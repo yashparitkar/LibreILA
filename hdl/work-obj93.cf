@@ -1,0 +1,7 @@
+v 4
+file . "axi4s_ila.vhdl" "10f77577ab7ee0bc9bd2e4685a35d54119558105" "20260714192844.148":
+  entity axi4s_ila at 16( 590) + 0 on 23;
+  architecture rtl of axi4s_ila at 75( 2831) + 0 on 24;
+file . "axiliteslave.vhdl" "5d8cf3ca6d04ef098ffa0079ce4d486307aded63" "20260714192844.149":
+  entity axiliteslave at 20( 731) + 0 on 25;
+  architecture arch_imp of axiliteslave at 138( 5816) + 0 on 26;
