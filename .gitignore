@@ -1,0 +1,26 @@
+# Ignore backup and temporary files
+*.old
+*.orig
+*.swp
+*.tmp
+
+# .vscode
+.vscode
+
+# Original reference files
+orig.*
+ref.*
+
+# ghdl config file
+*.cf 
+
+# Simulation output
+*.vcd
+*.ghw
+
+# Events log
+events_log*
+
+# Report-writing scratch space (notes/data dumps for the project report,
+# not part of the repo deliverable)
+report_staging/
