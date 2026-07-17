@@ -13,11 +13,12 @@ This specific ILA is specialised for the AXI4S but a similar logic can be modifi
 * Data acquisition happens continously in a circular buffer
 * Pass through AXI4 Stream ports ensures no delay is introduced due to the IP
 * Customizable trigger:
-1. Trigger can be set with AXI4Lite interface
-2. Any AXI4S signal can be set as a trigger condition
-3. Once setting the triggers condition, the ILA can be armed
-4. Number of samples before and after trigger can be adjusted
-5. Can also use a external trigger
+    * Trigger can be set with AXI4Lite interface
+    * Any AXI4S signal can be set as a trigger condition
+    * Once setting the triggers condition, the ILA can be armed
+    * Number of samples before and after trigger can be adjusted
+    * Can also use a external trigger
+* CDC on the ARM and DONE bits
 
 ## Ports
 Current implementation only uses TDATA, TVALID, TREADY and TLAST ports. 
@@ -28,13 +29,15 @@ Current implementation only uses TDATA, TVALID, TREADY and TLAST ports.
 * o_trig_out: internal trigger signal for chaining to other ILA instances
 
 ## Configuration Parameters
-* Buffer size
+* G_EXTERNAL_TRIG : 1: Use external trigger
+* G_DATA_WIDTH    : Width of the AXI4S, keep it multiple of 32
+* G_DEPTH         : Number of samples to store, keep it power of two
 
 ## axi4lite Register Map
 
 32-bit registers; byte address = `Index * 4`. Sizing auto-scales with data width and depth.
 
-**Input (RW):**
+### Input (RW)
 
 | Index | RW | Register Name       | Description                |
 |-------|----|---------------------|----------------------------|
@@ -43,7 +46,7 @@ Current implementation only uses TDATA, TVALID, TREADY and TLAST ports.
 |   2   | RW | Trigger position    | Number of pre-trig samples |
 |   3   |  W | Arm                 | Any write to this register arms the ILA |
 |4      | RW | Trigger data (LSB)  | Input for TDATA trigger    |
-|4+ a-1 | RW | Trigger data (LSB)  | Input for TDATA trigger    |
+|4+ a-1 | RW | Trigger data (MSB)  | Input for TDATA trigger    |
 |4+ a   | RW | Trigger data mask (LSB)  | Input for TDATA trigger    |
 |4+2a-1 | RW | Trigger data mask (MSB)  | Input for TDATA trigger    |
 
@@ -53,7 +56,7 @@ Further input register are auto added depending on the data width.
 
 Total input registers: 4 + G_DATA_WIDTH/32 * 2
 
-**Output (RO, index relative to the end of the input block):**
+### Output (RO, index relative to the end of the input block)
 
 | Index | RW | Register Name       | Description                 |
 |-------|----|---------------------|-----------------------------|
@@ -61,12 +64,26 @@ Total input registers: 4 + G_DATA_WIDTH/32 * 2
 |   1   | RO | Magic key           | 0xb01dface                  |
 |   2   | RO | samp_buff_trig_idx  | Index of the trigger sample |
 |   3   | RO | samp_buff_frst_idx  | Index of the first sample   |
-|  4+(a+1)i | RO | samp_buff(i) LSB    | ith sample in buffer LSB    |
-| 4+(a+1)i+a| RO | samp_buff(i) MSB    | ith sample in buffer MSB    |
+
+After this, sampling buffer is mapped with strides to ease the resource usage on the fabric. Each samp_buff is written as a bunch with number of registers used for each samp_buff as power of two to ease computation. Note that, minimum stride is of the length of 4, this is done to accomodate the control registers in the first output stride.
+
+For example, if the G_DATA_WIDTH is kept 64 and number of signals is 3 then total 4 32-bit registers are needed to properly show the data. Hence, stride will be of 4. Inside each stride, the data each stored in following format:
+ 
+| Offset   | RW | Register Name                            | Description                |
+|----------|----|------------------------------------------|----------------------------|
+|  0       | RO | samp_buff(31 downto  0)                  | The LSBs of the AXI4S data |
+|  1       | RO | samp_buff(63 downto 32)                  |                            |
+| stride-2 | RO | samp_buff(G_DEPTH-1  downto G_DEPTH-32 ) | The MSBs of the AXI4S data |
+| stride-1 | RO | samp_buff(G_DEPTH+31 downto G_DEPTH    ) | AXI4S signals              |
 
 Total output registers: 4 + ( G_DATA_WIDTH/32 + 1) * G_DEPTH
 
 Total number of registers: 8 + G_DATA_WIDTH/32 * 2 + (G_DATA_WIDTH/32 + 1) * G_DEPTH
+#### Status 
+| bit | Name   | Description                                  |
+|-----|--------|----------------------------------------------|
+|  0  | DONE   | Marks the completion of the ILA process      |
+| 2-1 | STATUS | Internal status register of the ILA (No CDC) |
 
 ## Trigger vector
 Trigger vector decided when to trigger ILA. It is a 32 bit with register with mask and condition modifiable with AXI4Lite interface. Each bit of the vector corresponds to one of the condition being activated for trigger. The bit4 decides if the conditions are ORed or ANDed. If the TDATA is used as trigger, the value of TDATA can be entered in the trigger data input registers. When TDATA is used as a trigger, the MASK is supllied by the second set of registers of the TDATA width enabling mask of same size. 

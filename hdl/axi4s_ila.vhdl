@@ -2,7 +2,7 @@
 -- File: axi4s_ila.vhdl
 -- Author: Y.U.P.
 -- Created: 2026/07/14 11:11
--- Last modified: 2026/07/14 11:12
+-- Last modified: 2026/07/15 11:32
 --
 -- Description: An ILA for AXI4-Stream.
 -- Usage:
@@ -23,8 +23,8 @@ entity axi4s_ila is
     G_EXTERNAL_TRIG     : integer := 0;    -- 1 for external trigger pin
     G_DATA_WIDTH        : natural := 64;   -- Keep it a multiple of 32 for best results
     G_DEPTH             : integer := 2048; -- Keep it a power of two for best results
-    C_S_AXIL_DATA_WIDTH : integer := 32;
-    C_S_AXIL_ADDR_WIDTH : integer := 32
+    C_S_AXIL_DATA_WIDTH : integer := 32;   -- DONT CHANGE
+    C_S_AXIL_ADDR_WIDTH : integer := 32    -- DONT CHANGE
   );
   port (
     i_rst_sync    : in    std_logic;
@@ -34,6 +34,7 @@ entity axi4s_ila is
 
     -- External tigger
     i_ext_trig : in    std_logic;
+    o_trig_out : out   std_logic;
 
     -- AXI4S_IN port
     axis_in_tready : out   std_logic;
@@ -74,31 +75,78 @@ end entity axi4s_ila;
 
 architecture rtl of axi4s_ila is
 
-  -- Making of the FIFO ---------------------------------------------
+  -- Fixing the width of the AXILite bus ----------------------------
+  -------------------------------------------------------------------
+
+  -- Making of the RAM buffer ---------------------------------------
+  -- The RAM multilane with each lane of C_S_AXIL_DATA_WIDTH for easier
+  -- muxing later
   constant C_ADDR_WIDTH : integer := integer(ceil(log2(real(G_DEPTH))));
 
   ------------------------ USER PARAMETER ---------------------------
   -- Number of signalling ports used in the ILA, make sure to change
   -- with the actual number of ports, eg, TKEEP is TDATA/8
+
+  -- Currently its TREADY, TVALID and TLAST, so 3 signals
   constant C_AXIS_N_SIGNALS : integer := 3;
+
+  -- Now, 3 signals can be fit inside a 1 32 bit regs hence,
+  constant C_N_LANES : integer := G_DATA_WIDTH / 32 + 1;
   ---------------------- USER PARAMETER ENDS ------------------------
 
-  type t_fifo_data is array (0 to G_DEPTH - 1) of std_logic_vector((G_DATA_WIDTH + C_AXIS_N_SIGNALS - 1) downto 0);
+  -- Function for stride length calculation -------------------------
 
-  signal r_fifo_data : t_fifo_data;
+  pure function get_stride (
+    lanes : integer
+  ) return integer is
+
+    variable calc_stride : integer;
+
+  begin
+
+    calc_stride := 1;
+
+    -- Find the next power of two
+    while calc_stride < lanes loop
+
+      calc_stride := calc_stride * 2;
+
+    end loop;
+
+    -- Enforce the minimum stride of 4 for control registers
+    if (calc_stride < 4) then
+      return 4;
+    else
+      return calc_stride;
+    end if;
+
+  end function get_stride;
+
+  -- Automatically scales based on G_DATA_WIDTH
+  constant C_AXIL_STRIDE : integer := get_stride(C_N_LANES);
+  -------------------------------------------------------------------
+
+  type t_lane is array (0 to G_DEPTH - 1) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+
+  type t_lane_arr is array (0 to C_N_LANES - 1) of t_lane;
+
+  signal samp_buff : t_lane_arr;
   attribute syn_ramstyle : string;
-  attribute syn_ramstyle of r_fifo_data : signal is "lsram";
+  attribute syn_ramstyle of samp_buff : signal is "lsram";
 
-  signal r_wr_index : unsigned(C_ADDR_WIDTH  downto 0);
-  signal w_wr_data  : std_logic_vector(G_DATA_WIDTH downto 0);
-  signal en_wr      : std_logic;
+  signal r_wr_idx  : unsigned(C_ADDR_WIDTH - 1 downto 0);
+  signal w_wr_data : std_logic_vector(C_S_AXIL_DATA_WIDTH * C_N_LANES - 1  downto 0);
+  signal en_wr     : std_logic;
   -------------------------------------------------------------------
 
   -- Calculating required number of the AXILite regs ----------------
   -- Note that, the additional ( (G_DATA_WIDTH / 32 + 1) * G_DEPTH ) registers are coming from the
   -- buffer itself
-  constant C_AXIL_N_REGS    : integer := 8 + 2 * G_DATA_WIDTH / 32;
-  constant C_AXIL_N_REGS_IN : integer := 4 + 2 * G_DATA_WIDTH / 32;
+  constant C_AXIL_N_CTRL_REGS    : integer := 8 + 2 * G_DATA_WIDTH / 32;
+  constant C_AXIL_N_CTRL_REGS_IN : integer := 4 + 2 * G_DATA_WIDTH / 32;
+
+  -- Total AXI4Lite regs
+  constant C_AXIL_N_REGS : integer := C_AXIL_N_CTRL_REGS + (C_AXIL_STRIDE  * G_DEPTH);
   ------------------------------------------------------------------
 
   -- ILA STATES -----------------------------------------------------
@@ -107,7 +155,10 @@ architecture rtl of axi4s_ila is
   constant ILA_TRIGD : std_logic_vector(1 downto 0) := "10";
   constant ILA_DONE  : std_logic_vector(1 downto 0) := "11";
 
-  signal ila_state : std_logic_vector(1 downto 0);
+  signal ila_state     : std_logic_vector(1 downto 0);
+  signal ila_done_axis : std_logic; -- done in the axis domain
+  signal ila_done_sync : std_logic;
+  signal ila_done_axil : std_logic; -- donw tin the axil domain
   -------------------------------------------------------------------
 
   -- Triggering signals ---------------------------------------------
@@ -145,14 +196,16 @@ architecture rtl of axi4s_ila is
   -------------------------------------------------------------------
 
   -- Control signals interface --------------------------------------
-  signal arm : std_logic;
+  signal arm_toggler_axilite : std_logic; -- in the axilite domain
+  signal arm_axis            : std_logic; -- synchronised in axis
+  signal arm_sync            : std_logic_vector(2 downto 0);
   -------------------------------------------------------------------
 
   -- From the axiliteslave template ---------------------------------
 
-  type reg_array_in is array (0 to C_AXIL_N_REGS_IN - 1) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+  type reg_array_in is array (0 to C_AXIL_N_CTRL_REGS_IN - 1) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
 
-  type reg_array_out is array (0 to (C_AXIL_N_REGS - C_AXIL_N_REGS_IN - 1)) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+  type reg_array_out is array (0 to (C_AXIL_N_CTRL_REGS - C_AXIL_N_CTRL_REGS_IN - 1)) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
 
   -- Number of Slave Registers 68
   signal slv_reg_in  : reg_array_in;
@@ -174,7 +227,10 @@ architecture rtl of axi4s_ila is
   -- ADDR_LSB is used for addressing 32/64 bit registers/memories
   -- ADDR_LSB = 2 for 32 bits (n downto 2)
   -- ADDR_LSB = 3 for 64 bits (n downto 3)
-  constant ADDR_LSB          : integer := (C_S_AXIL_DATA_WIDTH / 32) + 1;
+  constant ADDR_LSB : integer := (C_S_AXIL_DATA_WIDTH / 32) + 1;
+
+  -- THIS NEEDS MODIFICATION FOR ACCOMODATING THE G_DEPTH data regs
+  -- constant OPT_MEM_ADDR_BITS : integer := integer(ceil(log2(real(C_AXIL_N_CTRL_REGS)))) - 1;
   constant OPT_MEM_ADDR_BITS : integer := integer(ceil(log2(real(C_AXIL_N_REGS)))) - 1;
   ------------------------------------------------
   -- Signals for user logic register space example
@@ -206,34 +262,48 @@ begin
   -------------------------------------------------------------------
 
   -- MUXING of the ports --------------------------------------------
-  w_wr_data <= axis_out_tlast
-               & axis_in_tvalid
-               & axis_in_tlast
-               & axis_in_tdata;
+  w_wr_data <=
+  (
+    (C_S_AXIL_DATA_WIDTH * C_N_LANES - 1)  downto (G_DATA_WIDTH + C_AXIS_N_SIGNALS) => '0'
+  )
+    & axis_out_tready
+    & axis_in_tvalid
+    & axis_in_tlast
+    & axis_in_tdata;
   -------------------------------------------------------------------
 
   -- Creating trigger ----------------------------------------------
-  trig <= trig_or when trig_cond(4) = '1' else
-          trig_and;
+  o_trig_out <= trig;
 
-  trig_data <= '1' when ((axis_in_tdata xor trig_data_cond) and trig_data_mask)
-                        = (G_DATA_WIDTH - 1 downto 0 => '0') else
-               '0';
+  g_ext_trig_0 : if G_EXTERNAL_TRIG = 0 generate
+    trig <= trig_or when trig_cond(4) = '1' else
+            trig_and;
 
-  trig_vect(0) <= axis_out_tready xnor trig_cond(0);
-  trig_vect(1) <= axis_in_tvalid xnor trig_cond(1);
-  trig_vect(2) <= axis_in_tlast xnor trig_cond(2);
-  trig_vect(3) <= trig_data xnor trig_cond(3);
+    trig_data <= '1' when ((axis_in_tdata xor trig_data_cond) and trig_data_mask)
+                          = (G_DATA_WIDTH - 1 downto 0 => '0') else
+                 '0';
 
-  trig_or <= (trig_vect(0) and trig_mask(0)) or
-             (trig_vect(1) and trig_mask(1)) or
-             (trig_vect(2) and trig_mask(2)) or
-             (trig_vect(3) and trig_mask(3));
+    trig_vect(0)                                <= axis_out_tready xnor trig_cond(0);
+    trig_vect(1)                                <= axis_in_tvalid xnor trig_cond(1);
+    trig_vect(2)                                <= axis_in_tlast xnor trig_cond(2);
+    trig_vect(3)                                <= trig_data xnor trig_cond(3);
+    trig_vect(C_S_AXIL_DATA_WIDTH - 1 downto 4) <= (others => '0');
 
-  trig_and <= (trig_vect(0) nor  trig_mask(0)) and
-              (trig_vect(1) nor  trig_mask(1)) and
-              (trig_vect(2) nor  trig_mask(2)) and
-              (trig_vect(3) nor  trig_mask(3));
+    trig_or <= (trig_vect(0) and trig_mask(0)) or
+               (trig_vect(1) and trig_mask(1)) or
+               (trig_vect(2) and trig_mask(2)) or
+               (trig_vect(3) and trig_mask(3));
+
+    trig_and <= (trig_vect(0) nor  trig_mask(0)) and
+                (trig_vect(1) nor  trig_mask(1)) and
+                (trig_vect(2) nor  trig_mask(2)) and
+                (trig_vect(3) nor  trig_mask(3));
+  end generate g_ext_trig_0;
+
+  g_ext_trig_1 : if G_EXTERNAL_TRIG = 1 generate
+    trig <= i_ext_trig;
+  end generate g_ext_trig_1;
+
   ------------------------------------------------------------------
 
   -- Write process inside the FIFO ----------------------------------
@@ -242,15 +312,21 @@ begin
 
     if rising_edge(axis_in_aclk) then
       if (i_rst_sync = '1') then
-        r_wr_index <= (others => '0');
+        r_wr_idx <= (others => '0');
 
       -- For the ILA purpose, we are sampling on all rising edges,
       -- user can optionally make this sample only valid handshakes.
       -- Example,
       -- elsif (axis_in_tvalid = '1' and axis_out_tready = '1') then
       elsif (en_wr = '1') then
-        r_fifo_data(to_integer(r_wr_index( c_ADDR_WIDTH - 1 downto 0))) <= w_wr_data;
-        r_wr_index                                                      <= r_wr_index + 1;
+
+        for lane in 0 to C_N_LANES - 1 loop
+
+          samp_buff(lane)(to_integer(r_wr_idx)) <= w_wr_data(lane * 32 + 31 downto lane * 32);
+
+        end loop;
+
+        r_wr_idx <= r_wr_idx + 1;
       end if;
     end if;
 
@@ -267,6 +343,7 @@ begin
         -- Reseting the trigger positions
         trig_idx             <= (others => '0');
         post_trig_sample_cnt <= (others => '0');
+        en_wr                <= '0';
 
         ila_state <= IDLE;
 
@@ -277,11 +354,13 @@ begin
 
           when ILA_IDLE =>
 
+            en_wr <= '0';
+
             -- Reseting the trigger positions
             trig_idx             <= (others => '0');
             post_trig_sample_cnt <= (others => '0');
 
-            if (arm = '1') then
+            if (arm_axis = '1') then
               ila_state <= ILA_ARMED;
             end if;
 
@@ -290,9 +369,9 @@ begin
             en_wr <= '1';
 
             if (trig = '1') then
-              trig_idx             <= r_wr_index;
+              trig_idx             <= r_wr_idx;
               ila_state            <= ILA_TRIGD;
-              post_trig_sample_cnt <= G_DEPTH - trig_tgt - 1;
+              post_trig_sample_tgt <= G_DEPTH - trig_tgt - 1;
             else
               trig_idx             <= (others => '0');
               post_trig_sample_cnt <= (others => '0');
@@ -310,7 +389,7 @@ begin
 
           when ILA_DONE =>
 
-            if (arm = '1') then
+            if (arm_axis = '1') then
               ila_state <= ILA_ARMED;
             end if;
 
@@ -324,6 +403,44 @@ begin
     end if;
 
   end process p_ila;
+
+  -------------------------------------------------------------------
+
+  -- ARM synchroniser process ---------------------------------------
+  p_arm_cdc : process (axis_in_aclk) is
+  begin
+
+    if (rising_edge(axis_in_aclk)) then
+      if (i_rst_sync = '1') then
+        arm_sync <= (others => '0');
+      else
+        arm_sync <= arm_sync(1 downto 0) & arm_toggler_axilite;
+      end if;
+    end if;
+
+  end process p_arm_cdc;
+
+  arm_axis <= arm_sync(2) xor arm_sync(1);
+  -------------------------------------------------------------------
+
+  -- DONE synchroniser process --------------------------------------
+  ila_done_axis <= '1' when ila_state = ILA_DONE else
+                   '0';
+
+  p_done_cdc : process (s_axil_aclk) is
+  begin
+
+    if (rising_edge(s_axil_aclk)) then
+      if (s_axil_aresetn = '0') then
+        ila_done_axil <= '0';
+        ila_done_sync <= '0';
+      else
+        ila_done_sync <= ila_done_axis;
+        ila_done_axil <= ila_done_sync;
+      end if;
+    end if;
+
+  end process p_done_cdc;
 
   -------------------------------------------------------------------
 
@@ -436,14 +553,14 @@ begin
   -- and the slave is ready to accept the write address and write data.
   p_wlg : process (s_axil_aclk) is
 
-    variable idx : integer range 0 to C_AXIL_N_REGS - 1;
+    variable idx : integer range 0 to C_AXIL_N_CTRL_REGS - 1;
 
   begin
 
     if rising_edge(s_axil_aclk) then
       if (s_axil_aresetn = '0') then
         -- clear the register array
-        for i in 0 to C_AXIL_N_REGS_IN - 1 loop
+        for i in 0 to C_AXIL_N_CTRL_REGS_IN - 1 loop
 
           slv_reg_in(i) <= (others => '0');
 
@@ -453,7 +570,10 @@ begin
         if (s_axil_wvalid = '1') then
           -- compute index from address slice and write bytes per WSTRB
           idx := to_integer(unsigned(mem_logic));
-          if (idx >= 0 and idx < C_AXIL_N_REGS_IN) then
+          if (idx >= 0 and idx < C_AXIL_N_CTRL_REGS_IN) then
+            if (idx = 3) then
+              arm_toggler_axilite <= not arm_toggler_axilite;
+            end if;
             slv_reg_in(idx) <= s_axil_wdata;
           end if;
         end if;
@@ -525,34 +645,72 @@ begin
 
   -- Implement memory mapped register select and read logic generation
   -- Bounds-check address to avoid out-of-range access on register arrays.
-  p_rlg : process (axil_araddr, slv_reg_in, slv_reg_out) is
+  p_rlg : process (axil_araddr, slv_reg_in, slv_reg_out, samp_buff) is
 
-    variable rd_idx : integer range 0 to C_AXIL_N_REGS - 1;
+    variable rd_idx           : integer range 0 to 2 ** OPT_MEM_ADDR_BITS;
+    variable samp_rd_idx      : integer range 0 to ((G_DEPTH + 1) * C_AXIL_STRIDE);
+    variable stride_idx       : integer range 0 to G_DEPTH - 1;
+    variable intra_stride_idx : integer range 0 to C_AXIL_STRIDE - 1;
 
   begin
 
     rd_idx := to_integer(unsigned(axil_araddr(ADDR_LSB + OPT_MEM_ADDR_BITS downto ADDR_LSB)));
 
-    if (rd_idx < C_AXIL_N_REGS_IN) then
+    if (rd_idx < C_AXIL_N_CTRL_REGS_IN) then
+      -- Mapping of the input regs
       s_axil_rdata <= slv_reg_in(rd_idx);
-    elsif (rd_idx < C_AXIL_N_REGS) then
-      s_axil_rdata <= slv_reg_out(rd_idx - C_AXIL_N_REGS_IN);
-    elsif (rd_idx < C_AXIL_N_REGS + G_DEPTH) then
-      -- MAP THE BUFFER HERE PROPERLY LIKE THIS WE ARE HAVING AN ERROR CURRENTLY
-      s_axil_rdata <= r_fifo_data(rd_idx - C_AXIL_N_REGS);
+    elsif (rd_idx < C_AXIL_N_CTRL_REGS) then
+      -- Mapping of the output regs
+      s_axil_rdata <= slv_reg_out(rd_idx - C_AXIL_N_CTRL_REGS_IN);
+    elsif (rd_idx < (C_AXIL_N_CTRL_REGS + G_DEPTH  * C_AXIL_STRIDE)) then
+      -- Mapping of the RAM regs
+      samp_rd_idx      := rd_idx - C_AXIL_N_CTRL_REGS;
+      stride_idx       := samp_rd_idx / C_AXIL_STRIDE;
+      intra_stride_idx := samp_rd_idx mod C_AXIL_STRIDE;
+
+      -- Display the data STRIDE wise
+
+      if (stride_idx < C_N_LANES) then
+        s_axil_rdata <= samp_buff(intra_stride_idx)(stride_idx);
+      else
+        s_axil_rdata <= (others => '0');
+      end if;
     else
       s_axil_rdata <= (others => '0');
     end if;
 
   end process p_rlg;
 
--------------------------------------------------------------------------------
--- Example usage:
--- o_my_output <= slv_reg_in(0)(14 downto 0);
--- slv_reg_out( N -(C_AXI_N_REGS_IN) )(3 downto 0) <= i_my_input;
--- Note that, here N means Nth register among all the AXI4Lite registers
--- We need output offset of ( C_AXI_N_REGS_IN - 1 ) offset to properly map slv_reg_out
--- Add user connections here --------------------------------------------------
+  -------------------------------------------------------------------------------
+  -- Example usage:
+  -- o_my_output <= slv_reg_in(0)(14 downto 0);
+  -- slv_reg_out( N -(C_AXI_N_REGS_IN) )(3 downto 0) <= i_my_input;
+  -- Note that, here N means Nth register among all the AXI4Lite registers
+  -- We need output offset of ( C_AXI_N_REGS_IN - 1 ) offset to properly map slv_reg_out
+  -- Add user connections here --------------------------------------------------
+  trig_cond <= slv_reg_in(0);
+  trig_mask <= slv_reg_in(1);
+  trig_tgt  <= unsigned(slv_reg_in(2)(trig_tgt'range));
+
+  data_cond_gen : for i in 0 to (G_DATA_WIDTH / 32) - 1  generate
+    trig_data_cond(i * 32 + 31 downto 32 * i ) <= slv_reg_in(i + 4);
+  end generate data_cond_gen;
+
+  data_mask_gen : for i in 0 to (G_DATA_WIDTH / 32) - 1 generate
+    trig_data_mask(i * 32 + 31 downto 32 * i ) <= slv_reg_in(i + 4 + G_DATA_WIDTH / 32);
+  end generate data_mask_gen;
+
+  slv_reg_out(0)(0)                                <= ila_done_axil;
+  slv_reg_out(0)(2 downto 1)                       <= ila_state;
+  slv_reg_out(0)(C_S_AXIL_DATA_WIDTH - 1 downto 3) <= (others => '0');
+
+  slv_reg_out(1) <= x"B01DFACE";
+
+  slv_reg_out(2)(trig_idx'range)                               <= STD_LOGIC_VECTOR(trig_idx);
+  slv_reg_out(2)(C_S_AXIL_DATA_WIDTH - 1 downto C_ADDR_WIDTH ) <= (others => '0');
+
+  slv_reg_out(3)(r_wr_idx'range)                               <= STD_LOGIC_VECTOR(r_wr_idx); -- The write index always points to the next sample written
+  slv_reg_out(3)(C_S_AXIL_DATA_WIDTH - 1 downto  C_ADDR_WIDTH) <= (others => '0');
 
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------
