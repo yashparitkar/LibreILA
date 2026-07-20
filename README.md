@@ -99,6 +99,11 @@ Trigger vector decided when to trigger ILA. It is a 32 bit with register with ma
 
 > Note that, mask corresponding to the bit4, < 0/1:AND/OR > is not checked.
 
+## Trigger
+
+### External Trigger
+The external trigger is a bit-wide input port. Use of external port needs to be enabled at the time of instantiation. The signal is synchronised to the AXI4S clock domain and rising edge of the signal is used to trigger the ILA.
+
 ## Output format
 The output register can be seen in the above section. Internally, all the samples are stored in a LSRAM block. The AXI4Lite slave serves as read port for the RAM block. The offsetted read values are fed to the RAM port. This allows the design to make full use of the independent clock of the LSRAM of the PolarFire LSRAM block (G238606).
 

@@ -2,7 +2,7 @@
 -- File: axi4s_ila.vhdl
 -- Author: Y.U.P.
 -- Created: 2026/07/14 11:11
--- Last modified: 2026/07/15 11:32
+-- Last Modified: 2026-07-20 Mon 19:48
 --
 -- Description: An ILA for AXI4-Stream.
 -- Usage:
@@ -158,7 +158,7 @@ architecture rtl of axi4s_ila is
   signal ila_state     : std_logic_vector(1 downto 0);
   signal ila_done_axis : std_logic; -- done in the axis domain
   signal ila_done_sync : std_logic;
-  signal ila_done_axil : std_logic; -- donw tin the axil domain
+  signal ila_done_axil : std_logic; -- done in the axil domain
   -------------------------------------------------------------------
 
   -- Triggering signals ---------------------------------------------
@@ -184,6 +184,9 @@ architecture rtl of axi4s_ila is
   signal trig     : std_logic;
   signal trig_or  : std_logic;
   signal trig_and : std_logic;
+
+  signal ext_trig      : std_logic;
+  signal ext_trig_prev : std_logic;
 
   signal trig_vect : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
   signal trig_mask : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
@@ -232,12 +235,10 @@ architecture rtl of axi4s_ila is
   -- THIS NEEDS MODIFICATION FOR ACCOMODATING THE G_DEPTH data regs
   -- constant OPT_MEM_ADDR_BITS : integer := integer(ceil(log2(real(C_AXIL_N_CTRL_REGS)))) - 1;
   constant OPT_MEM_ADDR_BITS : integer := integer(ceil(log2(real(C_AXIL_N_REGS)))) - 1;
+
   ------------------------------------------------
   -- Signals for user logic register space example
   --------------------------------------------------
-
-  signal byte_index : integer;
-
   signal mem_logic : std_logic_vector(ADDR_LSB + OPT_MEM_ADDR_BITS downto ADDR_LSB);
 
   -- State machine local parameters
@@ -301,7 +302,24 @@ begin
   end generate g_ext_trig_0;
 
   g_ext_trig_1 : if G_EXTERNAL_TRIG = 1 generate
-    trig <= i_ext_trig;
+
+    p_edge_detect : process (axis_in_aclk) is
+    begin
+
+      if rising_edge(axis_in_aclk) then
+        if (i_rst_sync = '1') then  -- Optional reset
+          --  ext_trig_prev <= '0';
+          ext_trig <= '0';
+        else
+          -- ext_trig      <= i_ext_trig;
+          ext_trig_prev <= i_ext_trig;
+        end if;
+      end if;
+
+    end process p_edge_detect;
+
+    trig <= (not i_rst_sync) and (i_ext_trig and (not ext_trig_prev));
+
   end generate g_ext_trig_1;
 
   ------------------------------------------------------------------
@@ -560,6 +578,8 @@ begin
     if rising_edge(s_axil_aclk) then
       if (s_axil_aresetn = '0') then
         -- clear the register array
+        arm_toggler_axilite <= '0';
+
         for i in 0 to C_AXIL_N_CTRL_REGS_IN - 1 loop
 
           slv_reg_in(i) <= (others => '0');
@@ -647,7 +667,7 @@ begin
   -- Bounds-check address to avoid out-of-range access on register arrays.
   p_rlg : process (axil_araddr, slv_reg_in, slv_reg_out, samp_buff) is
 
-    variable rd_idx           : integer range 0 to 2 ** OPT_MEM_ADDR_BITS;
+    variable rd_idx           : integer range 0 to C_AXIL_N_REGS - 1;
     variable samp_rd_idx      : integer range 0 to ((G_DEPTH + 1) * C_AXIL_STRIDE);
     variable stride_idx       : integer range 0 to G_DEPTH - 1;
     variable intra_stride_idx : integer range 0 to C_AXIL_STRIDE - 1;
@@ -670,7 +690,7 @@ begin
 
       -- Display the data STRIDE wise
 
-      if (stride_idx < C_N_LANES) then
+      if (intra_stride_idx < C_N_LANES) then
         s_axil_rdata <= samp_buff(intra_stride_idx)(stride_idx);
       else
         s_axil_rdata <= (others => '0');
