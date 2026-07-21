@@ -2,7 +2,7 @@
 -- File: axi4s_ila.vhdl
 -- Author: Y.U.P.
 -- Created: 2026/07/14 11:11
--- Last Modified: 2026-07-20 Mon 19:48
+-- Last Modified: 2026-07-21 Tue 18:56
 --
 -- Description: An ILA for AXI4-Stream.
 -- Usage:
@@ -155,7 +155,16 @@ architecture rtl of axi4s_ila is
   constant ILA_TRIGD : std_logic_vector(1 downto 0) := "10";
   constant ILA_DONE  : std_logic_vector(1 downto 0) := "11";
 
-  signal ila_state     : std_logic_vector(1 downto 0);
+  signal ila_state : std_logic_vector(1 downto 0);
+
+  signal ila_armed_axis : std_logic; -- done in the axis domain
+  signal ila_armed_sync : std_logic;
+  signal ila_armed_axil : std_logic; -- done in the axil domain
+
+  signal ila_trigd_axis : std_logic; -- done in the axis domain
+  signal ila_trigd_sync : std_logic;
+  signal ila_trigd_axil : std_logic; -- done in the axil domain
+
   signal ila_done_axis : std_logic; -- done in the axis domain
   signal ila_done_sync : std_logic;
   signal ila_done_axil : std_logic; -- done in the axil domain
@@ -441,24 +450,40 @@ begin
   arm_axis <= arm_sync(2) xor arm_sync(1);
   -------------------------------------------------------------------
 
-  -- DONE synchroniser process --------------------------------------
-  ila_done_axis <= '1' when ila_state = ILA_DONE else
-                   '0';
+  -- STATE synchroniser process --------------------------------------
+  ila_armed_axis <= '1' when ila_state = ILA_DONE else
+                    '0';
+  ila_trigd_axis <= '1' when ila_state = ILA_DONE else
+                    '0';
+  ila_done_axis  <= '1' when ila_state = ILA_DONE else
+                    '0';
 
-  p_done_cdc : process (s_axil_aclk) is
+  p_state_cdc : process (s_axil_aclk) is
   begin
 
     if (rising_edge(s_axil_aclk)) then
       if (s_axil_aresetn = '0') then
+        ila_armed_axil <= '0';
+        ila_armed_sync <= '0';
+
+        ila_trigd_axil <= '0';
+        ila_trigd_sync <= '0';
+
         ila_done_axil <= '0';
         ila_done_sync <= '0';
       else
+        ila_armed_sync <= ila_done_axis;
+        ila_armed_axil <= ila_done_sync;
+
+        ila_trigd_sync <= ila_done_axis;
+        ila_trigd_axil <= ila_done_sync;
+
         ila_done_sync <= ila_done_axis;
         ila_done_axil <= ila_done_sync;
       end if;
     end if;
 
-  end process p_done_cdc;
+  end process p_state_cdc;
 
   -------------------------------------------------------------------
 
@@ -720,8 +745,10 @@ begin
     trig_data_mask(i * 32 + 31 downto 32 * i ) <= slv_reg_in(i + 4 + G_DATA_WIDTH / 32);
   end generate data_mask_gen;
 
-  slv_reg_out(0)(0)                                <= ila_done_axil;
-  slv_reg_out(0)(2 downto 1)                       <= ila_state;
+  slv_reg_out(0)(0)                                <= ila_armed_axil;
+  slv_reg_out(0)(1)                                <= ila_trigd_axil;
+  slv_reg_out(0)(2)                                <= ila_done_axil;
+  slv_reg_out(0)(4 downto 3)                       <= ila_state;
   slv_reg_out(0)(C_S_AXIL_DATA_WIDTH - 1 downto 3) <= (others => '0');
 
   slv_reg_out(1) <= x"B01DFACE";
@@ -729,7 +756,7 @@ begin
   slv_reg_out(2)(trig_idx'range)                               <= STD_LOGIC_VECTOR(trig_idx);
   slv_reg_out(2)(C_S_AXIL_DATA_WIDTH - 1 downto C_ADDR_WIDTH ) <= (others => '0');
 
-  slv_reg_out(3)(r_wr_idx'range)                               <= STD_LOGIC_VECTOR(r_wr_idx); -- The write index always points to the next sample written
+  slv_reg_out(3)(r_wr_idx'range)                               <= STD_LOGIC_VECTOR(r_wr_idx);
   slv_reg_out(3)(C_S_AXIL_DATA_WIDTH - 1 downto  C_ADDR_WIDTH) <= (others => '0');
 
 -------------------------------------------------------------------------------

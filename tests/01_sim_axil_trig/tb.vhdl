@@ -2,7 +2,7 @@
 -- File: tb.vhdl
 -- Author: Y.U.P.
 -- Created: 2026/07/14 11:11
--- Last Modified: 2026-07-20 Mon 20:05
+-- Last Modified: 2026-07-21 Tue 18:56
 --
 -- Description: Test the ILA with internal trigger when TLAST = '1'
 --   and TVALID = '1' and TREADY = '1'
@@ -338,11 +338,11 @@ begin
     for attempt in 0 to 511 loop
 
       axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_STATUS_ADDR, status);
-      exit when status(0) = '1';
+      exit when status(2) = '1';
 
     end loop;
 
-    assert status(0) = '1'
+    assert status(2) = '1'
       report "00_sim_ext_trig: DONE did not assert"
       severity error;
 

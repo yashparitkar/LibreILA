@@ -70,7 +70,7 @@ After this, sampling buffer is mapped with strides to ease the resource usage on
 For example, if the G_DATA_WIDTH is kept 64 and number of signals is 3 then total 4 32-bit registers are needed to properly show the data. Hence, stride will be of 4. Inside each stride, the data each stored in following format:
  
 | Offset   | RW | Register Name                            | Description                |
-|----------|----|------------------------------------------|----------------------------|
+|---------|----|------------------------------------------|----------------------------|
 |  0       | RO | samp_buff(31 downto  0)                  | The LSBs of the AXI4S data |
 |  1       | RO | samp_buff(63 downto 32)                  |                            |
 | stride-2 | RO | samp_buff(G_DEPTH-1  downto G_DEPTH-32 ) | The MSBs of the AXI4S data |
@@ -79,11 +79,14 @@ For example, if the G_DATA_WIDTH is kept 64 and number of signals is 3 then tota
 Total output registers: 4 + ( G_DATA_WIDTH/32 + 1) * G_DEPTH
 
 Total number of registers: 8 + G_DATA_WIDTH/32 * 2 + (G_DATA_WIDTH/32 + 1) * G_DEPTH
+
 #### Status 
 | bit | Name   | Description                                  |
 |-----|--------|----------------------------------------------|
-|  0  | DONE   | Marks the completion of the ILA process      |
-| 2-1 | STATUS | Internal status register of the ILA (No CDC) |
+|  0  | ARMED  | High if the ILA is armed                     |
+|  1  | TRIGD  | High if the trigger happens                  |
+|  2  | DONE   | Marks the completion of the ILA process      |
+| 4-2 | STATUS | Internal status register of the ILA (No CDC) |
 
 ## Trigger vector
 Trigger vector decided when to trigger ILA. It is a 32 bit with register with mask and condition modifiable with AXI4Lite interface. Each bit of the vector corresponds to one of the condition being activated for trigger. The bit4 decides if the conditions are ORed or ANDed. If the TDATA is used as trigger, the value of TDATA can be entered in the trigger data input registers. When TDATA is used as a trigger, the MASK is supllied by the second set of registers of the TDATA width enabling mask of same size. 

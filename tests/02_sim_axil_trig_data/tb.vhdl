@@ -1,10 +1,11 @@
 ---------------------------------------------------------------------
 -- File: tb.vhdl
 -- Author: Y.U.P.
--- Created: 2026-07-16 Mon 13:27
--- Last Modified: 2026-07-21 Tue 18:56
+-- Created: 2026/07/14 11:11
+-- Last Modified: 2026-07-20 Mon 20:53
 --
--- Description: Test the ILA in external trigger configuration
+-- Description: Test the ILA with internal trigger when TLAST = '1'
+--   and TVALID = '1' and TREADY = '1'
 ---------------------------------------------------------------------
 
 library ieee;
@@ -21,13 +22,18 @@ end entity tb;
 architecture sim of tb is
 
   constant C_DATA_WIDTH    : natural := 64;
-  constant C_DEPTH         : natural := 16;
+  constant C_DEPTH         : natural := 8;
   constant C_AXIS_PERIOD   : time    := 10 ns;
   constant C_AXIL_PERIOD   : time    := 10 ns;
-  constant C_TRIG_IDX      : natural := 4;
+  constant C_TRIG_IDX      : natural := 3;
   constant C_TRIGGER_POINT : natural := 80;
   constant C_TRIGGER_PULSE : natural := 16;
   constant C_SAMPLE_COUNT  : natural := 192;
+
+  constant TRIGGER_COND      : std_logic_vector := x"00000001";
+  constant TRIGGER_MASK      : std_logic_vector := x"00000000";
+  constant TRIGGER_DATA      : std_logic_vector := x"00000000_00000045";
+  constant TRIGGER_DATA_MASK : std_logic_vector := x"00000000_00000555";
 
   constant C_AXIL_WORD_BYTES : natural := 4;
   -- The DUT maps output registers after the input-register block.
@@ -36,7 +42,7 @@ architecture sim of tb is
   constant C_OUTPUT_REG_BASE : natural := C_INPUT_REG_COUNT * C_AXIL_WORD_BYTES;
   constant C_SAMPLE_RAM_BASE : natural := (4 + 2 * (C_DATA_WIDTH / 32) + 4) * C_AXIL_WORD_BYTES;
   constant C_SAMPLE_STRIDE   : natural := 2 ** integer(ceil(log2(real((C_DATA_WIDTH / 32) + 1))));
-
+  -- The current address decoder exposes the buffer RAM window.
   constant C_SAMPLE_PRINT_COUNT : natural                       := C_DEPTH;
   constant C_STATUS_ADDR        : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 0 * C_AXIL_WORD_BYTES, 32));
   constant C_MAGIC_ADDR         : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 1 * C_AXIL_WORD_BYTES, 32));
@@ -178,7 +184,7 @@ begin
 
   dut : entity work.axi4s_ila
     generic map (
-      g_external_trig => 1,
+      g_external_trig => 0,
       g_data_width    => C_DATA_WIDTH,
       g_depth         => C_DEPTH
     )
@@ -276,6 +282,32 @@ begin
     wait until rising_edge(s_axil_aclk);
     axil_write(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, x"00000008", std_logic_vector(to_unsigned(C_TRIG_IDX, 32)));
 
+    wait until rising_edge(s_axil_aclk);
+    axil_write(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, x"00000000", TRIGGER_COND);
+
+    wait until rising_edge(s_axil_aclk);
+    axil_write(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, x"00000004", TRIGGER_MASK);
+
+-- Trigger data words (Index 4 to 4 + a - 1)
+    for word_idx in 0 to (C_DATA_WIDTH / 32) - 1 loop
+      wait until rising_edge(s_axil_aclk);
+      axil_write(
+        s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid,
+        std_logic_vector(to_unsigned((4 + word_idx) * 4, 32)),
+        TRIGGER_DATA(31 + word_idx * 32 downto word_idx * 32)
+      );
+    end loop;
+
+    -- Trigger data mask words (Index 4 + a to 4 + 2a - 1)
+    for word_idx in 0 to (C_DATA_WIDTH / 32) - 1 loop
+      wait until rising_edge(s_axil_aclk);
+      axil_write(
+        s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid,
+        std_logic_vector(to_unsigned((4 + (C_DATA_WIDTH / 32) + word_idx) * 4, 32)),
+        TRIGGER_DATA_MASK(31 + word_idx * 32 downto word_idx * 32)
+      );
+    end loop;
+
     for settle_index in 1 to 4 loop
 
       wait until rising_edge(axis_in_aclk);
@@ -290,7 +322,6 @@ begin
 
     end loop;
 
-    -- Status lives in the output register block, not the input configuration block.
     axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_STATUS_ADDR, status);
     report "00_sim_ext_trig: status after arm = " & integer'image(to_integer(unsigned(status(2 downto 0))))
       severity note;
@@ -300,30 +331,40 @@ begin
       wait until falling_edge(axis_in_aclk);
       axis_in_tvalid <= '1';
       axis_in_tdata  <= std_logic_vector(to_unsigned(sample_index, C_DATA_WIDTH));
-      axis_in_tlast  <= '0';
 
-      if (sample_index >= C_TRIGGER_POINT and sample_index < C_TRIGGER_POINT + C_TRIGGER_PULSE) then
-        i_ext_trig <= '1';
+      -- Pulse TLAST at trigger sample index
+      if (sample_index = C_TRIGGER_POINT) then
+        axis_in_tlast <= '1';
       else
-        i_ext_trig <= '0';
+        axis_in_tlast <= '0';
       end if;
+
+      -- Inject TREADY backpressure every 5th cycle, ensuring TREADY = '1' at trigger point
+      if (sample_index mod 5 = 3 and sample_index /= C_TRIGGER_POINT) then
+        axis_out_tready <= '0';
+      else
+        axis_out_tready <= '1';
+      end if;
+
+      i_ext_trig <= '0';
 
       wait until rising_edge(axis_in_aclk);
 
     end loop;
 
-    i_ext_trig     <= '0';
-    axis_in_tvalid <= '0';
-    axis_in_tlast  <= '0';
+    i_ext_trig      <= '0';
+    axis_in_tvalid  <= '0';
+    axis_in_tlast   <= '0';
+    axis_out_tready <= '1';
 
     for attempt in 0 to 511 loop
 
       axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_STATUS_ADDR, status);
-      exit when status(2) = '1';
+      exit when status(0) = '1';
 
     end loop;
 
-    assert status(2) = '1'
+    assert status(0) = '1'
       report "00_sim_ext_trig: DONE did not assert"
       severity error;
 
@@ -333,14 +374,12 @@ begin
 
     end loop;
 
-    -- The magic key is the next output register after the status register.
     axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_MAGIC_ADDR, read_data);
     assert read_data = x"B01DFACE"
       report "00_sim_ext_trig: magic key mismatch"
       severity error;
 
-    -- Reading back the output samples.
-    -- Each sample is stored across the RAM window as one stride of 32-bit words.
+    -- Reading back output samples from RAM window
     for sample_index in 0 to C_SAMPLE_PRINT_COUNT - 1 loop
 
       for lane_index in 0 to (C_DATA_WIDTH / 32) loop
