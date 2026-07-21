@@ -58,12 +58,16 @@ Total input registers: 4 + G_DATA_WIDTH/32 * 2
 
 ### Output (RO, index relative to the end of the input block)
 
-| Index | RW | Register Name       | Description                 |
-|-------|----|---------------------|-----------------------------|
-|   0   | RO | Status              | ILA status register         |
-|   1   | RO | Magic key           | 0xb01dface                  |
-|   2   | RO | samp_buff_trig_idx  | Index of the trigger sample |
-|   3   | RO | samp_buff_frst_idx  | Index of the first sample   |
+| Index | RW | Register Name       | Description                           |
+|-------|----|---------------------|---------------------------------------|
+|   0   | RO | Status              | ILA status register                   |
+|   1   | RO | Magic key           | 0xb01dface                            |
+|   2   | RO | Clock frequency     | Sampling clock frequency (Hz)         |
+|   3   | RO | Width               | #signals(16bit) & axi4s width (16bit) |
+|   4   | RO | Buffer Depth        | Depth of the sampling buffer          |
+|   5   | RO | Reserved            | Reserved                              |
+|   6   | RO | samp_buff_trig_idx  | Index of the trigger sample           |
+|   7   | RO | samp_buff_frst_idx  | Index of the first sample             |
 
 After this, sampling buffer is mapped with strides to ease the resource usage on the fabric. Each samp_buff is written as a bunch with number of registers used for each samp_buff as power of two to ease computation. Note that, minimum stride is of the length of 4, this is done to accomodate the control registers in the first output stride.
 
@@ -76,9 +80,9 @@ For example, if the G_DATA_WIDTH is kept 64 and number of signals is 3 then tota
 | stride-2 | RO | samp_buff(G_DEPTH-1  downto G_DEPTH-32 ) | The MSBs of the AXI4S data |
 | stride-1 | RO | samp_buff(G_DEPTH+31 downto G_DEPTH    ) | AXI4S signals              |
 
-Total output registers: 4 + ( G_DATA_WIDTH/32 + 1) * G_DEPTH
+Total output registers: 8 + ( G_DATA_WIDTH/32 + 1) * G_DEPTH
 
-Total number of registers: 8 + G_DATA_WIDTH/32 * 2 + (G_DATA_WIDTH/32 + 1) * G_DEPTH
+Total number of registers: 12 + G_DATA_WIDTH/32 * 2 + (G_DATA_WIDTH/32 + 1) * G_DEPTH
 
 #### Status 
 | bit | Name   | Description                                  |

@@ -21,10 +21,10 @@ end entity tb;
 architecture sim of tb is
 
   constant C_DATA_WIDTH    : natural := 64;
-  constant C_DEPTH         : natural := 16;
+  constant C_DEPTH         : natural := 8;
   constant C_AXIS_PERIOD   : time    := 10 ns;
   constant C_AXIL_PERIOD   : time    := 10 ns;
-  constant C_TRIG_IDX      : natural := 4;
+  constant C_TRIG_IDX      : natural := 3;
   constant C_TRIGGER_POINT : natural := 80;
   constant C_TRIGGER_PULSE : natural := 16;
   constant C_SAMPLE_COUNT  : natural := 192;
@@ -34,7 +34,7 @@ architecture sim of tb is
   -- For this configuration, the output block begins at input-reg-count * 4 bytes.
   constant C_INPUT_REG_COUNT : natural := 4 + 2 * (C_DATA_WIDTH / 32);
   constant C_OUTPUT_REG_BASE : natural := C_INPUT_REG_COUNT * C_AXIL_WORD_BYTES;
-  constant C_SAMPLE_RAM_BASE : natural := (4 + 2 * (C_DATA_WIDTH / 32) + 4) * C_AXIL_WORD_BYTES;
+  constant C_SAMPLE_RAM_BASE : natural := (4 + 2 * (C_DATA_WIDTH / 32) + 8) * C_AXIL_WORD_BYTES;
   constant C_SAMPLE_STRIDE   : natural := 2 ** integer(ceil(log2(real((C_DATA_WIDTH / 32) + 1))));
 
   constant C_SAMPLE_PRINT_COUNT : natural                       := C_DEPTH;

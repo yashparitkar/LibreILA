@@ -1,10 +1,10 @@
 ---------------------------------------------------------------------
 -- File: tb.vhdl
 -- Author: Y.U.P.
--- Created: 2026/07/14 11:11
--- Last Modified: 2026-07-20 Mon 20:53
+-- Created: 2026-07-21 Tue 19:55
+-- Last Modified: 2026-07-21 Tue 20:00
 --
--- Description: Test the ILA with a data mask
+-- Description: Test the ILA with different clock domain configurations
 ---------------------------------------------------------------------
 
 library ieee;
@@ -22,8 +22,14 @@ architecture sim of tb is
 
   constant C_DATA_WIDTH    : natural := 64;
   constant C_DEPTH         : natural := 8;
-  constant C_AXIS_PERIOD   : time    := 10 ns;
-  constant C_AXIL_PERIOD   : time    := 10 ns;
+
+  -- Clock domain frequency configuration
+  constant C_AXIS_FREQ_MHZ : real := 100.0;
+  constant C_AXIL_FREQ_MHZ : real := 200.0;
+
+  constant C_AXIS_PERIOD   : time := integer(1_000_000.0 / C_AXIS_FREQ_MHZ) * 1 ps;
+  constant C_AXIL_PERIOD   : time := integer(1_000_000.0 / C_AXIL_FREQ_MHZ) * 1 ps;
+
   constant C_TRIG_IDX      : natural := 3;
   constant C_TRIGGER_POINT : natural := 80;
   constant C_TRIGGER_PULSE : natural := 16;
@@ -287,24 +293,28 @@ begin
     wait until rising_edge(s_axil_aclk);
     axil_write(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, x"00000004", TRIGGER_MASK);
 
--- Trigger data words (Index 4 to 4 + a - 1)
+    -- Trigger data words (Index 4 to 4 + a - 1)
     for word_idx in 0 to (C_DATA_WIDTH / 32) - 1 loop
+
       wait until rising_edge(s_axil_aclk);
       axil_write(
         s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid,
         std_logic_vector(to_unsigned((4 + word_idx) * 4, 32)),
         TRIGGER_DATA(31 + word_idx * 32 downto word_idx * 32)
       );
+
     end loop;
 
     -- Trigger data mask words (Index 4 + a to 4 + 2a - 1)
     for word_idx in 0 to (C_DATA_WIDTH / 32) - 1 loop
+
       wait until rising_edge(s_axil_aclk);
       axil_write(
         s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid,
         std_logic_vector(to_unsigned((4 + (C_DATA_WIDTH / 32) + word_idx) * 4, 32)),
         TRIGGER_DATA_MASK(31 + word_idx * 32 downto word_idx * 32)
       );
+
     end loop;
 
     for settle_index in 1 to 4 loop

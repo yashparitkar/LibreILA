@@ -20,9 +20,11 @@ library ieee;
 
 entity axi4s_ila is
   generic (
+    -- Clock speed of the AXIS, used in plotting
+    G_AXIS_CLK_FREQ     : integer := 100000000;
     G_EXTERNAL_TRIG     : integer := 0;    -- 1 for external trigger pin
     G_DATA_WIDTH        : natural := 64;   -- Keep it a multiple of 32 for best results
-    G_DEPTH             : integer := 2048; -- Keep it a power of two for best results
+    G_DEPTH             : natural := 2048; -- Keep it a power of two for best results
     C_S_AXIL_DATA_WIDTH : integer := 32;   -- DONT CHANGE
     C_S_AXIL_ADDR_WIDTH : integer := 32    -- DONT CHANGE
   );
@@ -142,8 +144,9 @@ architecture rtl of axi4s_ila is
   -- Calculating required number of the AXILite regs ----------------
   -- Note that, the additional ( (G_DATA_WIDTH / 32 + 1) * G_DEPTH ) registers are coming from the
   -- buffer itself
-  constant C_AXIL_N_CTRL_REGS    : integer := 8 + 2 * G_DATA_WIDTH / 32;
-  constant C_AXIL_N_CTRL_REGS_IN : integer := 4 + 2 * G_DATA_WIDTH / 32;
+  constant C_AXIL_N_CTRL_REGS_IN  : integer := 4 + 2 * G_DATA_WIDTH / 32;
+  constant C_AXIL_N_CTRL_REGS_OUT : integer := 8;
+  constant C_AXIL_N_CTRL_REGS     : integer := C_AXIL_N_CTRL_REGS_IN + C_AXIL_N_CTRL_REGS_OUT;
 
   -- Total AXI4Lite regs
   constant C_AXIL_N_REGS : integer := C_AXIL_N_CTRL_REGS + (C_AXIL_STRIDE  * G_DEPTH);
@@ -451,9 +454,9 @@ begin
   -------------------------------------------------------------------
 
   -- STATE synchroniser process --------------------------------------
-  ila_armed_axis <= '1' when ila_state = ILA_DONE else
+  ila_armed_axis <= '1' when ila_state = ILA_ARMED else
                     '0';
-  ila_trigd_axis <= '1' when ila_state = ILA_DONE else
+  ila_trigd_axis <= '1' when ila_state = ILA_TRIGD else
                     '0';
   ila_done_axis  <= '1' when ila_state = ILA_DONE else
                     '0';
@@ -472,11 +475,11 @@ begin
         ila_done_axil <= '0';
         ila_done_sync <= '0';
       else
-        ila_armed_sync <= ila_done_axis;
-        ila_armed_axil <= ila_done_sync;
+        ila_armed_sync <= ila_armed_axis;
+        ila_armed_axil <= ila_armed_sync;
 
-        ila_trigd_sync <= ila_done_axis;
-        ila_trigd_axil <= ila_done_sync;
+        ila_trigd_sync <= ila_trigd_axis;
+        ila_trigd_axil <= ila_trigd_sync;
 
         ila_done_sync <= ila_done_axis;
         ila_done_axil <= ila_done_sync;
@@ -749,15 +752,24 @@ begin
   slv_reg_out(0)(1)                                <= ila_trigd_axil;
   slv_reg_out(0)(2)                                <= ila_done_axil;
   slv_reg_out(0)(4 downto 3)                       <= ila_state;
-  slv_reg_out(0)(C_S_AXIL_DATA_WIDTH - 1 downto 3) <= (others => '0');
+  slv_reg_out(0)(C_S_AXIL_DATA_WIDTH - 1 downto 5) <= (others => '0');
 
   slv_reg_out(1) <= x"B01DFACE";
 
-  slv_reg_out(2)(trig_idx'range)                               <= STD_LOGIC_VECTOR(trig_idx);
-  slv_reg_out(2)(C_S_AXIL_DATA_WIDTH - 1 downto C_ADDR_WIDTH ) <= (others => '0');
+  slv_reg_out(2) <= STD_LOGIC_VECTOR(to_unsigned(G_AXIS_CLK_FREQ, C_S_AXIL_DATA_WIDTH));
 
-  slv_reg_out(3)(r_wr_idx'range)                               <= STD_LOGIC_VECTOR(r_wr_idx);
-  slv_reg_out(3)(C_S_AXIL_DATA_WIDTH - 1 downto  C_ADDR_WIDTH) <= (others => '0');
+  slv_reg_out(3)(31 downto 16) <= STD_LOGIC_VECTOR(to_unsigned(C_AXIS_N_SIGNALS, 16));
+  slv_reg_out(3)(15 downto  0) <= STD_LOGIC_VECTOR(to_unsigned(G_DATA_WIDTH, 16));
+
+  slv_reg_out(4) <= STD_LOGIC_VECTOR(to_unsigned(G_DEPTH, C_S_AXIL_DATA_WIDTH));
+
+  slv_reg_out(5) <= (others => '0');
+
+  slv_reg_out(6)(trig_idx'range)                               <= STD_LOGIC_VECTOR(trig_idx);
+  slv_reg_out(6)(C_S_AXIL_DATA_WIDTH - 1 downto C_ADDR_WIDTH ) <= (others => '0');
+
+  slv_reg_out(7)(r_wr_idx'range)                               <= STD_LOGIC_VECTOR(r_wr_idx);
+  slv_reg_out(7)(C_S_AXIL_DATA_WIDTH - 1 downto  C_ADDR_WIDTH) <= (others => '0');
 
 -------------------------------------------------------------------------------
 -------------------------------------------------------------------

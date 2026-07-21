@@ -1,0 +1,14 @@
+-------------------------------------------------------------------------------
+-- File: ila_uart_wrapper.vhdl
+-- Author: Y.U.P.
+-- Created: 2026-07-21 Tue 20:12
+-- Last Modified: 2026-07-21 Tue 20:12
+--
+-- Description: This is a wrapper for the axi4s_ila. This exposes two UART pins through which the ILA can be controller allowing the external debug of the ILA with serial port.
+-- Usage:
+--   * Add this file and the axi4s_ila.vhdl to the project
+--   * Instantiate properly
+--   * Expose the UART RX and TX to the outside world
+--   * Connect the RX and TX to PC with serial adapter
+--   * Use the python interface to work with the ILA
+-------------------------------------------------------------------------------

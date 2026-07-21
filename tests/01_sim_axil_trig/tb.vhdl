@@ -38,9 +38,9 @@ architecture sim of tb is
   -- For this configuration, the output block begins at input-reg-count * 4 bytes.
   constant C_INPUT_REG_COUNT : natural := 4 + 2 * (C_DATA_WIDTH / 32);
   constant C_OUTPUT_REG_BASE : natural := C_INPUT_REG_COUNT * C_AXIL_WORD_BYTES;
-  constant C_SAMPLE_RAM_BASE : natural := (4 + 2 * (C_DATA_WIDTH / 32) + 4) * C_AXIL_WORD_BYTES;
+  constant C_SAMPLE_RAM_BASE : natural := (4 + 2 * (C_DATA_WIDTH / 32) + 8) * C_AXIL_WORD_BYTES;
   constant C_SAMPLE_STRIDE   : natural := 2 ** integer(ceil(log2(real((C_DATA_WIDTH / 32) + 1))));
-  -- The current address decoder exposes the buffer RAM window.
+
   constant C_SAMPLE_PRINT_COUNT : natural                       := C_DEPTH;
   constant C_STATUS_ADDR        : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 0 * C_AXIL_WORD_BYTES, 32));
   constant C_MAGIC_ADDR         : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 1 * C_AXIL_WORD_BYTES, 32));
