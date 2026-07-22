@@ -2,7 +2,7 @@
 -- File: axi4s_ila.vhdl
 -- Author: Y.U.P.
 -- Created: 2026/07/14 11:11
--- Last Modified: 2026/07/22 16:31
+-- Last Modified: 2026/07/22 19:31
 --
 -- Description: An ILA for AXI4-Stream.
 -- Usage:
@@ -398,7 +398,7 @@ begin
 
             en_wr <= '1';
 
-            if (trig = '1' or arm_axis = '1') then
+            if ((trig = '1') or (arm_axis = '1')) then
               trig_idx             <= r_wr_idx;
               ila_state            <= ILA_TRIGD;
               post_trig_sample_tgt <= G_DEPTH - trig_tgt - 1;

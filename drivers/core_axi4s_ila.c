@@ -296,3 +296,39 @@ cmd_status_t AXI4S_ILA_read_idx
     
     return CMD_STATUS_SUCCESS;
 }
+
+/*-------------------------------------------------------------------------*//**
+ * AXI4S_ILA_read_data()
+ * See "core_axi4s_ila.h" for details of how to use this function.
+ */
+cmd_status_t AXI4S_ILA_read_data
+(
+    axi4s_ila_instance_t * this_axi4s_ila,
+    uint64_t * data_buffer,
+    uint8_t * signal_buffer,
+    uint32_t * samp_buff_trig_idx
+)
+{
+    uint32_t samp_buff_frst_idx;
+    
+    if (this_axi4s_ila == NULL)
+    {
+        return CMD_STATUS_BAD_AXI4S_ILA; // fail fast instead of busy-looping the full timeout
+    }
+    samp_buff_frst_idx = HAL_get_32bit_reg(this_axi4s_ila->base_addr, CORE_AXI4S_ILA_REGS_SAMP_BUFF_FRST_IDX);
+
+    * samp_buff_trig_idx = HAL_get_32bit_reg(this_axi4s_ila->base_addr, CORE_AXI4S_ILA_REGS_SAMP_BUFF_TRIG_IDX);
+
+    for( uint32_t i = 0; i < CORE_AXI4S_ILA_SAMP_BUFF_DEPTH; i++)
+    {
+        uint32_t idx = (samp_buff_frst_idx + i) % CORE_AXI4S_ILA_SAMP_BUFF_DEPTH;
+
+        uint32_t lo = HAL_get_32bit_reg(this_axi4s_ila->base_addr, CORE_AXI4S_ILA_REGS_SAMP_BUFF_BASE + (idx * CORE_AXI4S_ILA_STRIDE_WIDTH));
+        uint32_t hi = HAL_get_32bit_reg(this_axi4s_ila->base_addr, CORE_AXI4S_ILA_REGS_SAMP_BUFF_BASE + (idx * CORE_AXI4S_ILA_STRIDE_WIDTH) + 4);
+        data_buffer[i] = ((uint64_t)hi << 32) | lo;
+
+        signal_buffer[i] = HAL_get_32bit_reg(this_axi4s_ila->base_addr, CORE_AXI4S_ILA_REGS_SAMP_BUFF_BASE + (idx * CORE_AXI4S_ILA_STRIDE_WIDTH) + 8);
+    }
+    
+    return CMD_STATUS_SUCCESS;
+}

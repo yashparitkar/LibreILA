@@ -117,9 +117,9 @@ The AXI4S_ILA_configure_trigger() function configures the trigger settings for t
     The trigger_mask parameter is the value to be written to the TRIG_MASK register of the CoreAXI4S_ILA hardware instance. This value defines the mask for the trigger conditions.
 
   @return
-    ila_status_t, see enum __axi4s_ila_status_t for details of the return values.
+    cmd_status_t, see enum __axi4s_ila_status_t for details of the return values.
   */
-ila_status_t AXI4S_ILA_configure_trigger
+cmd_status_t AXI4S_ILA_configure_trigger
 (
     axi4s_ila_instance_t * this_axi4s_ila,
     uint32_t trigger_cond,
@@ -139,9 +139,9 @@ The AXI4S_ILA_configure_trigger_data() function configures the trigger settings 
     The trigger_mask parameter is the value to be written to the TRIG_DATA_MASK register(s) of the CoreAXI4S_ILA hardware instance. This value defines the mask for the trigger data conditions. Only the bits set in this mask will be considered when evaluating the trigger condition against the trigger data.
 
   @return
-    ila_status_t, see enum __axi4s_ila_status_t for details of the return values.
+    cmd_status_t, see enum __axi4s_ila_status_t for details of the return values.
   */
-ila_status_t AXI4S_ILA_configure_trigger_data
+cmd_status_t AXI4S_ILA_configure_trigger_data
 (
     axi4s_ila_instance_t * this_axi4s_ila,
     uint64_t trigger_data_cond,
@@ -155,9 +155,9 @@ The AXI4S_ILA_arm() function arms the CoreAXI4S_ILA hardware instance. This is d
     Pointer to the axi4s_ila_instance_t to operate on.
 
   @return
-    ila_status_t, see enum __axi4s_ila_status_t for details of the return values.
+    cmd_status_t, see enum __axi4s_ila_status_t for details of the return values.
   */
-ila_status_t AXI4S_ILA_arm
+cmd_status_t AXI4S_ILA_arm
 (
     axi4s_ila_instance_t * this_axi4s_ila
 );
@@ -169,9 +169,9 @@ The AXI4S_ILA_force_trigger() function forces a trigger event on the CoreAXI4S_I
     Pointer to the axi4s_ila_instance_t to operate on.
 
   @return
-    ila_status_t, see enum __axi4s_ila_status_t for details of the return values.
+    cmd_status_t, see enum __axi4s_ila_status_t for details of the return values.
   */
-ila_status_t AXI4S_ILA_force_trigger
+cmd_status_t AXI4S_ILA_force_trigger
 (
     axi4s_ila_instance_t * this_axi4s_ila
 );
@@ -186,9 +186,9 @@ The AXI4S_ILA_wait_done() function polls the STATUS register of the CoreAXI4S_IL
     The timeout_ms parameter specifies the maximum time in milliseconds to wait for the ILA to complete its operation. If the ILA does not complete within this time, the function will return a timeout status.
 
   @return
-    ila_status_t, see enum __axi4s_ila_status_t for details of the return values.
+    cmd_status_t, see enum __axi4s_ila_status_t for details of the return values.
   */
-ila_status_t AXI4S_ILA_wait_done
+cmd_status_t AXI4S_ILA_wait_done
 (
     axi4s_ila_instance_t * this_axi4s_ila,
     uint32_t timeout_ms
@@ -207,9 +207,9 @@ The AXI4S_ILA_read_idx() function reads the indices of the sample buffer where t
     Pointer to a uint32_t variable where the index of the sample in the sample buffer where the trigger event occurred will be stored.
 
   @return
-    ila_status_t, see enum __axi4s_ila_status_t for details of the return values.
+    cmd_status_t, see enum __axi4s_ila_status_t for details of the return values.
   */
-ila_status_t AXI4S_ILA_read_idx
+cmd_status_t AXI4S_ILA_read_idx
 (
     axi4s_ila_instance_t * this_axi4s_ila,
     uint32_t * samp_buff_frst_idx,
@@ -236,7 +236,7 @@ The function separates the data and signal bits from the sample buffer and store
   @return
     ila_status_t, see enum __axi4s_ila_status_t for details of the return values.
   */
-ila_status_t AXI4S_ILA_read_data
+cmd_status_t AXI4S_ILA_read_data
 (
     axi4s_ila_instance_t * this_axi4s_ila,
     uint64_t * data_buffer,
