@@ -44,7 +44,7 @@ Current implementation only uses TDATA, TVALID, TREADY and TLAST ports.
 |   0   | RW | Trigger vector cond | See trigger vector section |
 |   1   | RW | Trigger vector mask |                            |
 |   2   | RW | Trigger position    | Number of pre-trig samples |
-|   3   |  W | Arm                 | Any write to this register arms the ILA |
+|   3   |  W | Arm_FT              | Any write to this register arms the ILA or forces trigger if already armed |
 |4      | RW | Trigger data (LSB)  | Input for TDATA trigger    |
 |4+ a-1 | RW | Trigger data (MSB)  | Input for TDATA trigger    |
 |4+ a   | RW | Trigger data mask (LSB)  | Input for TDATA trigger    |
@@ -69,9 +69,7 @@ Total input registers: 4 + G_DATA_WIDTH/32 * 2
 |   6   | RO | samp_buff_trig_idx  | Index of the trigger sample           |
 |   7   | RO | samp_buff_frst_idx  | Index of the first sample             |
 
-After this, sampling buffer is mapped with strides to ease the resource usage on the fabric. Each samp_buff is written as a bunch with number of registers used for each samp_buff as power of two to ease computation. Note that, minimum stride is of the length of 4, this is done to accomodate the control registers in the first output stride.
-
-For example, if the G_DATA_WIDTH is kept 64 and number of signals is 3 then total 4 32-bit registers are needed to properly show the data. Hence, stride will be of 4. Inside each stride, the data each stored in following format:
+After this, sampling buffer is mapped with strides to ease the resource usage on the fabric. Each samp_buff is written as a bunch with number of registers used for each samp_buff as power of two to ease computation. For example, if the G_DATA_WIDTH is kept 64 and number of signals is 3 then total 4 32-bit registers are needed to properly show the data. Hence, stride will be of 4. Inside each stride, the data each stored in following format:
  
 | Offset   | RW | Register Name                            | Description                |
 |---------|----|------------------------------------------|----------------------------|
@@ -119,8 +117,7 @@ STATE HOW THE SIGNALS ARE APPENDED AND WORD ALIGNED WHILE STORING
 
 ## Serving suggestions
 This design contains minimal AXI4S ports, user can add rest of the ports from the standard.
+
 This can be further optimised for the data storage compression although I don't prefer that as it will make the readout complex.
 
 If needed, user can also modify to use masked data values for triggering.
-
-A simple softcore can be coupled with the core to give data output via SPI or some other protocol and read it out with PC. Even a software interface can be added to it.

@@ -203,17 +203,17 @@
          CORE_AXI4S_ILA_REGS_TRIG_MASK_REG_TDATA_FIELD_SHIFT)
 
 /*******************************************************************************
- * Register: ARM_REG
+ * Register: ARM_FT_REG
  *
- * Description: Any write to this register will arm the ILA. The ILA will start capturing data based on the configured trigger conditions.
+ * Description: Any write to this register will arm the ILA if not armed or trigger is forced if already armed.
  */
-#define CORE_AXI4S_ILA_REGS_ARM_REG_OFFSET       0x0CU
-#define CORE_AXI4S_ILA_REGS_ARM_REG_LENGTH       0x04U
-#define CORE_AXI4S_ILA_REGS_ARM_REG_RW_MASK      0x00000000U
-#define CORE_AXI4S_ILA_REGS_ARM_REG_RO_MASK      0x00000000U
-#define CORE_AXI4S_ILA_REGS_ARM_REG_WO_MASK      0xFFFFFFFFU
-#define CORE_AXI4S_ILA_REGS_ARM_REG_READ_MASK    0x00000000U
-#define CORE_AXI4S_ILA_REGS_ARM_REG_WRITE_MASK   0xFFFFFFFFU
+#define CORE_AXI4S_ILA_REGS_ARM_FT_REG_OFFSET       0x0CU
+#define CORE_AXI4S_ILA_REGS_ARM_FT_REG_LENGTH       0x04U
+#define CORE_AXI4S_ILA_REGS_ARM_FT_REG_RW_MASK      0x00000000U
+#define CORE_AXI4S_ILA_REGS_ARM_FT_REG_RO_MASK      0x00000000U
+#define CORE_AXI4S_ILA_REGS_ARM_FT_REG_WO_MASK      0xFFFFFFFFU
+#define CORE_AXI4S_ILA_REGS_ARM_FT_REG_READ_MASK    0x00000000U
+#define CORE_AXI4S_ILA_REGS_ARM_FT_REG_WRITE_MASK   0xFFFFFFFFU
 
 /*******************************************************************************
  * Register: TRIG_DATA_COND_LSB_REG
