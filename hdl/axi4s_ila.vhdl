@@ -2,7 +2,7 @@
 -- File: axi4s_ila.vhdl
 -- Author: Y.U.P.
 -- Created: 2026/07/14 11:11
--- Last Modified: 2026-07-21 Tue 18:56
+-- Last Modified: 2026/07/22 10:52
 --
 -- Description: An ILA for AXI4-Stream.
 -- Usage:
@@ -214,6 +214,10 @@ architecture rtl of axi4s_ila is
   signal arm_toggler_axilite : std_logic; -- in the axilite domain
   signal arm_axis            : std_logic; -- synchronised in axis
   signal arm_sync            : std_logic_vector(2 downto 0);
+
+  signal force_trig_toggler_axilite : std_logic; -- in the axilite domain
+  signal force_trig_axis            : std_logic; -- synchronised in axis
+  signal force_trig_sync            : std_logic_vector(2 downto 0);
   -------------------------------------------------------------------
 
   -- From the axiliteslave template ---------------------------------
@@ -289,8 +293,8 @@ begin
   o_trig_out <= trig;
 
   g_ext_trig_0 : if G_EXTERNAL_TRIG = 0 generate
-    trig <= trig_or when trig_cond(4) = '1' else
-            trig_and;
+    trig <= (force_trig_axis or trig_or) when trig_cond(4) = '1' else
+            (force_trig_axis or trig_and);
 
     trig_data <= '1' when ((axis_in_tdata xor trig_data_cond) and trig_data_mask)
                           = (G_DATA_WIDTH - 1 downto 0 => '0') else
@@ -436,21 +440,24 @@ begin
 
   -------------------------------------------------------------------
 
-  -- ARM synchroniser process ---------------------------------------
-  p_arm_cdc : process (axis_in_aclk) is
+  -- SIGNAL synchroniser process ---------------------------------------
+  p_signal_cdc : process (axis_in_aclk) is
   begin
 
     if (rising_edge(axis_in_aclk)) then
       if (i_rst_sync = '1') then
-        arm_sync <= (others => '0');
+        arm_sync        <= (others => '0');
+        force_trig_sync <= (others => '0');
       else
-        arm_sync <= arm_sync(1 downto 0) & arm_toggler_axilite;
+        arm_sync        <= arm_sync(1 downto 0) & arm_toggler_axilite;
+        force_trig_sync <= force_trig_sync(1 downto 0) & force_trig_toggler_axilite;
       end if;
     end if;
 
-  end process p_arm_cdc;
+  end process p_signal_cdc;
 
-  arm_axis <= arm_sync(2) xor arm_sync(1);
+  arm_axis        <= arm_sync(2) xor arm_sync(1);
+  force_trig_axis <= force_trig_sync(2) xor force_trig_sync(1);
   -------------------------------------------------------------------
 
   -- STATE synchroniser process --------------------------------------

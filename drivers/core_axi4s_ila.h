@@ -34,9 +34,9 @@ typedef enum __cmd_status_t
 {
     CMD_STATUS_SUCCESS = 0,   /**< Command completed successfully. */
     CMD_STATUS_BAD_AXI4S_ILA = -1,   /**< Command failed due to a bad AXI4S_ILA instance. */
-    CMD_STATUS_BAD_DATA_POINTER = -2,   /**< Command failed due to bad input data. eg, null pointer */
-    CMD_STATUS_BAD_MAGIC_KEY = -3,   /**< Command failed due to a bad MAGIC_KEY read from the CoreAXI4S_ILA hardware instance. */
-    CMD_STATUS_BAD_DATA_LENGTH = -4,   /**< Command failed due to bad data length. eg, nframes = 0 */
+    CMD_STATUS_BAD_MAGIC_KEY = -2,   /**< Command failed due to a bad MAGIC_KEY read from the CoreAXI4S_ILA hardware instance. */
+    CMD_STATUS_BAD_CONFIG = -3,   /**< Command failed due to defined  configuration no matching hardware. eg, invalid buffer depth or data width */
+    CMD_STATUS_BAD_CLK_FREQ = -4,   /**< Command failed due defined clock frequency does not match hardware */
     CMD_STATUS_TIMEOUT = 1,   /**< Command timed out before completion. */
     CMD_STATUS_ERROR   = 2    /**< Command completed with an error. */
 } cmd_status_t;
@@ -44,21 +44,20 @@ typedef enum __cmd_status_t
 /*-------------------------------------------------------------------------*//** Enum for the hardware state reported by AXI4S_ILA_check_status(). Encodes two
  * independent bits (ready/busy, overflow/no overflow) as one named state,
  * rather than a bare 0-3 int8_t. */
-typedef enum __fpad_status_t
+typedef enum __axi4s_ila_status_t
 {
     AXI4S_ILA_STATUS_BAD_AXI4S_ILA = -1,   /**< this_axi4s_ila is NULL. */
     AXI4S_ILA_STATUS_IDLE          =  0,   /**< ILA is idle */
     AXI4S_ILA_STATUS_ARMED         =  1,   /**< ILA is armed */
     AXI4S_ILA_STATUS_TRIGGERED     =  2,   /**< ILA is triggered */
     AXI4S_ILA_STATUS_DONE          =  3    /**< ILA acquisition complete */
-} fpad_status_t;
+} axi4s_ila_status_t;
 
 /*-------------------------------------------------------------------------*//** Structure instance holding all data regarding the CoreAXI4S_ILA
  */
 typedef struct __axi4s_ila_instance_t
 {
     addr_t              base_addr; // base addr of AXI4S_ILA AXI4L
-
 } axi4s_ila_instance_t;
 
 /*

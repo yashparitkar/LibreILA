@@ -62,7 +62,7 @@ Total input registers: 4 + G_DATA_WIDTH/32 * 2
 |-------|----|---------------------|---------------------------------------|
 |   0   | RO | Status              | ILA status register                   |
 |   1   | RO | Magic key           | 0xb01dface                            |
-|   2   | RO | Clock frequency     | Sampling clock frequency (Hz)         |
+|   2   | RO | Samp Clk Freqcy     | Sampling clock frequency (Hz)         |
 |   3   | RO | Width               | #signals(16bit) & axi4s width (16bit) |
 |   4   | RO | Buffer Depth        | Depth of the sampling buffer          |
 |   5   | RO | Reserved            | Reserved                              |
@@ -85,12 +85,13 @@ Total output registers: 8 + ( G_DATA_WIDTH/32 + 1) * G_DEPTH
 Total number of registers: 12 + G_DATA_WIDTH/32 * 2 + (G_DATA_WIDTH/32 + 1) * G_DEPTH
 
 #### Status 
+This is the status register of the ILA. The ARMED, TRIGD and DONE signal bits are CDCed with 2FF to the AXI4Lite domain and hence suffer a slight delay. The internal status register does not have CDC and used for debugging.
 | bit | Name   | Description                                  |
 |-----|--------|----------------------------------------------|
 |  0  | ARMED  | High if the ILA is armed                     |
 |  1  | TRIGD  | High if the trigger happens                  |
 |  2  | DONE   | Marks the completion of the ILA process      |
-| 4-2 | STATUS | Internal status register of the ILA (No CDC) |
+| 4-3 | STATUS | Internal status register of the ILA (No CDC) |
 
 ## Trigger vector
 Trigger vector decided when to trigger ILA. It is a 32 bit with register with mask and condition modifiable with AXI4Lite interface. Each bit of the vector corresponds to one of the condition being activated for trigger. The bit4 decides if the conditions are ORed or ANDed. If the TDATA is used as trigger, the value of TDATA can be entered in the trigger data input registers. When TDATA is used as a trigger, the MASK is supllied by the second set of registers of the TDATA width enabling mask of same size. 
