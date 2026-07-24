@@ -1,11 +1,16 @@
 # AXI4 Slave ILA
-This directory contains work related to AXI4 Stream In-System Logic Analyzer. 
+
+This project contains work related to AXI4 Stream In-System Logic Analyzer. 
 
 The motivation to make this is follows:
 * There is no ILA like in Xilinx toolchain in the Microchip toolchain, the SmartDebug can not replace the ILA
 * ILA serves as a really good tool to debug the signals
 
 This specific ILA is specialised for the AXI4S but a similar logic can be modified and easily adapted for generic IOs.
+
+## License 
+
+This project is licensed under CERN Open Hardware Licence Version 2 - Permissive unless otherwise specified. See LICENSE for more details.
 
 ## Features
 * Optional external trigger port to synchronise with other ILAs
@@ -18,7 +23,12 @@ This specific ILA is specialised for the AXI4S but a similar logic can be modifi
     * Once setting the triggers condition, the ILA can be armed
     * Number of samples before and after trigger can be adjusted
     * Can also use a external trigger
-* CDC on the ARM and DONE bits
+* CDC on the ARM and status bits
+* A serial wrapper is also provided to easily use the ILA with the PC
+* A python driver is provided to easily control the ILA from the PC when instantiated with the serial wrapper
+
+# AXI4S_ILA core
+This section contains information about the AXI4S_ILA core.
 
 ## Ports
 Current implementation only uses TDATA, TVALID, TREADY and TLAST ports. 
@@ -111,9 +121,12 @@ Trigger vector decided when to trigger ILA. It is a 32 bit with register with ma
 The external trigger is a bit-wide input port. Use of external port needs to be enabled at the time of instantiation. The signal is synchronised to the AXI4S clock domain and rising edge of the signal is used to trigger the ILA.
 
 ## Output format
-The output register can be seen in the above section. Internally, all the samples are stored in a LSRAM block. The AXI4Lite slave serves as read port for the RAM block. The offsetted read values are fed to the RAM port. This allows the design to make full use of the independent clock of the LSRAM of the PolarFire LSRAM block (G238606).
+The output register can be seen in the above section. Internally, all the samples are stored in a LSRAM block. The AXI4Lite slave serves as read port for the RAM block. The offsetted read values are fed to the RAM port. This allows the design to make full use of the independent clock of the LSRAM of the PolarFire LSRAM block (Microchip document G238606).
 
 STATE HOW THE SIGNALS ARE APPENDED AND WORD ALIGNED WHILE STORING
+
+## Clock domains
+The core operates in the sampling clock domain which is AXI4S in the default case. The AXI4Lite is separate domain.
 
 ## Serving suggestions
 This design contains minimal AXI4S ports, user can add rest of the ports from the standard.
@@ -121,3 +134,24 @@ This design contains minimal AXI4S ports, user can add rest of the ports from th
 This can be further optimised for the data storage compression although I don't prefer that as it will make the readout complex.
 
 If needed, user can also modify to use masked data values for triggering.
+
+# ILA UART WRAPPER
+This section contains information about the ILA UART WRAPPER.
+
+## UART packet format
+The PC is the one managing the ILA. It is connected to the ILA with the UART interface. A custom packet format is defined to read/write the addresses. The packet format for the upstream and downstream is given below.
+
+### PC to ILA WRAPPER
+```text
+| SYNC/VALID | R/W | #words | base address | Write Data Words | 
+|     0x55   | 0/1 | 7 bit  |   32-bits    | 32-bits x #words | 
+```
+
+### ILA WRAPPER to PC
+```text
+| SYNC/VALID | valid | #words | base address | Read Data Words  | 
+|     0xAA   | 0/1   | 7 bit  |   32-bits    | 32-bits x #words | 
+```
+
+## Clock domains
+The core operates in the sampling clock domain which is AXI4S in the default case. The AXI4Lite is separate domain in which AXI4Lite interface operates and also the wrapper. The UART is obv the third domain.

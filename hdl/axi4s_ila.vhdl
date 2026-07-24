@@ -1,8 +1,8 @@
 -------------------------------------------------------------------------------
 -- File: axi4s_ila.vhdl
--- Author: Y.U.P.
+-- Author: Y.U.P. (paritkary25)
 -- Created: 2026/07/14 11:11
--- Last Modified: 2026/07/22 19:31
+-- Last Modified: 2026/07/24 11:08
 --
 -- Description: An ILA for AXI4-Stream.
 -- Usage:
@@ -29,22 +29,21 @@ entity axi4s_ila is
     C_S_AXIL_ADDR_WIDTH : integer := 32    -- DONT CHANGE
   );
   port (
-    i_rst_sync    : in    std_logic;
-    axis_in_aclk  : in    std_logic;
-    axis_out_aclk : in    std_logic;
-    axil_s_aclk   : in    std_logic;
+    i_rst_sync : in    std_logic;
 
     -- External tigger
     i_ext_trig : in    std_logic;
     o_trig_out : out   std_logic;
 
     -- AXI4S_IN port
+    axis_in_aclk   : in    std_logic;
     axis_in_tready : out   std_logic;
     axis_in_tvalid : in    std_logic;
     axis_in_tlast  : in    std_logic;
     axis_in_tdata  : in    std_logic_vector(G_DATA_WIDTH - 1 downto 0);
 
     -- AXI4S_OUT port
+    axis_out_aclk   : out   std_logic;
     axis_out_tready : in    std_logic;
     axis_out_tvalid : out   std_logic;
     axis_out_tlast  : out   std_logic;
@@ -268,6 +267,7 @@ architecture rtl of axi4s_ila is
 begin
 
   -- Shorting of AXI4S ports ----------------------------------------
+  axis_out_aclk   <= axis_in_aclk;
   axis_out_tvalid <= axis_in_tvalid;
   axis_out_tdata  <= axis_in_tdata;
   axis_out_tlast  <= axis_in_tlast;

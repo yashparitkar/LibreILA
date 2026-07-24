@@ -48,7 +48,6 @@ architecture sim of tb is
   signal i_rst_sync    : std_logic := '1';
   signal axis_in_aclk  : std_logic := '0';
   signal axis_out_aclk : std_logic := '0';
-  signal axil_s_aclk   : std_logic := '0';
   signal s_axil_aclk   : std_logic := '0';
 
   signal i_ext_trig : std_logic := '0';
@@ -190,7 +189,6 @@ begin
       i_rst_sync      => i_rst_sync,
       axis_in_aclk    => axis_in_aclk,
       axis_out_aclk   => axis_out_aclk,
-      axil_s_aclk     => axil_s_aclk,
       i_ext_trig      => i_ext_trig,
       o_trig_out      => o_trig_out,
       axis_in_tready  => axis_in_tready,
@@ -230,10 +228,8 @@ begin
     while true loop
 
       axis_in_aclk  <= '0';
-      axis_out_aclk <= '0';
       wait for C_AXIS_PERIOD / 2;
       axis_in_aclk  <= '1';
-      axis_out_aclk <= '1';
       wait for C_AXIS_PERIOD / 2;
 
     end loop;
@@ -245,10 +241,8 @@ begin
 
     while true loop
 
-      axil_s_aclk <= '0';
       s_axil_aclk <= '0';
       wait for C_AXIL_PERIOD / 2;
-      axil_s_aclk <= '1';
       s_axil_aclk <= '1';
       wait for C_AXIL_PERIOD / 2;
 

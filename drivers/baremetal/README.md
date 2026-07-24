@@ -1,5 +1,5 @@
 # AXI4S ILA C drivers
-This folder contains C drivers to control the folding pipeline array driver (axi4s_ila).
+This folder contains C drivers to control the axi4s_ila.
 
 The driver is written in C and is designed to be used in embedded systems. 
 

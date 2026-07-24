@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @file core_axi4s_ila.c
- * @author Y.U.P.
+ * @author Y.U.P. (paritkary25)
  * @brief CoreAXI4S_ILA bare metal driver implementation.
  *
  * Functions:
