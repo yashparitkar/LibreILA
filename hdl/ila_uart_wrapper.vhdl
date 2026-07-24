@@ -2,9 +2,11 @@
 -- File: ila_uart_wrapper.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-21 Tue 20:12
--- Last Modified: 2026/07/24 15:12
+-- Last Modified: 2026/07/24 17:07
 --
--- Description: This is a wrapper for the axi4s_ila. This exposes two UART pins through which the ILA can be controller allowing the external debug of the ILA with serial port.
+-- Description: This is a wrapper for the axi4s_ila. This exposes two UART
+-- pins through which the ILA can be controller allowing the external debug
+-- of the ILA with serial port.
 -- Usage:
 --   * Add the all the .vhdl files to your project
 --   * Instantiate the wrapper
@@ -25,12 +27,15 @@ entity ila_uart_wrapper is
     G_DEPTH              : natural := 2048;   -- Keep it a power of two for best results
     C_S_AXIL_DATA_WIDTH  : integer := 32;     -- DONT CHANGE
     C_S_AXIL_ADDR_WIDTH  : integer := 32;     -- DONT CHANGE
-    G_UART_RX_FIFO_DEPTH : natural := 1024;    -- Depth of the FIFO for UART RX
-    G_UART_TX_FIFO_DEPTH : natural := 1024;    -- Depth of the FIFO for UART TX
+    G_UART_RX_FIFO_DEPTH : natural := 1024;   -- Depth of the FIFO for UART RX
+    G_UART_TX_FIFO_DEPTH : natural := 1024;   -- Depth of the FIFO for UART TX
     BAUD_RATE            : integer := 115_200 -- Baud rate for UART communication
   );
   port (
     i_rst_sync : in    std_logic;
+
+    -- AXI4Lite clock
+    s_axil_aclk : in    std_logic;
 
     -- UART port
     uart_rx : in    std_logic;
@@ -52,40 +57,27 @@ entity ila_uart_wrapper is
     axis_out_tready : in    std_logic;
     axis_out_tvalid : out   std_logic;
     axis_out_tlast  : out   std_logic;
-    axis_out_tdata  : out   std_logic_vector(G_DATA_WIDTH - 1 downto 0);
-
-    -- AXI4Lite slave port
-    s_axil_aclk    : in    std_logic;
-    s_axil_aresetn : in    std_logic;
-    s_axil_awaddr  : in    std_logic_vector(C_S_AXIL_ADDR_WIDTH - 1 downto 0);
-    s_axil_awprot  : in    std_logic_vector(2 downto 0);
-    s_axil_awvalid : in    std_logic;
-    s_axil_awready : out   std_logic;
-    s_axil_wdata   : in    std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
-    s_axil_wstrb   : in    std_logic_vector((C_S_AXIL_DATA_WIDTH / 8) - 1 downto 0);
-    s_axil_wvalid  : in    std_logic;
-    s_axil_wready  : out   std_logic;
-    s_axil_bresp   : out   std_logic_vector(1 downto 0);
-    s_axil_bvalid  : out   std_logic;
-    s_axil_bready  : in    std_logic;
-    s_axil_araddr  : in    std_logic_vector(C_S_AXIL_ADDR_WIDTH - 1 downto 0);
-    s_axil_arprot  : in    std_logic_vector(2 downto 0);
-    s_axil_arvalid : in    std_logic;
-    s_axil_arready : out   std_logic;
-    s_axil_rdata   : out   std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
-    s_axil_rresp   : out   std_logic_vector(1 downto 0);
-    s_axil_rvalid  : out   std_logic;
-    s_axil_rready  : in    std_logic
+    axis_out_tdata  : out   std_logic_vector(G_DATA_WIDTH - 1 downto 0)
   );
 end entity ila_uart_wrapper;
 
 architecture rtl of ila_uart_wrapper is
-  -- Wrapper state machine ------------------------------------------
-  constant IUW_IDLE : std_logic_vector(1 downto 0) := "00";
-  constant IUW_RD : std_logic_vector(1 downto 0) := "01";
-  constant IUW_WR : std_logic_vector(1 downto 0) := "10"
 
-  signal iuw_state : std_logic_vector(1 downto 0) := IUW_IDLE;
+  -- Wrapper state machine ------------------------------------------
+  constant IUW_IDLE : std_logic_vector(2 downto 0) := "000";
+  constant IUW_REQ  : std_logic_vector(2 downto 0) := "001";
+  constant IUW_ADDR : std_logic_vector(2 downto 0) := "010";
+  constant IUW_RD   : std_logic_vector(2 downto 0) := "011";
+  constant IUW_WR   : std_logic_vector(2 downto 0) := "110";
+
+  signal iuw_state : std_logic_vector(2 downto 0);
+  -------------------------------------------------------------------
+
+  -- Operating side -------------------------------------------------
+  constant TXN_FETCH : std_logic := '1';
+  constant TXN_WRITE : std_logic := '0';
+
+  signal txn_side : std_logic;
   -------------------------------------------------------------------
 
   -- FIFO signals ---------------------------------------------------
@@ -98,14 +90,38 @@ architecture rtl of ila_uart_wrapper is
   signal uart_rx_fifo_nempty  : std_logic;
   -------------------------------------------------------------------
 
+  -- Main process logic signals -------------------------------------
+  signal byte_count  : unsigned(3 downto 0);
+  signal word_count  : unsigned(6 downto 0);
+  signal word_target : unsigned(6 downto 0);
+  signal word_addr   : std_logic_vector(31 downto 0);
+  signal word_data   : std_logic_vector(31 downto 0);
+  signal req_type    : std_logic;             -- '0' for read, '1' for write
 
-  -- Main process logic signals ------------------------------------- 
+  -- Read logic signals
   -------------------------------------------------------------------
 
-  -- AXI4Lite read logic signals ------------------------------------
-  -------------------------------------------------------------------
-
-  -- AXI4Lite write logic signals -----------------------------------
+  -- Internal AXI4Lite connections ----------------------------------
+  signal s_axil_aresetn : std_logic;
+  signal s_axil_awaddr  : std_logic_vector(C_S_AXIL_ADDR_WIDTH - 1 downto 0);
+  signal s_axil_awprot  : std_logic_vector(2 downto 0);
+  signal s_axil_awvalid : std_logic;
+  signal s_axil_awready : std_logic;
+  signal s_axil_wdata   : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+  signal s_axil_wstrb   : std_logic_vector(C_S_AXIL_DATA_WIDTH/8 - 1 downto 0);
+  signal s_axil_wvalid  : std_logic;
+  signal s_axil_wready  : std_logic;
+  signal s_axil_bresp   : std_logic_vector(1 downto 0);
+  signal s_axil_bvalid  : std_logic;
+  signal s_axil_bready  : std_logic;
+  signal s_axil_araddr  : std_logic_vector(C_S_AXIL_ADDR_WIDTH - 1 downto 0);
+  signal s_axil_arprot  : std_logic_vector(2 downto 0);
+  signal s_axil_arvalid : std_logic;
+  signal s_axil_arready : std_logic;
+  signal s_axil_rdata   : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+  signal s_axil_rresp   : std_logic_vector(1 downto 0);
+  signal s_axil_rvalid  : std_logic;
+  signal s_axil_rready  : std_logic;
   -------------------------------------------------------------------
 
   -- UART signals ---------------------------------------------------
@@ -217,6 +233,14 @@ architecture rtl of ila_uart_wrapper is
   end component uart;
 
 begin
+  -- Signal assignments ---------------------------------------------
+  s_axil_aresetn <= not i_rst_sync;
+
+  -- Default values for AXI4Lite signals
+  s_axil_awprot <= (others => '0');
+  s_axil_arprot <= (others => '0');
+  s_axil_wstrb  <= (others => '1');
+  -------------------------------------------------------------------
 
   axi4s_ila_inst : component axi4s_ila
     generic map (
@@ -287,7 +311,7 @@ begin
       i_rd_en    => uart_data_in_ack,
       o_rd_data  => uart_data_in,
       o_nfull    => uart_tx_fifo_nfull,
-      o_nempty   => uart_data_in_stb,
+      o_nempty   => uart_data_in_stb
     );
 
   uart_rx_fifo_inst : component fifo
@@ -323,23 +347,185 @@ begin
       rx                  => uart_rx
     );
 
-  -- AXI4Lite read process ------------------------------------------
-  -- Reads the data from the AXI4Lite at the demanded registers
-  -- Writes that to the temporary resigters
-  p_axilite_read : process(s_axil_aclk) is
-  end process p_axilite_read;
-  -------------------------------------------------------------------
-
-  -- AXI4Lite write process -----------------------------------------
-  -- Reads the data from the registers                         
-  -- Writes that to the axilite resigters at the give address
-  p_axilite_read : process(s_axil_aclk) is
-  end process p_axilite_read;
-  -------------------------------------------------------------------
-
   -- Main process ---------------------------------------------------
-  -- Handles the main logic of the wrapper. This includes reading and writing to the UART FIFOs, and handling the AXI4Lite read and write requests.
-  p_main : process(s_axil_aclk) is
+  -- Handles the main logic of the wrapper. This includes reading and
+  -- writing to the UART FIFOs, and handling the AXI4Lite read and
+  -- write requests.
+  p_main : process (s_axil_aclk) is
+  begin
+
+    if rising_edge(s_axil_aclk) then
+      if (i_rst_sync = '1') then
+        -- Reset logic
+        iuw_state          <= IUW_IDLE;
+        uart_tx_fifo_wr_en <= '0';
+        uart_rx_fifo_rd_en <= '0';
+        byte_count         <= (others => '0');
+      else
+        -- Default values
+        uart_tx_fifo_wr_en <= '0';
+        uart_rx_fifo_rd_en <= '0';
+
+        case iuw_state is
+
+          when IUW_IDLE =>
+
+            -- Check if there is proper sync/valid packet in the UART RX FIFO
+            if (uart_rx_fifo_nempty = '1') then
+              if (uart_rx_fifo_rd_data = x"55") then
+                -- Read the data from the UART RX FIFO
+                uart_rx_fifo_rd_en <= '1';
+                iuw_state          <= IUW_REQ;
+              else
+                -- Invalid packet, stay in IDLE, flush the FIFO
+                uart_rx_fifo_rd_en <= '1';
+                iuw_state          <= IUW_IDLE;
+              end if;
+            end if;
+
+          when IUW_REQ =>
+
+            -- Get the next byte from the UART RX FIFO
+            if (uart_rx_fifo_nempty = '1') then
+              uart_rx_fifo_rd_en <= '1';
+              word_count         <= (others => '0');
+              word_target        <= unsigned(uart_rx_fifo_rd_data(6 downto 0));
+              req_type           <= uart_rx_fifo_rd_data(7);
+              iuw_state          <= IUW_ADDR;
+            end if;
+
+          when IUW_ADDR =>
+
+            -- Get next 4 bytes from the UART RX FIFO for the address, MSB first
+            if (byte_count < 4) then
+              if (uart_rx_fifo_nempty = '1') then
+                uart_rx_fifo_rd_en                                                                    <= '1';
+                word_addr((31 - to_integer(byte_count) * 8) downto (24 - to_integer(byte_count) * 8)) <= uart_rx_fifo_rd_data;
+                byte_count                                                                            <= byte_count + 1;
+              end if;
+            else
+              -- Address received, move to read or write state based on req_type
+              byte_count <= (others => '0');
+              txn_side   <= TXN_FETCH;
+              if (req_type = '0') then
+                iuw_state <= IUW_RD;
+              else
+                iuw_state <= IUW_WR;
+              end if;
+            end if;
+
+          when IUW_RD =>
+
+            -- Get 4 bytes from the AXI4Lite registers at the given address
+            -- Write them to the UART TX FIFO, incrementing the address
+            if (word_count < word_target) then
+
+              case txn_side is
+
+                when TXN_FETCH =>
+
+                  -- initiate AXI4Lite read transaction
+                  s_axil_araddr  <= std_logic_vector(word_addr);
+                  s_axil_arvalid <= '1';
+                  s_axil_rready  <= '1';
+                  txn_side       <= TXN_FETCH;
+
+                  if (s_axil_rvalid = '1') then
+                    word_data      <= s_axil_rdata;
+                    s_axil_arvalid <= '0';
+                    txn_side       <= TXN_WRITE;
+                    byte_count     <= (others => '0');
+                  end if;
+
+                when TXN_WRITE =>
+
+                  -- Write the data into the UART TX FIFO, MSB first
+                  if (byte_count < 4) then
+                    if (uart_tx_fifo_nfull = '1') then
+                      uart_tx_fifo_wr_en   <= '1';
+                      uart_tx_fifo_wr_data <= word_data((31 - to_integer(byte_count) * 8) downto (24 - to_integer(byte_count) * 8));
+                      byte_count           <= byte_count + 1;
+                    end if;
+                  else
+                    -- All bytes written, increment word count and address
+                    word_count <= word_count + 1;
+                    word_addr  <= std_logic_vector(unsigned(word_addr) + 4);
+                    txn_side   <= TXN_FETCH;
+                  end if;
+
+                when others =>
+
+                  txn_side <= TXN_FETCH;
+
+              end case;
+
+            else
+              -- All words read, go back to IDLE state
+              iuw_state <= IUW_IDLE;
+            end if;
+
+          when IUW_WR =>
+
+            -- Get 4 bytes from the UART RX FIFO
+            -- Write the words to the AXI4Lite registers, incrementing the
+            -- address for each word
+            if (word_count < word_target) then
+
+              case txn_side is
+
+                when TXN_FETCH =>
+
+                  -- Get the next byte from the UART RX FIFO
+                  if (byte_count < 4) then
+                    if (uart_rx_fifo_nempty = '1') then
+                      uart_rx_fifo_rd_en                                                                <= '1';
+                      word_data(31 - to_integer(byte_count) * 8 downto 24 - to_integer(byte_count) * 8) <= uart_rx_fifo_rd_data;
+                      byte_count                                                                        <= byte_count + 1;
+                    end if;
+                  else
+                    -- All bytes received, initiate AXI4Lite write transaction
+                    s_axil_awaddr  <= std_logic_vector(word_addr);
+                    s_axil_wdata   <= word_data;
+                    s_axil_awvalid <= '1';
+                    s_axil_wvalid  <= '1';
+                    txn_side       <= TXN_WRITE;
+                  end if;
+
+                when TXN_WRITE =>
+
+                  -- Wait for AXI4Lite write response
+                  if (s_axil_bvalid = '1') then
+                    s_axil_awvalid <= '0';
+                    s_axil_wvalid  <= '0';
+                    s_axil_bready  <= '1';                                                               -- Acknowledge the write response
+                    word_count     <= word_count + 1;
+                    word_addr      <= std_logic_vector(unsigned(word_addr) + 4);
+                    byte_count     <= (others => '0');
+                    txn_side       <= TXN_FETCH;
+                  end if;
+
+                when others =>
+
+                  txn_side <= TXN_FETCH;
+
+              end case;
+
+            else
+              -- All words written, go back to IDLE state
+              iuw_state <= IUW_IDLE;
+            end if;
+
+          when others =>
+
+            iuw_state <= IUW_IDLE;
+
+        end case;
+
+      end if;
+    end if;
+
   end process p_main;
-  -------------------------------------------------------------------
+
+-------------------------------------------------------------------
+
 end architecture rtl;

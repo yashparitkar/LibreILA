@@ -154,4 +154,4 @@ The PC is the one managing the ILA. It is connected to the ILA with the UART int
 ```
 
 ## Clock domains
-The core operates in the sampling clock domain which is AXI4S in the default case. The AXI4Lite is separate domain in which AXI4Lite interface operates and also the wrapper. The UART is obv the third domain.
+The core operates in the sampling clock domain which is AXI4S in the default case. The AXI4Lite domain clock is kept separate. This block operates on the AXI4Lite clock. The UART clock is derived from the AXI4Lite clock.

@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
--- File: ufifo.vhdl
+-- File: fifo.vhdl
 -- Author: Y.U.P.
--- Last modified: 2026/07/24 14:37
+-- Last modified: 2026/07/24 17:05
 --
 -- Description: Synchronous FIFO made out of registers
 -------------------------------------------------------------------------------
@@ -11,7 +11,7 @@ library ieee;
   use ieee.numeric_std.all;
   use ieee.math_real.all;
 
-entity ufifo is
+entity fifo is
   generic (
     G_WIDTH : natural := 64;
     G_DEPTH : natural := 4
@@ -32,9 +32,9 @@ entity ufifo is
     o_nfull  : out   std_logic;
     o_nempty : out   std_logic
   );
-end entity ufifo;
+end entity fifo;
 
-architecture rtl of ufifo is
+architecture rtl of fifo is
 
   constant C_ADDR_WIDTH : integer := integer(ceil(log2(real(G_DEPTH))));
 

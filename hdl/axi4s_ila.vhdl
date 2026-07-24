@@ -2,9 +2,9 @@
 -- File: axi4s_ila.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026/07/14 11:11
--- Last Modified: 2026/07/24 11:08
+-- Last Modified: 2026/07/24 17:04
 --
--- Description: An ILA for AXI4-Stream.
+-- Description: An ILA for AXI4-Stream
 -- Usage:
 --   * The AXI4Stream ports are pass through ports which are probed and saved
 --     to a buffer
@@ -22,6 +22,7 @@ entity axi4s_ila is
   generic (
     -- Clock speed of the AXIS, used in plotting
     G_AXIS_CLK_FREQ     : integer := 100000000;
+    G_AXIL_CLK_FREQ     : integer := 100000000;
     G_EXTERNAL_TRIG     : integer := 0;    -- 1 for external trigger pin
     G_DATA_WIDTH        : natural := 64;   -- Keep it a multiple of 32 for best results
     G_DEPTH             : natural := 2048; -- Keep it a power of two for best results
