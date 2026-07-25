@@ -2,6 +2,8 @@
  * @file core_axi4s_ila_regs.h
  * @author Y.U.P. (paritkary25)
  * @brief CoreAXI4S_ILA register definitions
+ * 
+ * @note Last Modified: 2026-07-24 Fri 20:46
  *
  * @details This file contains the register definitions for the CoreAXI4S_ILA module, including register offsets, field offsets, masks, and descriptions. It serves as a reference for software developers to interact with the CoreAXI4S_ILA hardware. 
  * 

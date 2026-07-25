@@ -155,3 +155,11 @@ The PC is the one managing the ILA. It is connected to the ILA with the UART int
 
 ## Clock domains
 The core operates in the sampling clock domain which is AXI4S in the default case. The AXI4Lite domain clock is kept separate. This block operates on the AXI4Lite clock. The UART clock is derived from the AXI4Lite clock.
+
+## Watchdog timer
+The wrapper has a watchdog timer to reset the wrapper in case of any error. The timer is incremented in non-IDLE mode and is reset when a byte is succefully is received via UART or AXI interface. A reset is issued when the timer reaches a certain value.
+
+# Future improvements
+## A script to modify the probe port
+A python script can be written to modify the probed port. This can be done by reading a configuration from csv file. Support for the inout port can also be added.
+The script will need to modify the port declarations and signal concatment. This method will also make it easier to write a script which generate modified vhdl based on other parameter such as existance of the i_ext_trig port, writing default generics.

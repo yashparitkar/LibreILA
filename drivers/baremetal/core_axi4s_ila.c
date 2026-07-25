@@ -2,6 +2,8 @@
  * @file core_axi4s_ila.c
  * @author Y.U.P. (paritkary25)
  * @brief CoreAXI4S_ILA bare metal driver implementation.
+ * 
+ * @note Last Modified: 2026-07-24 Fri 20:46
  *
  * Functions:
  *   cmd_status_t AXI4S_ILA_init( axi4s_ila_instance_t * this_axi4s_ila, addr_t base_addr);

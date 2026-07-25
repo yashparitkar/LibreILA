@@ -2,7 +2,7 @@
 -- File: ila_uart_wrapper.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-21 Tue 20:12
--- Last Modified: 2026/07/24 17:07
+-- Last Modified: 2026-07-25 Sat 22:30
 --
 -- Description: This is a wrapper for the axi4s_ila. This exposes two UART
 -- pins through which the ILA can be controller allowing the external debug
@@ -22,6 +22,7 @@ library ieee;
 entity ila_uart_wrapper is
   generic (
     G_AXIS_CLK_FREQ      : integer := 100_000_000;
+    G_AXIL_CLK_FREQ      : integer := 100_000_000;
     G_EXTERNAL_TRIG      : integer := 0;      -- 1 for external trigger pin
     G_DATA_WIDTH         : natural := 64;     -- Keep it a multiple of 32 for best results
     G_DEPTH              : natural := 2048;   -- Keep it a power of two for best results
@@ -63,12 +64,21 @@ end entity ila_uart_wrapper;
 
 architecture rtl of ila_uart_wrapper is
 
+  -- Watchdog signals -----------------------------------------------
+  constant WDT_TRIGGER : unsigned(31 downto 0) := to_unsigned(G_AXIL_CLK_FREQ, 32);
+
+  signal wdt_counter : unsigned(31 downto 0);
+  signal wdt_trig    : std_logic;
+  signal wdt_reset   : std_logic;
+  -------------------------------------------------------------------
+
   -- Wrapper state machine ------------------------------------------
   constant IUW_IDLE : std_logic_vector(2 downto 0) := "000";
   constant IUW_REQ  : std_logic_vector(2 downto 0) := "001";
-  constant IUW_ADDR : std_logic_vector(2 downto 0) := "010";
-  constant IUW_RD   : std_logic_vector(2 downto 0) := "011";
-  constant IUW_WR   : std_logic_vector(2 downto 0) := "110";
+  constant IUW_ADDR : std_logic_vector(2 downto 0) := "011";
+  constant IUW_HDR  : std_logic_vector(2 downto 0) := "010";
+  constant IUW_RD   : std_logic_vector(2 downto 0) := "100";
+  constant IUW_WR   : std_logic_vector(2 downto 0) := "101";
 
   signal iuw_state : std_logic_vector(2 downto 0);
   -------------------------------------------------------------------
@@ -96,9 +106,30 @@ architecture rtl of ila_uart_wrapper is
   signal word_target : unsigned(6 downto 0);
   signal word_addr   : std_logic_vector(31 downto 0);
   signal word_data   : std_logic_vector(31 downto 0);
-  signal req_type    : std_logic;             -- '0' for read, '1' for write
+  signal req_type    : std_logic; -- '0' for read, '1' for write
 
-  -- Read logic signals
+  -- AXI4Lite read process signals ----------------------------------
+  constant ARP_IDLE : std_logic_vector(1 downto 0) := "00";
+  constant ARP_READ : std_logic_vector(1 downto 0) := "01";
+
+  signal arp_state : std_logic_vector(1 downto 0);
+
+  signal axil_rd_req  : std_logic;
+  signal axil_rd_addr : std_logic_vector(C_S_AXIL_ADDR_WIDTH - 1 downto 0);
+  signal axil_rd_data : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+  signal axil_rd_done : std_logic;
+  -------------------------------------------------------------------
+
+  -- AXI4Lite write process signals ---------------------------------
+  constant AWP_IDLE : std_logic_vector(1 downto 0) := "00";
+  constant AWP_RESP : std_logic_vector(1 downto 0) := "01";
+
+  signal awp_state : std_logic_vector(1 downto 0);
+
+  signal axil_wr_req  : std_logic;
+  signal axil_wr_addr : std_logic_vector(C_S_AXIL_ADDR_WIDTH - 1 downto 0);
+  signal axil_wr_data : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+  signal axil_wr_done : std_logic;
   -------------------------------------------------------------------
 
   -- Internal AXI4Lite connections ----------------------------------
@@ -108,7 +139,7 @@ architecture rtl of ila_uart_wrapper is
   signal s_axil_awvalid : std_logic;
   signal s_axil_awready : std_logic;
   signal s_axil_wdata   : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
-  signal s_axil_wstrb   : std_logic_vector(C_S_AXIL_DATA_WIDTH/8 - 1 downto 0);
+  signal s_axil_wstrb   : std_logic_vector(C_S_AXIL_DATA_WIDTH / 8 - 1 downto 0);
   signal s_axil_wvalid  : std_logic;
   signal s_axil_wready  : std_logic;
   signal s_axil_bresp   : std_logic_vector(1 downto 0);
@@ -228,11 +259,12 @@ architecture rtl of ila_uart_wrapper is
       tx                  : out   std_logic;
       rx                  : in    std_logic
     );
-
-  -------------------------------------------------------------------
   end component uart;
 
+-------------------------------------------------------------------
+
 begin
+
   -- Signal assignments ---------------------------------------------
   s_axil_aresetn <= not i_rst_sync;
 
@@ -333,7 +365,7 @@ begin
   uart_inst : component uart
     generic map (
       baud            => BAUD_RATE,
-      clock_frequency => G_AXIS_CLK_FREQ
+      clock_frequency => G_AXIL_CLK_FREQ
     )
     port map (
       clock               => s_axil_aclk,
@@ -347,28 +379,63 @@ begin
       rx                  => uart_rx
     );
 
+  -- Watchdog timer process -----------------------------------------
+  p_wdt : process (s_axil_aclk) is
+  begin
+
+    if rising_edge(s_axil_aclk) then
+      if ((i_rst_sync = '1') or (wdt_reset = '1')) then
+        wdt_counter <= (others => '0');
+        wdt_trig    <= '0';
+      else
+        if (wdt_counter = WDT_TRIGGER) then
+          wdt_trig    <= '1';
+          wdt_counter <= (others => '0');
+        else
+          wdt_trig    <= '0';
+          wdt_counter <= wdt_counter + 1;
+        end if;
+      end if;
+    end if;
+
+  end process p_wdt;
+
+  -------------------------------------------------------------------
+
   -- Main process ---------------------------------------------------
   -- Handles the main logic of the wrapper. This includes reading and
   -- writing to the UART FIFOs, and handling the AXI4Lite read and
   -- write requests.
   p_main : process (s_axil_aclk) is
+
+    variable byte_count_int : integer range 0 to 15;
+
   begin
 
+    byte_count_int := to_integer(unsigned(byte_count));
+
     if rising_edge(s_axil_aclk) then
-      if (i_rst_sync = '1') then
+      if ((i_rst_sync = '1') or (wdt_trig = '1')) then
         -- Reset logic
         iuw_state          <= IUW_IDLE;
         uart_tx_fifo_wr_en <= '0';
         uart_rx_fifo_rd_en <= '0';
         byte_count         <= (others => '0');
+        axil_rd_req        <= '0';
+        axil_wr_req        <= '0';
       else
         -- Default values
         uart_tx_fifo_wr_en <= '0';
         uart_rx_fifo_rd_en <= '0';
+        wdt_reset          <= '0';
 
         case iuw_state is
 
           when IUW_IDLE =>
+
+            wdt_reset   <= '1';
+            axil_rd_req <= '0';
+            axil_wr_req <= '0';
 
             -- Check if there is proper sync/valid packet in the UART RX FIFO
             if (uart_rx_fifo_nempty = '1') then
@@ -399,18 +466,66 @@ begin
             -- Get next 4 bytes from the UART RX FIFO for the address, MSB first
             if (byte_count < 4) then
               if (uart_rx_fifo_nempty = '1') then
-                uart_rx_fifo_rd_en                                                                    <= '1';
-                word_addr((31 - to_integer(byte_count) * 8) downto (24 - to_integer(byte_count) * 8)) <= uart_rx_fifo_rd_data;
-                byte_count                                                                            <= byte_count + 1;
+                uart_rx_fifo_rd_en                                                    <= '1';
+                word_addr((31 - byte_count_int * 8) downto (24 - byte_count_int * 8)) <= uart_rx_fifo_rd_data;
+                byte_count                                                            <= byte_count + 1;
               end if;
             else
-              -- Address received, move to read or write state based on req_type
+              -- Address received, move to header frame preparation
+              wdt_reset  <= '1';
               byte_count <= (others => '0');
-              txn_side   <= TXN_FETCH;
-              if (req_type = '0') then
-                iuw_state <= IUW_RD;
+              iuw_state  <= IUW_HDR;
+            end if;
+
+          when IUW_HDR =>
+
+            wdt_reset <= '1';
+            if (uart_tx_fifo_nfull = '1') then
+              uart_tx_fifo_wr_en <= '1';
+
+              case byte_count is
+
+                when "0000" =>
+
+                  uart_tx_fifo_wr_data <= x"AA";
+
+                when "0001" =>
+
+                  uart_tx_fifo_wr_data <= '1' & std_logic_vector(word_target);
+
+                when "0010" =>
+
+                  uart_tx_fifo_wr_data <= word_addr(31 downto 24);
+
+                when "0011" =>
+
+                  uart_tx_fifo_wr_data <= word_addr(23 downto 16);
+
+                when "0100" =>
+
+                  uart_tx_fifo_wr_data <= word_addr(15 downto 8);
+
+                when "0101" =>
+
+                  uart_tx_fifo_wr_data <= word_addr(7 downto 0);
+
+                when others =>
+
+                  null;
+
+              end case;
+
+              if (byte_count = 5) then
+                byte_count <= (others => '0');
+                txn_side   <= TXN_FETCH;
+
+                if (req_type = '0') then
+                  iuw_state <= IUW_RD;
+                else
+                  iuw_state <= IUW_WR;
+                end if;
               else
-                iuw_state <= IUW_WR;
+                byte_count <= byte_count + 1;
               end if;
             end if;
 
@@ -424,17 +539,16 @@ begin
 
                 when TXN_FETCH =>
 
-                  -- initiate AXI4Lite read transaction
-                  s_axil_araddr  <= std_logic_vector(word_addr);
-                  s_axil_arvalid <= '1';
-                  s_axil_rready  <= '1';
-                  txn_side       <= TXN_FETCH;
+                  -- Request AXI4Lite Read process
+                  axil_rd_req  <= '1';
+                  axil_rd_addr <= word_addr;
 
-                  if (s_axil_rvalid = '1') then
-                    word_data      <= s_axil_rdata;
-                    s_axil_arvalid <= '0';
-                    txn_side       <= TXN_WRITE;
-                    byte_count     <= (others => '0');
+                  if (axil_rd_done = '1') then
+                    axil_rd_req <= '0';
+                    wdt_reset   <= '1';
+                    word_data   <= axil_rd_data;
+                    txn_side    <= TXN_WRITE;
+                    byte_count  <= (others => '0');
                   end if;
 
                 when TXN_WRITE =>
@@ -443,8 +557,9 @@ begin
                   if (byte_count < 4) then
                     if (uart_tx_fifo_nfull = '1') then
                       uart_tx_fifo_wr_en   <= '1';
-                      uart_tx_fifo_wr_data <= word_data((31 - to_integer(byte_count) * 8) downto (24 - to_integer(byte_count) * 8));
+                      uart_tx_fifo_wr_data <= word_data((31 - byte_count_int * 8) downto (24 - byte_count_int * 8));
                       byte_count           <= byte_count + 1;
+                      wdt_reset            <= '1';
                     end if;
                   else
                     -- All bytes written, increment word count and address
@@ -461,7 +576,8 @@ begin
 
             else
               -- All words read, go back to IDLE state
-              iuw_state <= IUW_IDLE;
+              axil_rd_req <= '0';
+              iuw_state   <= IUW_IDLE;
             end if;
 
           when IUW_WR =>
@@ -478,30 +594,28 @@ begin
                   -- Get the next byte from the UART RX FIFO
                   if (byte_count < 4) then
                     if (uart_rx_fifo_nempty = '1') then
-                      uart_rx_fifo_rd_en                                                                <= '1';
-                      word_data(31 - to_integer(byte_count) * 8 downto 24 - to_integer(byte_count) * 8) <= uart_rx_fifo_rd_data;
-                      byte_count                                                                        <= byte_count + 1;
+                      uart_rx_fifo_rd_en                                                <= '1';
+                      word_data(31 - byte_count_int * 8 downto 24 - byte_count_int * 8) <= uart_rx_fifo_rd_data;
+                      byte_count                                                        <= byte_count + 1;
                     end if;
                   else
-                    -- All bytes received, initiate AXI4Lite write transaction
-                    s_axil_awaddr  <= std_logic_vector(word_addr);
-                    s_axil_wdata   <= word_data;
-                    s_axil_awvalid <= '1';
-                    s_axil_wvalid  <= '1';
-                    txn_side       <= TXN_WRITE;
+                    -- All bytes received, request AXI4Lite Write process
+                    axil_wr_req  <= '1';
+                    axil_wr_addr <= word_addr;
+                    axil_wr_data <= word_data;
+                    txn_side     <= TXN_WRITE;
                   end if;
 
                 when TXN_WRITE =>
 
-                  -- Wait for AXI4Lite write response
-                  if (s_axil_bvalid = '1') then
-                    s_axil_awvalid <= '0';
-                    s_axil_wvalid  <= '0';
-                    s_axil_bready  <= '1';                                                               -- Acknowledge the write response
-                    word_count     <= word_count + 1;
-                    word_addr      <= std_logic_vector(unsigned(word_addr) + 4);
-                    byte_count     <= (others => '0');
-                    txn_side       <= TXN_FETCH;
+                  -- Wait for AXI4Lite Write process completion
+                  if (axil_wr_done = '1') then
+                    axil_wr_req <= '0';
+                    word_count  <= word_count + 1;
+                    word_addr   <= std_logic_vector(unsigned(word_addr) + 4);
+                    byte_count  <= (others => '0');
+                    txn_side    <= TXN_FETCH;
+                    wdt_reset   <= '1';
                   end if;
 
                 when others =>
@@ -512,7 +626,8 @@ begin
 
             else
               -- All words written, go back to IDLE state
-              iuw_state <= IUW_IDLE;
+              axil_wr_req <= '0';
+              iuw_state   <= IUW_IDLE;
             end if;
 
           when others =>
@@ -525,6 +640,116 @@ begin
     end if;
 
   end process p_main;
+
+  -- AXI4Lite Write Process -----------------------------------------
+  p_axil_write : process (s_axil_aclk) is
+  begin
+
+    if rising_edge(s_axil_aclk) then
+      if (i_rst_sync = '1') then
+        awp_state      <= AWP_IDLE;
+        s_axil_awvalid <= '0';
+        s_axil_wvalid  <= '0';
+        s_axil_bready  <= '0';
+        s_axil_awaddr  <= (others => '0');
+        s_axil_wdata   <= (others => '0');
+        axil_wr_done   <= '0';
+      else
+
+        case awp_state is
+
+          when AWP_IDLE =>
+
+            axil_wr_done <= '0';
+
+            if (axil_wr_req = '1') then
+              s_axil_awaddr  <= axil_wr_addr;
+              s_axil_wdata   <= axil_wr_data;
+              s_axil_awvalid <= '1';
+              s_axil_wvalid  <= '1';
+              s_axil_bready  <= '1';
+              awp_state      <= AWP_RESP;
+            end if;
+
+          when AWP_RESP =>
+
+            if (s_axil_awready = '1') then
+              s_axil_awvalid <= '0';
+            end if;
+
+            if (s_axil_wready = '1') then
+              s_axil_wvalid <= '0';
+            end if;
+
+            if (s_axil_bvalid = '1') then
+              s_axil_bready <= '0';
+              axil_wr_done  <= '1';
+              awp_state     <= AWP_IDLE;
+            end if;
+
+          when others =>
+
+            awp_state <= AWP_IDLE;
+
+        end case;
+
+      end if;
+    end if;
+
+  end process p_axil_write;
+
+  -------------------------------------------------------------------
+
+  -- AXI4Lite Read Process ------------------------------------------
+  p_axil_read : process (s_axil_aclk) is
+  begin
+
+    if rising_edge(s_axil_aclk) then
+      if (i_rst_sync = '1') then
+        arp_state      <= ARP_IDLE;
+        s_axil_arvalid <= '0';
+        s_axil_rready  <= '0';
+        s_axil_araddr  <= (others => '0');
+        axil_rd_done   <= '0';
+        axil_rd_data   <= (others => '0');
+      else
+
+        case arp_state is
+
+          when ARP_IDLE =>
+
+            axil_rd_done <= '0';
+
+            if (axil_rd_req = '1') then
+              s_axil_araddr  <= axil_rd_addr;
+              s_axil_arvalid <= '1';
+              s_axil_rready  <= '1';
+              arp_state      <= ARP_READ;
+            end if;
+
+          when ARP_READ =>
+
+            if (s_axil_arready = '1') then
+              s_axil_arvalid <= '0';
+            end if;
+
+            if (s_axil_rvalid = '1') then
+              axil_rd_data  <= s_axil_rdata;
+              s_axil_rready <= '0';
+              axil_rd_done  <= '1';
+              arp_state     <= ARP_IDLE;
+            end if;
+
+          when others =>
+
+            arp_state <= ARP_IDLE;
+
+        end case;
+
+      end if;
+    end if;
+
+  end process p_axil_read;
 
 -------------------------------------------------------------------
 
