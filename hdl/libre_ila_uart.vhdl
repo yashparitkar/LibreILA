@@ -2,7 +2,7 @@
 -- File: libre_ila_uart.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-21 Tue 20:12
--- Last Modified: 2026-07-25 Sat 22:30
+-- Last Modified: 2026-07-27 Mon 16:49
 --
 -- Description: This is a wrapper for the libre_ila. This exposes two UART
 -- pins through which the ILA can be controller allowing the external debug
@@ -98,6 +98,15 @@ architecture rtl of libre_ila_uart is
   signal uart_rx_fifo_rd_en   : std_logic;
   signal uart_rx_fifo_rd_data : std_logic_vector(7 downto 0);
   signal uart_rx_fifo_nempty  : std_logic;
+
+  -- uart_rx_fifo's o_nempty/o_rd_data only update the cycle after
+  -- rd_en is pulsed (registered read pointer). Set to '1' directly
+  -- alongside every uart_rx_fifo_rd_en<='1' (NOT derived as `<= rd_en`,
+  -- which -- being computed from rd_en's pre-edge value in this same
+  -- process -- would only become visible one cycle too late to guard
+  -- the actual stale cycle) so p_main can skip re-examining
+  -- nempty/rd_data on the one cycle where they're still stale.
+  signal uart_rx_fifo_rd_en_d1 : std_logic;
   -------------------------------------------------------------------
 
   -- Main process logic signals -------------------------------------
@@ -118,6 +127,17 @@ architecture rtl of libre_ila_uart is
   signal axil_rd_addr : std_logic_vector(C_S_AXIL_ADDR_WIDTH - 1 downto 0);
   signal axil_rd_data : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
   signal axil_rd_done : std_logic;
+
+  -- p_main holds axil_rd_req high from the cycle it's asserted until it
+  -- sees axil_rd_done, but its own clearing of axil_rd_req only becomes
+  -- visible one cycle after p_axil_read returns to ARP_IDLE -- so
+  -- ARP_IDLE's own req check needs edge-detection (not just a level
+  -- check) or it re-fires a second, spurious transaction on that one
+  -- stale cycle. A plain one-cycle-delayed copy is sufficient here
+  -- (unlike a single-cycle pulse) because axil_rd_req is held high
+  -- across the whole multi-cycle handshake, so the delayed copy has
+  -- already caught up to '1' well before the stale re-check cycle.
+  signal axil_rd_req_d1 : std_logic;
   -------------------------------------------------------------------
 
   -- AXI4Lite write process signals ---------------------------------
@@ -129,6 +149,13 @@ architecture rtl of libre_ila_uart is
   signal axil_wr_req  : std_logic;
   signal axil_wr_addr : std_logic_vector(C_S_AXIL_ADDR_WIDTH - 1 downto 0);
   signal axil_wr_data : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+
+  -- Same one-cycle stale-request race as axil_rd_req_d1 above, but for
+  -- writes -- this one is the actual cause of the double-toggle ARM_FT
+  -- bug: without it, AWP_IDLE re-fires the SAME write a second time
+  -- immediately after the first completes, toggling ARM_FT twice
+  -- (arm, then an immediate spurious force-trigger).
+  signal axil_wr_req_d1 : std_logic;
   signal axil_wr_done : std_logic;
   -------------------------------------------------------------------
 
@@ -417,17 +444,19 @@ begin
     if rising_edge(s_axil_aclk) then
       if ((i_rst_sync = '1') or (wdt_trig = '1')) then
         -- Reset logic
-        iuw_state          <= IUW_IDLE;
-        uart_tx_fifo_wr_en <= '0';
-        uart_rx_fifo_rd_en <= '0';
-        byte_count         <= (others => '0');
-        axil_rd_req        <= '0';
-        axil_wr_req        <= '0';
+        iuw_state             <= IUW_IDLE;
+        uart_tx_fifo_wr_en    <= '0';
+        uart_rx_fifo_rd_en    <= '0';
+        uart_rx_fifo_rd_en_d1 <= '0';
+        byte_count            <= (others => '0');
+        axil_rd_req           <= '0';
+        axil_wr_req           <= '0';
       else
         -- Default values
-        uart_tx_fifo_wr_en <= '0';
-        uart_rx_fifo_rd_en <= '0';
-        wdt_reset          <= '0';
+        uart_tx_fifo_wr_en    <= '0';
+        uart_rx_fifo_rd_en    <= '0';
+        wdt_reset             <= '0';
+        uart_rx_fifo_rd_en_d1 <= '0';
 
         case iuw_state is
 
@@ -438,35 +467,39 @@ begin
             axil_wr_req <= '0';
 
             -- Check if there is proper sync/valid packet in the UART RX FIFO
-            if (uart_rx_fifo_nempty = '1') then
+            if (uart_rx_fifo_nempty = '1' and uart_rx_fifo_rd_en_d1 = '0') then
               if (uart_rx_fifo_rd_data = x"55") then
                 -- Read the data from the UART RX FIFO
-                uart_rx_fifo_rd_en <= '1';
-                iuw_state          <= IUW_REQ;
+                uart_rx_fifo_rd_en    <= '1';
+                uart_rx_fifo_rd_en_d1 <= '1';
+                iuw_state             <= IUW_REQ;
               else
                 -- Invalid packet, stay in IDLE, flush the FIFO
-                uart_rx_fifo_rd_en <= '1';
-                iuw_state          <= IUW_IDLE;
+                uart_rx_fifo_rd_en    <= '1';
+                uart_rx_fifo_rd_en_d1 <= '1';
+                iuw_state             <= IUW_IDLE;
               end if;
             end if;
 
           when IUW_REQ =>
 
             -- Get the next byte from the UART RX FIFO
-            if (uart_rx_fifo_nempty = '1') then
-              uart_rx_fifo_rd_en <= '1';
-              word_count         <= (others => '0');
-              word_target        <= unsigned(uart_rx_fifo_rd_data(6 downto 0));
-              req_type           <= uart_rx_fifo_rd_data(7);
-              iuw_state          <= IUW_ADDR;
+            if (uart_rx_fifo_nempty = '1' and uart_rx_fifo_rd_en_d1 = '0') then
+              uart_rx_fifo_rd_en    <= '1';
+              uart_rx_fifo_rd_en_d1 <= '1';
+              word_count            <= (others => '0');
+              word_target           <= unsigned(uart_rx_fifo_rd_data(6 downto 0));
+              req_type              <= uart_rx_fifo_rd_data(7);
+              iuw_state             <= IUW_ADDR;
             end if;
 
           when IUW_ADDR =>
 
             -- Get next 4 bytes from the UART RX FIFO for the address, MSB first
             if (byte_count < 4) then
-              if (uart_rx_fifo_nempty = '1') then
+              if (uart_rx_fifo_nempty = '1' and uart_rx_fifo_rd_en_d1 = '0') then
                 uart_rx_fifo_rd_en                                                    <= '1';
+                uart_rx_fifo_rd_en_d1                                                 <= '1';
                 word_addr((31 - byte_count_int * 8) downto (24 - byte_count_int * 8)) <= uart_rx_fifo_rd_data;
                 byte_count                                                            <= byte_count + 1;
               end if;
@@ -562,9 +595,16 @@ begin
                       wdt_reset            <= '1';
                     end if;
                   else
-                    -- All bytes written, increment word count and address
+                    -- All bytes written, increment word count and address.
+                    -- byte_count is reset here (not left for the next
+                    -- TXN_FETCH pass) because on the last word this state
+                    -- exits straight to IDLE without ever revisiting
+                    -- TXN_FETCH, which would otherwise leave a stale
+                    -- byte_count=4 to corrupt the next message's ADDR
+                    -- parsing.
                     word_count <= word_count + 1;
                     word_addr  <= std_logic_vector(unsigned(word_addr) + 4);
+                    byte_count <= (others => '0');
                     txn_side   <= TXN_FETCH;
                   end if;
 
@@ -593,8 +633,9 @@ begin
 
                   -- Get the next byte from the UART RX FIFO
                   if (byte_count < 4) then
-                    if (uart_rx_fifo_nempty = '1') then
+                    if (uart_rx_fifo_nempty = '1' and uart_rx_fifo_rd_en_d1 = '0') then
                       uart_rx_fifo_rd_en                                                <= '1';
+                      uart_rx_fifo_rd_en_d1                                             <= '1';
                       word_data(31 - byte_count_int * 8 downto 24 - byte_count_int * 8) <= uart_rx_fifo_rd_data;
                       byte_count                                                        <= byte_count + 1;
                     end if;
@@ -654,7 +695,10 @@ begin
         s_axil_awaddr  <= (others => '0');
         s_axil_wdata   <= (others => '0');
         axil_wr_done   <= '0';
+        axil_wr_req_d1 <= '0';
       else
+
+        axil_wr_req_d1 <= axil_wr_req;
 
         case awp_state is
 
@@ -662,7 +706,7 @@ begin
 
             axil_wr_done <= '0';
 
-            if (axil_wr_req = '1') then
+            if (axil_wr_req = '1' and axil_wr_req_d1 = '0') then
               s_axil_awaddr  <= axil_wr_addr;
               s_axil_wdata   <= axil_wr_data;
               s_axil_awvalid <= '1';
@@ -712,7 +756,10 @@ begin
         s_axil_araddr  <= (others => '0');
         axil_rd_done   <= '0';
         axil_rd_data   <= (others => '0');
+        axil_rd_req_d1 <= '0';
       else
+
+        axil_rd_req_d1 <= axil_rd_req;
 
         case arp_state is
 
@@ -720,7 +767,7 @@ begin
 
             axil_rd_done <= '0';
 
-            if (axil_rd_req = '1') then
+            if (axil_rd_req = '1' and axil_rd_req_d1 = '0') then
               s_axil_araddr  <= axil_rd_addr;
               s_axil_arvalid <= '1';
               s_axil_rready  <= '1';

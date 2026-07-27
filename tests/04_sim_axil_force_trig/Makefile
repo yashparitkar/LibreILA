@@ -1,6 +1,6 @@
-UNIT       := libre_ila_uart
+UNIT       := libre_ila
 TOP        := tb
-SRC        := ../../hdl/libre_ila.vhdl ../../hdl/fifo.vhdl ../../hdl/uart.vhdl ../../hdl/$(UNIT).vhdl tb.vhdl
+SRC        := ../../hdl/$(UNIT).vhdl tb.vhdl
 WORKDIR    := work
 GHDLFLAGS  := --std=08 --workdir=$(WORKDIR)
 WAVE       := $(TOP).ghw

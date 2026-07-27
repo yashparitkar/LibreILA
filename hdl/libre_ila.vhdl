@@ -2,7 +2,7 @@
 -- File: libre_ila.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-07-27 Mon 10:25
+-- Last Modified: 2026-07-27 Mon 16:50
 --
 -- Description: An ILA for AXI4-Stream
 -- Usage:
@@ -36,19 +36,21 @@ entity libre_ila is
     i_ext_trig : in    std_logic;
     o_trig_out : out   std_logic;
 
-    -- AXI4S_IN port
+    -- Probe Input ports --------------------------------------------
     axis_in_aclk   : in    std_logic;
     axis_in_tready : out   std_logic;
     axis_in_tvalid : in    std_logic;
     axis_in_tlast  : in    std_logic;
     axis_in_tdata  : in    std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+    -----------------------------------------------------------------
 
-    -- AXI4S_OUT port
+    -- Probe Output ports -------------------------------------------
     axis_out_aclk   : out   std_logic;
     axis_out_tready : in    std_logic;
     axis_out_tvalid : out   std_logic;
     axis_out_tlast  : out   std_logic;
     axis_out_tdata  : out   std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+    -----------------------------------------------------------------
 
     -- AXI4Lite slave port
     s_axil_aclk    : in    std_logic;
@@ -144,7 +146,9 @@ architecture rtl of libre_ila is
   -- Calculating required number of the AXILite regs ----------------
   -- Note that, the additional ( (G_DATA_WIDTH / 32 + 1) * G_DEPTH ) registers are coming from the
   -- buffer itself
-  constant C_AXIL_N_CTRL_REGS_IN  : integer := 4 + 2 * G_DATA_WIDTH / 32;
+  -- The trigger vector cond/mask block reuses C_AXIL_STRIDE so it lines up
+  -- with the output sample stride layout, see trig_cond/trig_mask below.
+  constant C_AXIL_N_CTRL_REGS_IN  : integer := 4 + 2 * C_AXIL_STRIDE;
   constant C_AXIL_N_CTRL_REGS_OUT : integer := 8;
   constant C_AXIL_N_CTRL_REGS     : integer := C_AXIL_N_CTRL_REGS_IN + C_AXIL_N_CTRL_REGS_OUT;
 
@@ -200,14 +204,16 @@ architecture rtl of libre_ila is
   signal ext_trig      : std_logic;
   signal ext_trig_prev : std_logic;
 
-  signal trig_vect : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
-  signal trig_mask : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
-  signal trig_cond : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+  -- Merged trigger vector -- one bit per sample bit, laid out identically to
+  -- the output sample stride (w_wr_data): TDATA bits, then TLAST/TVALID/TREADY,
+  -- then zero padding up to the stride boundary.
+  constant C_TRIG_VECT_WIDTH : integer := C_AXIL_STRIDE * C_S_AXIL_DATA_WIDTH;
 
-  -- If the data is used as a condition
-  signal trig_data      : std_logic; -- denotes if the data satisfies trig condition
-  signal trig_data_cond : std_logic_vector(G_DATA_WIDTH - 1 downto 0);
-  signal trig_data_mask : std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+  signal trig_sample_word : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
+  signal trig_vect        : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
+  signal trig_mask        : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
+  signal trig_cond        : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
+  signal trig_cfg         : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
   -------------------------------------------------------------------
 
   -- Control signals interface --------------------------------------
@@ -263,11 +269,11 @@ architecture rtl of libre_ila is
   -- State machine variables
   signal state_read  : std_logic_vector(1 downto 0);
   signal state_write : std_logic_vector(1 downto 0);
--------------------------------------------------------------------
+  -------------------------------------------------------------------
 
 begin
 
-  -- Shorting of AXI4S ports ----------------------------------------
+  -- Shorting of the ports ------------------------------------------
   axis_out_aclk   <= axis_in_aclk;
   axis_out_tvalid <= axis_in_tvalid;
   axis_out_tdata  <= axis_in_tdata;
@@ -290,28 +296,22 @@ begin
   o_trig_out <= trig;
 
   g_ext_trig_0 : if G_EXTERNAL_TRIG = 0 generate
-    trig <= trig_or when trig_cond(4) = '1' else
+    trig <= trig_or when trig_cfg(0) = '1' else
             trig_and;
 
-    trig_data <= '1' when ((axis_in_tdata xor trig_data_cond) and trig_data_mask)
-                          = (G_DATA_WIDTH - 1 downto 0 => '0') else
-                 '0';
+    -- Same bit layout as w_wr_data, zero-extended up to the stride boundary
+    trig_sample_word <= (C_TRIG_VECT_WIDTH - 1 downto C_S_AXIL_DATA_WIDTH * C_N_LANES => '0')
+                         & w_wr_data;
 
-    trig_vect(0)                                <= axis_out_tready xnor trig_cond(0);
-    trig_vect(1)                                <= axis_in_tvalid xnor trig_cond(1);
-    trig_vect(2)                                <= axis_in_tlast xnor trig_cond(2);
-    trig_vect(3)                                <= trig_data xnor trig_cond(3);
-    trig_vect(C_S_AXIL_DATA_WIDTH - 1 downto 4) <= (others => '0');
+    trig_vect <= trig_sample_word xnor trig_cond;
 
-    trig_or <= (trig_vect(0) and trig_mask(0)) or
-               (trig_vect(1) and trig_mask(1)) or
-               (trig_vect(2) and trig_mask(2)) or
-               (trig_vect(3) and trig_mask(3));
+    -- OR: trigger if any enabled (mask=1) bit matches its condition
+    trig_or <= '0' when (trig_vect and trig_mask) = (trig_vect'range => '0') else
+               '1';
 
-    trig_and <= (trig_vect(0) nor  trig_mask(0)) and
-                (trig_vect(1) nor  trig_mask(1)) and
-                (trig_vect(2) nor  trig_mask(2)) and
-                (trig_vect(3) nor  trig_mask(3));
+    -- AND: trigger only if every enabled (mask=1) bit matches its condition
+    trig_and <= '1' when (trig_mask and not trig_vect) = (trig_vect'range => '0') else
+                '0';
   end generate g_ext_trig_0;
 
   g_ext_trig_1 : if G_EXTERNAL_TRIG = 1 generate
@@ -620,7 +620,7 @@ begin
           -- compute index from address slice and write bytes per WSTRB
           idx := to_integer(unsigned(mem_logic));
           if (idx >= 0 and idx < C_AXIL_N_CTRL_REGS_IN) then
-            if (idx = 3) then
+            if (idx = 1) then
               arm_toggler_axilite <= not arm_toggler_axilite;
             end if;
             slv_reg_in(idx) <= s_axil_wdata;
@@ -737,17 +737,17 @@ begin
   -- Note that, here N means Nth register among all the AXI4Lite registers
   -- We need output offset of ( C_AXI_N_REGS_IN - 1 ) offset to properly map slv_reg_out
   -- Add user connections here --------------------------------------------------
-  trig_cond <= slv_reg_in(0);
-  trig_mask <= slv_reg_in(1);
-  trig_tgt  <= unsigned(slv_reg_in(2)(trig_tgt'range));
+  trig_tgt <= unsigned(slv_reg_in(0)(trig_tgt'range));
+  trig_cfg <= slv_reg_in(2);
+  -- slv_reg_in(1) is ARM_FT (write-triggered, see p_wlg), slv_reg_in(3) is reserved
 
-  data_cond_gen : for i in 0 to (G_DATA_WIDTH / 32) - 1  generate
-    trig_data_cond(i * 32 + 31 downto 32 * i ) <= slv_reg_in(i + 4);
-  end generate data_cond_gen;
+  trig_cond_gen : for i in 0 to C_AXIL_STRIDE - 1 generate
+    trig_cond(i * 32 + 31 downto 32 * i) <= slv_reg_in(i + 4);
+  end generate trig_cond_gen;
 
-  data_mask_gen : for i in 0 to (G_DATA_WIDTH / 32) - 1 generate
-    trig_data_mask(i * 32 + 31 downto 32 * i ) <= slv_reg_in(i + 4 + G_DATA_WIDTH / 32);
-  end generate data_mask_gen;
+  trig_mask_gen : for i in 0 to C_AXIL_STRIDE - 1 generate
+    trig_mask(i * 32 + 31 downto 32 * i) <= slv_reg_in(i + 4 + C_AXIL_STRIDE);
+  end generate trig_mask_gen;
 
   slv_reg_out(0)(0)                                <= ila_armed_axil;
   slv_reg_out(0)(1)                                <= ila_trigd_axil;

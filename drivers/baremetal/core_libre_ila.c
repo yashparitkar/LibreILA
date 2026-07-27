@@ -2,24 +2,27 @@
  * @file core_libre_ila.c
  * @author Y.U.P. (paritkary25)
  * @brief CoreLibreILA bare metal driver implementation.
- * 
- * @note Last Modified: 2026-07-24 Fri 20:46
+ *
+ * @note Last Modified: 2026-07-27 Mon
+ *
+ * The probe is treated as a flat bit vector everywhere below, nothing in here
+ * knows what any of its bits mean.
  *
  * Functions:
  *   cmd_status_t LIBRE_ILA_init( libre_ila_instance_t * this_libre_ila, addr_t base_addr);
  *   libre_ila_status_t LIBRE_ILA_get_status( libre_ila_instance_t * this_libre_ila);
- * 
- *   cmd_status_t LIBRE_ILA_configure_trigger( libre_ila_instance_t * this_libre_ila, uint32_t trigger_cond, uint32_t trigger_mask);
- *   cmd_status_t LIBRE_ILA_configure_trigger_data( libre_ila_instance_t * this_libre_ila, uint64_t trigger_data_cond, uint64_t trigger_data_mask); 
- * 
+ *
+ *   cmd_status_t LIBRE_ILA_set_trigger_position( libre_ila_instance_t * this_libre_ila, uint32_t trig_pos);
+ *   cmd_status_t LIBRE_ILA_configure_trigger( libre_ila_instance_t * this_libre_ila, const uint32_t * trigger_cond, const uint32_t * trigger_mask, libre_ila_trig_mode_t mode);
+ *
  *   cmd_status_t LIBRE_ILA_arm ( libre_ila_instance_t * this_libre_ila);
  *   cmd_status_t LIBRE_ILA_force_trigger ( libre_ila_instance_t * this_libre_ila);
- * 
+ *
  *   cmd_status_t LIBRE_ILA_wait_done( libre_ila_instance_t * this_libre_ila, uint32_t timeout_ms);
- * 
+ *
  *   cmd_status_t LIBRE_ILA_read_idx( libre_ila_instance_t * this_libre_ila, uint32_t * samp_buff_frst_idx, uint32_t * samp_buff_trig_idx);
- *   cmd_status_t LIBRE_ILA_read_data( libre_ila_instance_t * this_libre_ila, uint64_t * data_buffer, uint8_t * signal_buffer, uint32_t  * samp_buff_trig_idx);
- *   
+ *   cmd_status_t LIBRE_ILA_read_data( libre_ila_instance_t * this_libre_ila, uint32_t * samp_buffer, uint32_t * samp_buff_trig_idx);
+ *
  */
 #include "core_libre_ila_regs.h"
 #include "core_libre_ila.h"
@@ -44,14 +47,14 @@
 cmd_status_t LIBRE_ILA_init
 (
     libre_ila_instance_t *   this_libre_ila,
-    addr_t              base_addr,
+    addr_t              base_addr
 )
 {
     // Check if the defined values are true against the hardware instance.
     // 1. Check if the LIBRE_ILA instance pointer is NULL.
     // 2. Check if the MAGIC_KEY read from the hardware instance matches the expected value
-    // 3. Check buffer depth and data width against the hardware instance.
-    // 4. Check if the clock frequency matches the expected value (warning only)
+    // 3. Check buffer depth and probe width against the hardware instance.
+    // 4. Check if the clock frequency matches the expected value
 
     uint32_t mgckey_value;
     uint32_t buffer_depth_value;
@@ -63,6 +66,8 @@ cmd_status_t LIBRE_ILA_init
     {
         return CMD_STATUS_BAD_LIBRE_ILA; // Bad LIBRE_ILA instance
     }
+
+    this_libre_ila->base_addr = base_addr;
 
     mgckey_value = HAL_get_32bit_reg(this_libre_ila->base_addr,  CORE_LIBRE_ILA_REGS_MGCKEY);
 
@@ -78,14 +83,16 @@ cmd_status_t LIBRE_ILA_init
         return CMD_STATUS_BAD_CONFIG; // Connection failed, return failure status
     }
 
-    data_width_value = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_WIDTH_REG_DATA_WIDTH);
+    /* The two halves of WIDTH are checked separately, the lane count and hence
+     * the whole register map is derived from the data half alone. */
+    data_width_value = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_WIDTH_REG_DATA_WIDTH_FIELD);
 
     if (data_width_value != CORE_LIBRE_ILA_DATA_WIDTH)
     {
         return CMD_STATUS_BAD_CONFIG; // Connection failed, return failure status
     }
 
-    signal_width_value = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_WIDTH_REG_SIGNAL_WIDTH);
+    signal_width_value = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_WIDTH_REG_SIGNAL_WIDTH_FIELD);
 
     if (signal_width_value != CORE_LIBRE_ILA_SIGNAL_WIDTH)
     {
@@ -106,7 +113,7 @@ cmd_status_t LIBRE_ILA_init
  * LIBRE_ILA_get_status()
  * See "core_libre_ila.h" for details of how to use this function.
  */
-ila_status_t LIBRE_ILA_get_status
+libre_ila_status_t LIBRE_ILA_get_status
 (
     libre_ila_instance_t *   this_libre_ila
 )
@@ -115,20 +122,23 @@ ila_status_t LIBRE_ILA_get_status
 
     if (this_libre_ila == NULL)
     {
-        return CMD_STATUS_BAD_LIBRE_ILA; // Bad LIBRE_ILA instance
+        return LIBRE_ILA_STATUS_BAD_LIBRE_ILA; // Bad LIBRE_ILA instance
     }
 
+    /* The STATE field of the same register carries the raw state machine value,
+     * but it is not synchronised into this clock domain. Decode the CDCed
+     * ARMED/TRIGD/DONE bits instead, latest state first. */
     ila_status = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_STATUS);
 
-    if (ila_status & CORE_LIBRE_ILA_STATUS_REG_DONE_MASK == CORE_LIBRE_ILA_STATUS_REG_DONE_MASK)
+    if ((ila_status & CORE_LIBRE_ILA_REGS_STATUS_REG_DONE_FIELD_MASK) != 0u)
     {
         return LIBRE_ILA_STATUS_DONE; // ILA acquisition complete
     }
-    else if (ila_status & CORE_LIBRE_ILA_STATUS_REG_TRIGGERED_MASK == CORE_LIBRE_ILA_STATUS_REG_TRIGGERED_MASK)
+    else if ((ila_status & CORE_LIBRE_ILA_REGS_STATUS_REG_TRIGD_FIELD_MASK) != 0u)
     {
         return LIBRE_ILA_STATUS_TRIGGERED; // ILA is triggered
     }
-    else if (ila_status & CORE_LIBRE_ILA_STATUS_REG_ARMED_MASK == CORE_LIBRE_ILA_STATUS_REG_ARMED_MASK)
+    else if ((ila_status & CORE_LIBRE_ILA_REGS_STATUS_REG_ARMED_FIELD_MASK) != 0u)
     {
         return LIBRE_ILA_STATUS_ARMED; // ILA is armed
     }
@@ -138,52 +148,75 @@ ila_status_t LIBRE_ILA_get_status
     }
 
 }
+
+/*-------------------------------------------------------------------------*//**
+ * LIBRE_ILA_set_trigger_position()
+ * See "core_libre_ila.h" for details of how to use this function.
+ */
+cmd_status_t LIBRE_ILA_set_trigger_position
+(
+    libre_ila_instance_t *   this_libre_ila,
+    uint32_t            trig_pos
+)
+{
+    if (this_libre_ila == NULL)
+    {
+        return CMD_STATUS_BAD_LIBRE_ILA; // Bad LIBRE_ILA instance
+    }
+
+    if (trig_pos >= CORE_LIBRE_ILA_SAMP_BUFF_DEPTH)
+    {
+        return CMD_STATUS_BAD_PARAM; // Trigger has to sit inside the captured window
+    }
+
+    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_TRIG_POS, trig_pos);
+
+    return CMD_STATUS_SUCCESS; // Trigger position set successfully
+}
+
 /*-------------------------------------------------------------------------*//**
  * LIBRE_ILA_configure_trigger()
  * See "core_libre_ila.h" for details of how to use this function.
  */
-
 cmd_status_t LIBRE_ILA_configure_trigger
 (
     libre_ila_instance_t *   this_libre_ila,
-    uint32_t            trigger_cond,
-    uint32_t            trigger_mask
+    const uint32_t *    trigger_cond,
+    const uint32_t *    trigger_mask,
+    libre_ila_trig_mode_t    mode
 )
 {
+    uint32_t word_idx;
+
     if (this_libre_ila == NULL)
     {
         return CMD_STATUS_BAD_LIBRE_ILA; // Bad LIBRE_ILA instance
     }
 
-    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_TRIG_COND, trigger_cond);
-    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_TRIG_MASK, trigger_mask);
+    if ((trigger_cond == NULL) || (trigger_mask == NULL))
+    {
+        return CMD_STATUS_BAD_PARAM; // Nothing to write from
+    }
+
+    if ((mode != LIBRE_ILA_TRIG_MODE_AND) && (mode != LIBRE_ILA_TRIG_MODE_OR))
+    {
+        return CMD_STATUS_BAD_PARAM; // Only the ANDOR bit exists in TRIG_CFG
+    }
+
+    /* Whole vector at once, the caller owns every bit of it including the
+     * padding above the probe width. */
+    for (word_idx = 0u; word_idx < CORE_LIBRE_ILA_STRIDE_WIDTH; word_idx++)
+    {
+        HW_set_32bit_reg(this_libre_ila->base_addr + CORE_LIBRE_ILA_REGS_TRIG_COND_WORD_OFFSET(word_idx),
+                         trigger_cond[word_idx]);
+
+        HW_set_32bit_reg(this_libre_ila->base_addr + CORE_LIBRE_ILA_REGS_TRIG_MASK_WORD_OFFSET(word_idx),
+                         trigger_mask[word_idx]);
+    }
+
+    HAL_set_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_ANDOR_FIELD, (uint32_t)mode);
 
     return CMD_STATUS_SUCCESS; // Trigger configuration successful
-}
-
-/*-------------------------------------------------------------------------*//**
- * LIBRE_ILA_configure_trigger_data()
- * See "core_libre_ila.h" for details of how to use this function.
- */
-cmd_status_t LIBRE_ILA_configure_trigger_data
-(
-    libre_ila_instance_t *   this_libre_ila,
-    uint64_t            trigger_data_cond,
-    uint64_t            trigger_data_mask
-)
-{
-    if (this_libre_ila == NULL)
-    {
-        return CMD_STATUS_BAD_LIBRE_ILA; // Bad LIBRE_ILA instance
-    }
-
-    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_TRIG_DATA_COND_LSB, (uint32_t)(trigger_data_cond & 0xFFFFFFFF));
-    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_TRIG_DATA_COND_LSB + 4, (uint32_t)((trigger_data_cond >> 32) & 0xFFFFFFFF));
-
-    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_TRIG_DATA_MASK_LSB, (uint32_t)(trigger_data_mask & 0xFFFFFFFF));
-    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_TRIG_DATA_MASK_LSB + 4, (uint32_t)((trigger_data_mask >> 32) & 0xFFFFFFFF));
-
-    return CMD_STATUS_SUCCESS; // Trigger data configuration successful
 }
 
 /*-------------------------------------------------------------------------*//**
@@ -201,14 +234,15 @@ cmd_status_t LIBRE_ILA_arm
     }
 
     // Check if the ILA is already armed
-    uint32_t ila_arm_status = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_STATUS, ARMED);
+    uint32_t ila_arm_status = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_STATUS_REG_ARMED_FIELD);
 
-    if (ila_arm_status == 1)
+    if (ila_arm_status == 1u)
     {
-        return CMD_STATUS_ERROR; // ILA is already armed
+        return CMD_STATUS_ERROR; // ILA is already armed, another write would force a trigger
     }
 
-    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_ARM_FT, 0x1);
+    // The hardware arms on the write itself, the value written does not matter
+    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_ARM_FT, 0x1u);
 
     return CMD_STATUS_SUCCESS; // ILA armed successfully
 }
@@ -228,14 +262,15 @@ cmd_status_t LIBRE_ILA_force_trigger
     }
 
     // Check if the ILA is already armed
-    uint32_t ila_arm_status = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_STATUS, ARMED);
+    uint32_t ila_arm_status = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_STATUS_REG_ARMED_FIELD);
 
-    if (ila_arm_status == 0)
+    if (ila_arm_status == 0u)
     {
-        return CMD_STATUS_ERROR; // ILA is not armed, cannot force trigger
+        return CMD_STATUS_ERROR; // ILA is not armed, the write would arm it instead
     }
 
-    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_ARM_FT, 0x1);
+    // Same register as the arm, an armed ILA reads the write as a forced trigger
+    HAL_set_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_ARM_FT, 0x1u);
 
     return CMD_STATUS_SUCCESS; // Force trigger send successfully
 }
@@ -258,13 +293,13 @@ cmd_status_t LIBRE_ILA_wait_done
         return CMD_STATUS_BAD_LIBRE_ILA; // fail fast instead of busy-looping the full timeout
     }
 
-    deadline = readmtime() + FPAD_MS_TO_TICKS(timeout_ms);
+    deadline = readmtime() + LIBRE_ILA_MS_TO_TICKS(timeout_ms);
 
     do
     {
 
-        ila_status = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_STATUS, DONE);
-        if (ila_status == 1)
+        ila_status = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_STATUS_REG_DONE_FIELD);
+        if (ila_status == 1u)
         {
             return CMD_STATUS_SUCCESS;
         }
@@ -272,10 +307,6 @@ cmd_status_t LIBRE_ILA_wait_done
     } while (readmtime() < deadline);
 
     return CMD_STATUS_TIMEOUT;
-    if (this_libre_ila == NULL)
-    {
-        return CMD_STATUS_BAD_LIBRE_ILA; // Bad LIBRE_ILA instance
-    }
 }
 
 /*-------------------------------------------------------------------------*//**
@@ -293,9 +324,15 @@ cmd_status_t LIBRE_ILA_read_idx
     {
         return CMD_STATUS_BAD_LIBRE_ILA; // fail fast instead of busy-looping the full timeout
     }
+
+    if ((samp_buff_frst_idx == NULL) || (samp_buff_trig_idx == NULL))
+    {
+        return CMD_STATUS_BAD_PARAM; // Nowhere to store the indices
+    }
+
     * samp_buff_frst_idx = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_SAMP_BUFF_FRST_IDX);
     * samp_buff_trig_idx = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_SAMP_BUFF_TRIG_IDX);
-    
+
     return CMD_STATUS_SUCCESS;
 }
 
@@ -306,31 +343,47 @@ cmd_status_t LIBRE_ILA_read_idx
 cmd_status_t LIBRE_ILA_read_data
 (
     libre_ila_instance_t * this_libre_ila,
-    uint64_t * data_buffer,
-    uint8_t * signal_buffer,
+    uint32_t * samp_buffer,
     uint32_t * samp_buff_trig_idx
 )
 {
     uint32_t samp_buff_frst_idx;
-    
+    uint32_t trig_idx;
+    uint32_t i;
+
     if (this_libre_ila == NULL)
     {
         return CMD_STATUS_BAD_LIBRE_ILA; // fail fast instead of busy-looping the full timeout
     }
+
+    if ((samp_buffer == NULL) || (samp_buff_trig_idx == NULL))
+    {
+        return CMD_STATUS_BAD_PARAM; // Nowhere to store the capture
+    }
+
     samp_buff_frst_idx = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_SAMP_BUFF_FRST_IDX);
+    trig_idx           = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_SAMP_BUFF_TRIG_IDX);
 
-    * samp_buff_trig_idx = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_SAMP_BUFF_TRIG_IDX);
+    /* Both indices point into the circular buffer, the readback below unrolls
+     * it from the oldest sample, so rebase the trigger onto the output. */
+    * samp_buff_trig_idx = (trig_idx + CORE_LIBRE_ILA_SAMP_BUFF_DEPTH - samp_buff_frst_idx)
+                           % CORE_LIBRE_ILA_SAMP_BUFF_DEPTH;
 
-    for( uint32_t i = 0; i < CORE_LIBRE_ILA_SAMP_BUFF_DEPTH; i++)
+    for( i = 0u; i < CORE_LIBRE_ILA_SAMP_BUFF_DEPTH; i++)
     {
         uint32_t idx = (samp_buff_frst_idx + i) % CORE_LIBRE_ILA_SAMP_BUFF_DEPTH;
+        uint32_t lane;
 
-        uint32_t lo = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_SAMP_BUFF_BASE + (idx * CORE_LIBRE_ILA_STRIDE_WIDTH));
-        uint32_t hi = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_SAMP_BUFF_BASE + (idx * CORE_LIBRE_ILA_STRIDE_WIDTH) + 4);
-        data_buffer[i] = ((uint64_t)hi << 32) | lo;
-
-        signal_buffer[i] = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_SAMP_BUFF_BASE + (idx * CORE_LIBRE_ILA_STRIDE_WIDTH) + 8);
+        /* A sample takes CORE_LIBRE_ILA_STRIDE_WIDTH registers in hardware but
+         * only the first CORE_LIBRE_ILA_N_LANES of them carry probe bits, the
+         * rest is padding and gets dropped here. */
+        for (lane = 0u; lane < CORE_LIBRE_ILA_N_LANES; lane++)
+        {
+            LIBRE_ILA_SAMPLE_WORD(samp_buffer, i, lane) =
+                    HW_get_32bit_reg(this_libre_ila->base_addr +
+                                     CORE_LIBRE_ILA_REGS_SAMP_BUFF_WORD_OFFSET(idx, lane));
+        }
     }
-    
+
     return CMD_STATUS_SUCCESS;
 }

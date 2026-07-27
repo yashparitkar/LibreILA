@@ -1,6 +1,6 @@
-# AXI4 Slave ILA
+# LibreILA
 
-This project contains work related to AXI4 Stream In-System Logic Analyzer. 
+This project contains work related to LibreILA (In-System Logic Analyzer). 
 
 The motivation to make this is follows:
 * There is no ILA like in Xilinx toolchain in the Microchip toolchain, the SmartDebug can not replace the ILA
@@ -49,22 +49,22 @@ Current implementation only uses TDATA, TVALID, TREADY and TLAST ports.
 
 ### Input (RW)
 
-| Index | RW | Register Name       | Description                |
-|-------|----|---------------------|----------------------------|
-|   0   | RW | Trigger vector cond | See trigger vector section |
-|   1   | RW | Trigger vector mask |                            |
-|   2   | RW | Trigger position    | Number of pre-trig samples |
-|   3   |  W | Arm_FT              | Any write to this register arms the ILA or forces trigger if already armed |
-|4      | RW | Trigger data (LSB)  | Input for TDATA trigger    |
-|4+ a-1 | RW | Trigger data (MSB)  | Input for TDATA trigger    |
-|4+ a   | RW | Trigger data mask (LSB)  | Input for TDATA trigger    |
-|4+2a-1 | RW | Trigger data mask (MSB)  | Input for TDATA trigger    |
+| Index  | RW | Register Name          | Description                 |
+|--------|----|-------------------------|-----------------------------|
+|   0    | RW | Trigger position        | Number of pre-trig samples  |
+|   1    |  W | Arm_FT                  | Any write to this register arms the ILA or forces trigger if already armed |
+|   2    | RW | Trigger configuration   | bit0: 0 = AND, 1 = OR. See trigger vector section |
+|   3    | RW | Reserved                | Reserved                    |
+| 4      | RW | Trigger vector cond (LSB) | See trigger vector section |
+| 4+a-1  | RW | Trigger vector cond (MSB) |                            |
+| 4+a    | RW | Trigger vector mask (LSB) |                            |
+| 4+2a-1 | RW | Trigger vector mask (MSB) |                            |
 
-Here, a is the number of G_DATA_WIDTH/32
+Here, `a` is `C_AXIL_STRIDE`: the same stride constant used to lay out the output sample buffer (see below), i.e. the next power-of-two register count for (TDATA lanes + 1 control lane), with a minimum of 4. This makes the trigger vector cond/mask registers share the exact same per-sample bit layout as the output sample buffer.
 
-Further input register are auto added depending on the data width.
+Further input registers are auto added depending on the data width.
 
-Total input registers: 4 + G_DATA_WIDTH/32 * 2
+Total input registers: 4 + C_AXIL_STRIDE * 2
 
 ### Output (RO, index relative to the end of the input block)
 
@@ -90,7 +90,7 @@ After this, sampling buffer is mapped with strides to ease the resource usage on
 
 Total output registers: 8 + ( G_DATA_WIDTH/32 + 1) * G_DEPTH
 
-Total number of registers: 12 + G_DATA_WIDTH/32 * 2 + (G_DATA_WIDTH/32 + 1) * G_DEPTH
+Total number of registers: 12 + C_AXIL_STRIDE * 2 + (G_DATA_WIDTH/32 + 1) * G_DEPTH
 
 #### Status 
 This is the status register of the ILA. The ARMED, TRIGD and DONE signal bits are CDCed with 2FF to the AXI4Lite domain and hence suffer a slight delay. The internal status register does not have CDC and used for debugging.
@@ -102,18 +102,23 @@ This is the status register of the ILA. The ARMED, TRIGD and DONE signal bits ar
 | 4-3 | STATUS | Internal status register of the ILA (No CDC) |
 
 ## Trigger vector
-Trigger vector decided when to trigger ILA. It is a 32 bit with register with mask and condition modifiable with AXI4Lite interface. Each bit of the vector corresponds to one of the condition being activated for trigger. The bit4 decides if the conditions are ORed or ANDed. If the TDATA is used as trigger, the value of TDATA can be entered in the trigger data input registers. When TDATA is used as a trigger, the MASK is supllied by the second set of registers of the TDATA width enabling mask of same size. 
-> Mask serves enable for the condition check, i.e., TREADY will be checked only if the corresponding mask is '1'.
+The trigger vector, condition and mask registers are merged into a single, unified per-bit vector that shares the exact same bit layout as one row of the output sample buffer (see the AXI4Lite register map and the output register section above): TDATA occupies the low bits, followed by the AXI4S control signals, followed by reserved/padding bits up to the `C_AXIL_STRIDE`-register boundary.
 
-| Index | Signal             |
-|-------|--------------------|
-| 0     | TREADY             |
-| 1     | TVALID             |
-| 2     | TLAST              |
-| 3     | TDATA              |
-| 4     | < 0/1:AND/OR >     |
+| Bit range                              | Signal                          |
+|-----------------------------------------|---------------------------------|
+| G_DATA_WIDTH-1 downto 0                 | TDATA                           |
+| G_DATA_WIDTH                            | TLAST                           |
+| G_DATA_WIDTH+1                          | TVALID                          |
+| G_DATA_WIDTH+2                          | TREADY                          |
+| G_DATA_WIDTH+3 to (C_AXIL_STRIDE*32)-1  | Reserved (leave mask bit at '0') |
 
-> Note that, mask corresponding to the bit4, < 0/1:AND/OR > is not checked.
+For every bit, the corresponding cond bit is the expected value of that signal and the corresponding mask bit enables that bit for the trigger check (`mask='1'` means the bit participates; `mask='0'` means it's ignored). A bit is considered "matching" when the live signal equals its cond bit.
+
+The trigger configuration register (index 2, bit0) selects how the enabled bits are combined:
+* `0` (AND): the ILA triggers only once **every** enabled bit is matching.
+* `1` (OR): the ILA triggers as soon as **any** enabled bit is matching.
+
+Since TDATA now participates in the same per-bit vector as the control signals, individual TDATA bits can be combined with TREADY/TVALID/TLAST in either AND or OR mode -- there is no longer a separate, single-bit "whole word matches" path for TDATA.
 
 ## Trigger
 
@@ -160,6 +165,7 @@ The core operates in the sampling clock domain which is AXI4S in the default cas
 The wrapper has a watchdog timer to reset the wrapper in case of any error. The timer is incremented in non-IDLE mode and is reset when a byte is succefully is received via UART or AXI interface. A reset is issued when the timer reaches a certain value.
 
 # Future improvements
+
 ## A script to modify the probe port
 A python script can be written to modify the probed port. This can be done by reading a configuration from csv file. Support for the inout port can also be added.
 The script will need to modify the port declarations and signal concatment. This method will also make it easier to write a script which generate modified vhdl based on other parameter such as existance of the i_ext_trig port, writing default generics.

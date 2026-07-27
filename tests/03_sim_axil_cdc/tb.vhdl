@@ -35,18 +35,28 @@ architecture sim of tb is
   constant C_TRIGGER_PULSE : natural := 16;
   constant C_SAMPLE_COUNT  : natural := 192;
 
-  constant TRIGGER_COND      : std_logic_vector(31 downto 0) := x"00000001";
-  constant TRIGGER_MASK      : std_logic_vector(31 downto 0) := x"00000000";
   constant TRIGGER_DATA      : std_logic_vector(63 downto 0) := x"00000000_00000045";
   constant TRIGGER_DATA_MASK : std_logic_vector(63 downto 0) := x"00000000_00000555";
 
   constant C_AXIL_WORD_BYTES : natural := 4;
+  -- Matches the DUT's C_AXIL_STRIDE: next power-of-two register count for
+  -- (TDATA lanes + 1 control lane), minimum 4 -- same constant the DUT uses
+  -- to size both the trigger vector block and the output sample stride.
+  constant C_STRIDE          : natural := 2 ** integer(ceil(log2(real(C_DATA_WIDTH / 32 + 1))));
   -- The DUT maps output registers after the input-register block.
-  -- For this configuration, the output block begins at input-reg-count * 4 bytes.
-  constant C_INPUT_REG_COUNT : natural := 4 + 2 * (C_DATA_WIDTH / 32);
+  constant C_INPUT_REG_COUNT : natural := 4 + 2 * C_STRIDE;
   constant C_OUTPUT_REG_BASE : natural := C_INPUT_REG_COUNT * C_AXIL_WORD_BYTES;
-  constant C_SAMPLE_RAM_BASE : natural := (4 + 2 * (C_DATA_WIDTH / 32) + 8) * C_AXIL_WORD_BYTES;
-  constant C_SAMPLE_STRIDE   : natural := 2 ** integer(ceil(log2(real((C_DATA_WIDTH / 32) + 1))));
+  constant C_SAMPLE_RAM_BASE : natural := (C_INPUT_REG_COUNT + 8) * C_AXIL_WORD_BYTES;
+  constant C_SAMPLE_STRIDE   : natural := C_STRIDE;
+
+  -- New input register map: 0=trig pos, 1=ARM_FT, 2=trig cfg (AND/OR), 3=reserved,
+  -- 4..4+a-1=trig vector cond, 4+a..4+2a-1=trig vector mask (a = C_STRIDE)
+  constant C_TRIG_POS_ADDR  : std_logic_vector(31 downto 0) := x"00000000";
+  constant C_ARM_FT_ADDR    : std_logic_vector(31 downto 0) := x"00000004";
+  constant C_TRIG_CFG_ADDR  : std_logic_vector(31 downto 0) := x"00000008";
+  constant C_TRIG_COND_BASE : natural := 4 * C_AXIL_WORD_BYTES;
+  constant C_TRIG_MASK_BASE : natural := (4 + C_STRIDE) * C_AXIL_WORD_BYTES;
+
   -- The current address decoder exposes the buffer RAM window.
   constant C_SAMPLE_PRINT_COUNT : natural                       := C_DEPTH;
   constant C_STATUS_ADDR        : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 0 * C_AXIL_WORD_BYTES, 32));
@@ -99,6 +109,8 @@ architecture sim of tb is
     signal wvalid  : out std_logic;
     signal bready  : out std_logic;
     signal bvalid  : in std_logic;
+    signal awready : in std_logic;
+    signal wready  : in std_logic;
     constant addr  : in std_logic_vector(31 downto 0);
     constant data  : in std_logic_vector(31 downto 0)
   ) is
@@ -108,17 +120,22 @@ architecture sim of tb is
     awvalid <= '1';
     wdata   <= data;
     wvalid  <= '1';
-    bready  <= '1';
 
-    while bvalid /= '1' loop
-
-      wait until rising_edge(clk);
-
-    end loop;
+    -- Wait for the slave to accept THIS address+data. AWREADY/WREADY are
+    -- fresh per-cycle handshake signals; BVALID alone is not safe to poll
+    -- here since the slave's write FSM can leave it asserted from a prior
+    -- back-to-back write, which would make this wait return immediately
+    -- without the new address/data ever having been latched.
+    wait until rising_edge(clk) and awready = '1' and wready = '1';
 
     awvalid <= '0';
     wvalid  <= '0';
-    bready  <= '0';
+    bready  <= '1';
+
+    -- Consume the response, then drop BREADY so the slave can clear
+    -- BVALID before the next transaction starts.
+    wait until rising_edge(clk) and bvalid = '1';
+    bready <= '0';
 
   end procedure axil_write;
 
@@ -130,6 +147,8 @@ architecture sim of tb is
     signal wvalid  : out std_logic;
     signal bready  : out std_logic;
     signal bvalid  : in std_logic;
+    signal awready : in std_logic;
+    signal wready  : in std_logic;
     constant addr  : in std_logic_vector(31 downto 0);
     constant data  : in std_logic_vector(31 downto 0)
   ) is
@@ -139,20 +158,15 @@ architecture sim of tb is
     awvalid <= '1';
     wdata   <= data;
     wvalid  <= '1';
-    bready  <= '1';
 
-    wait until rising_edge(clk);
-
-    wvalid <= '0';
-
-    while bvalid /= '1' loop
-
-      wait until rising_edge(clk);
-
-    end loop;
+    wait until rising_edge(clk) and awready = '1' and wready = '1';
 
     awvalid <= '0';
-    bready  <= '0';
+    wvalid  <= '0';
+    bready  <= '1';
+
+    wait until rising_edge(clk) and bvalid = '1';
+    bready <= '0';
 
   end procedure axil_arm;
 
@@ -279,33 +293,31 @@ begin
     end loop;
 
     wait until rising_edge(s_axil_aclk);
-    axil_write(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, x"00000008", std_logic_vector(to_unsigned(C_TRIG_IDX, 32)));
+    axil_write(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready, C_TRIG_POS_ADDR, std_logic_vector(to_unsigned(C_TRIG_IDX, 32)));
 
+    -- AND mode: trigger only once every enabled (mask=1) bit matches
     wait until rising_edge(s_axil_aclk);
-    axil_write(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, x"00000000", TRIGGER_COND);
+    axil_write(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready, C_TRIG_CFG_ADDR, x"00000000");
 
-    wait until rising_edge(s_axil_aclk);
-    axil_write(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, x"00000004", TRIGGER_MASK);
-
-    -- Trigger data words (Index 4 to 4 + a - 1)
+    -- Trigger vector cond words -- TDATA bits (Index 4 to 4 + a - 1)
     for word_idx in 0 to (C_DATA_WIDTH / 32) - 1 loop
 
       wait until rising_edge(s_axil_aclk);
       axil_write(
-        s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid,
-        std_logic_vector(to_unsigned((4 + word_idx) * 4, 32)),
+        s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready,
+        std_logic_vector(to_unsigned(C_TRIG_COND_BASE + word_idx * C_AXIL_WORD_BYTES, 32)),
         TRIGGER_DATA(31 + word_idx * 32 downto word_idx * 32)
       );
 
     end loop;
 
-    -- Trigger data mask words (Index 4 + a to 4 + 2a - 1)
+    -- Trigger vector mask words -- TDATA bits (Index 4 + a to 4 + 2a - 1)
     for word_idx in 0 to (C_DATA_WIDTH / 32) - 1 loop
 
       wait until rising_edge(s_axil_aclk);
       axil_write(
-        s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid,
-        std_logic_vector(to_unsigned((4 + (C_DATA_WIDTH / 32) + word_idx) * 4, 32)),
+        s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready,
+        std_logic_vector(to_unsigned(C_TRIG_MASK_BASE + word_idx * C_AXIL_WORD_BYTES, 32)),
         TRIGGER_DATA_MASK(31 + word_idx * 32 downto word_idx * 32)
       );
 
@@ -317,7 +329,7 @@ begin
 
     end loop;
 
-    axil_arm(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, x"0000000C", x"00000001");
+    axil_arm(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready, C_ARM_FT_ADDR, x"00000001");
 
     for settle_index in 1 to 16 loop
 
