@@ -14,7 +14,7 @@ datasheet:
 	-$(LATEX) $(DATASHEET).tex
 	-$(LATEX) $(DATASHEET).tex
 
-datasheet:
+manual:
 	-$(LATEX) $(MANUAL).tex
 	-$(BIBTEX) $(MANUAL)
 	-$(LATEX) $(MANUAL).tex
@@ -31,7 +31,7 @@ clean:
 		-name '*.nav' -o -name '*.out' -o -name '*.snm' -o \
 		-name '*.toc' -o -name '*.lof' -o -name '*.lot' -o \
 		-name '*.synctex.gz' -o -name '*.vrb' -o -name '*.bcf' -o \
-		-name '*.run.xml' \
+		-name '*.run.xml' -o \
 		-name '*.pdf' \
 	\) -delete
 	rm -f Chapters/*.pdf Appendices/*.pdf

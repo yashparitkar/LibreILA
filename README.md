@@ -27,8 +27,8 @@ This project is licensed under CERN Open Hardware Licence Version 2 - Permissive
 * A serial wrapper is also provided to easily use the ILA with the PC
 * A python driver is provided to easily control the ILA from the PC when instantiated with the serial wrapper
 
-# AXI4S_ILA core
-This section contains information about the AXI4S_ILA core.
+# LibreILA core
+This section contains information about the LibreILA core.
 
 ## Ports
 Current implementation only uses TDATA, TVALID, TREADY and TLAST ports. 
@@ -135,8 +135,8 @@ This can be further optimised for the data storage compression although I don't 
 
 If needed, user can also modify to use masked data values for triggering.
 
-# ILA UART WRAPPER
-This section contains information about the ILA UART WRAPPER.
+# LibreILA UART Wrapper
+This section contains information about the LibreILA UART Wrapper (libre_ila_uart.vhdl).
 
 ## UART packet format
 The PC is the one managing the ILA. It is connected to the ILA with the UART interface. A custom packet format is defined to read/write the addresses. The packet format for the upstream and downstream is given below.

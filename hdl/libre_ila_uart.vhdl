@@ -1,10 +1,10 @@
 -------------------------------------------------------------------------------
--- File: ila_uart_wrapper.vhdl
+-- File: libre_ila_uart.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-21 Tue 20:12
 -- Last Modified: 2026-07-25 Sat 22:30
 --
--- Description: This is a wrapper for the axi4s_ila. This exposes two UART
+-- Description: This is a wrapper for the libre_ila. This exposes two UART
 -- pins through which the ILA can be controller allowing the external debug
 -- of the ILA with serial port.
 -- Usage:
@@ -19,7 +19,7 @@ library ieee;
   use ieee.std_logic_1164.all;
   use ieee.numeric_std.all;
 
-entity ila_uart_wrapper is
+entity libre_ila_uart is
   generic (
     G_AXIS_CLK_FREQ      : integer := 100_000_000;
     G_AXIL_CLK_FREQ      : integer := 100_000_000;
@@ -60,9 +60,9 @@ entity ila_uart_wrapper is
     axis_out_tlast  : out   std_logic;
     axis_out_tdata  : out   std_logic_vector(G_DATA_WIDTH - 1 downto 0)
   );
-end entity ila_uart_wrapper;
+end entity libre_ila_uart;
 
-architecture rtl of ila_uart_wrapper is
+architecture rtl of libre_ila_uart is
 
   -- Watchdog signals -----------------------------------------------
   constant WDT_TRIGGER : unsigned(31 downto 0) := to_unsigned(G_AXIL_CLK_FREQ, 32);
@@ -165,9 +165,9 @@ architecture rtl of ila_uart_wrapper is
 
   -- Component instantiations ---------------------------------------
 
-  -- AXI4S ILA
+  -- LibreILA
   --   Our star of the show
-  component axi4s_ila is
+  component libre_ila is
     generic (
       G_AXIS_CLK_FREQ     : integer;
       G_EXTERNAL_TRIG     : integer;
@@ -216,7 +216,7 @@ architecture rtl of ila_uart_wrapper is
       s_axil_rvalid  : out   std_logic;
       s_axil_rready  : in    std_logic
     );
-  end component axi4s_ila;
+  end component libre_ila;
 
   -- FIFO
   component fifo is
@@ -274,7 +274,7 @@ begin
   s_axil_wstrb  <= (others => '1');
   -------------------------------------------------------------------
 
-  axi4s_ila_inst : component axi4s_ila
+  libre_ila_inst : component libre_ila
     generic map (
       -- Clock speed of the AXIS, used in plotting
       g_axis_clk_freq     => G_AXIS_CLK_FREQ,

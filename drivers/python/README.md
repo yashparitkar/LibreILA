@@ -1,5 +1,5 @@
-# AXI4S ILA Python driver
-This directory contains the python driver for the AXI4S ILA IP. The driver is used to control the AXI4S ILA when instantiated as ila_uart_wrapper.vhdl
+# LibreILA Python driver
+This directory contains the python driver for the LibreILA IP. The driver is used to control the LibreILA when instantiated as libre_ila_uart.vhdl
 
 ## Requirements
 Following packages are required:

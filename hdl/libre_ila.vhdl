@@ -1,8 +1,8 @@
 -------------------------------------------------------------------------------
--- File: axi4s_ila.vhdl
+-- File: libre_ila.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-07-24 Fri 20:47
+-- Last Modified: 2026-07-27 Mon 10:25
 --
 -- Description: An ILA for AXI4-Stream
 -- Usage:
@@ -18,7 +18,7 @@ library ieee;
   use ieee.numeric_std.all;
   use ieee.math_real.all;
 
-entity axi4s_ila is
+entity libre_ila is
   generic (
     -- Clock speed of the AXIS, used in plotting
     G_AXIS_CLK_FREQ     : integer := 100000000;
@@ -73,9 +73,9 @@ entity axi4s_ila is
     s_axil_rvalid  : out   std_logic;
     s_axil_rready  : in    std_logic
   );
-end entity axi4s_ila;
+end entity libre_ila;
 
-architecture rtl of axi4s_ila is
+architecture rtl of libre_ila is
 
   -- Fixing the width of the AXILite bus ----------------------------
   -------------------------------------------------------------------

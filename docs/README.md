@@ -1,5 +1,5 @@
-# AXI4S ILA Documentation
-This folder contain documentations related to the AXI4S ILA.
+# LibreILA Documentation
+This folder contain documentations related to the LibreILA.
 
 ## Directory Structure
 ```text

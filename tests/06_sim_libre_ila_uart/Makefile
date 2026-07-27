@@ -1,4 +1,4 @@
-UNIT       := axi4s_ila
+UNIT       := libre_ila_uart
 TOP        := tb
 SRC        := ../../hdl/$(UNIT).vhdl tb.vhdl
 WORKDIR    := work

@@ -186,7 +186,7 @@ architecture sim of tb is
 
 begin
 
-  dut : entity work.axi4s_ila
+  dut : entity work.libre_ila
     generic map (
       g_external_trig => 0,
       g_data_width    => C_DATA_WIDTH,

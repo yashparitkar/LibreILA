@@ -1,0 +1,111 @@
+\documentclass{article}
+\usepackage{float}
+\usepackage[margin=2.5cm]{geometry}
+% \usepackage{xurl}
+\usepackage{tabularx}
+\usepackage[utf8x]{inputenc}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage[linktocpage]{hyperref}
+% \usepackage{wasysym}
+\usepackage{graphicx}
+% \usepackage{epsfig}
+\setkeys{Gin}{width=0.8\textwidth}
+% \usepackage[normalem]{ulem}
+% \usepackage{enumerate}
+\usepackage{listings}
+\usepackage[nohyperlinks]{acronym}
+
+\lstset{ %
+basicstyle=\footnotesize,       % the size of the fonts that are used for the code
+showspaces=false,               % show spaces adding particular underscores
+showstringspaces=false,         % underline spaces within strings
+showtabs=false,                 % show tabs within strings adding particular underscores
+frame=single,                   % adds a frame around the code
+tabsize=2,                      % sets default tabsize to 2 spaces
+breaklines=true,                % sets automatic line breaking
+breakatwhitespace=false,        % sets if automatic breaks should only happen at whitespace
+}
+
+\hypersetup{
+ colorlinks=true,
+ citecolor=violet,
+ linkcolor=blue,
+ urlcolor=blue
+}
+
+\usepackage{fancyhdr}
+
+
+\fancyhead[L]{LibreILA User Manual}
+\fancyhead[R]{Yash Paritkar}
+\fancyfoot[L]{\leftmark}
+\fancyfoot[C]{}
+\fancyfoot[R]{\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0.5pt}
+\pagestyle{fancy}
+
+
+\newcommand{\todo}[1]{\textbf{\color{red}TODO: #1}}
+\newcommand{\arya}{\color{blue}} 
+\newcommand{\degr}{\ensuremath{^\circ}}
+
+\title{LibreILA User Manual}
+\author{Yash Paritkar (github/paritkary25)}
+\date{July 2026}
+
+\begin{document}
+
+\begin{figure}
+    \centering
+    \includegraphics[trim=0 0 0 0,clip=true,width=0.75\linewidth]{./images/oshw-logo-800-px-original.png}
+    % \caption{Caption}
+    \label{fig:rendering}
+\end{figure}
+
+\maketitle
+
+\newpage
+
+\section*{Document History}
+\addcontentsline{toc}{section}{Document history}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|c|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Version} & \textbf{Date} & \textbf{Comments} \\
+        \hline
+        0.0 & 25 July 2026 & Document created. Yash Partikar \\
+        \hline
+        \end{tabularx}
+%    \caption{General characteristics of the payload}
+    \label{tab:hisotry}
+\end{table}
+
+\newpage
+
+\tableofcontents
+
+\newpage
+\listoffigures
+\listoftables
+
+\section*{List of Acronyms}
+\begin{acronym}[sort = true]
+    % A
+    % I
+    \acro{ILA}{Integrated Logic Analyzer}
+\end{acronym}
+
+\newpage
+\section{Introduction}
+This document describes the design and implementation of the \ac{ILA}.
+
+\newpage
+\section{Generating configuration}
+\end{document}
