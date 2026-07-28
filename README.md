@@ -1,51 +1,80 @@
 # LibreILA
 
-This project contains work related to LibreILA (In-System Logic Analyzer). 
+This project contains work related to LibreILA (In-System Logic Analyzer).
+
+![LibreILA](docs/tex/images/libre_ila_logo.svg)
 
 The motivation to make this is follows:
 * There is no ILA like in Xilinx toolchain in the Microchip toolchain, the SmartDebug can not replace the ILA
 * ILA serves as a really good tool to debug the signals
 
-This specific ILA is specialised for the AXI4S but a similar logic can be modified and easily adapted for generic IOs.
+The core itself is generic: it samples a single flat probe word of `G_PROBE_WIDTH` bits and knows nothing about what those bits mean. The build shipped in [hdl/libre_ila.vhdl](hdl/libre_ila.vhdl) wires that probe to a pass through 64-bit AXI4S pair (67 probe bits), which is the reference configuration used by the tests and the drivers. Any other probe port map is meant to be produced by the generator in [codegen/](codegen/) from a `portmap.csv`.
 
-## License 
+> The generator scripts in [codegen/](codegen/) are still work in progress, for now the probe concatenation is edited by hand in `w_probe`.
+
+## License
 
 This project is licensed under CERN Open Hardware Licence Version 2 - Permissive unless otherwise specified. See LICENSE for more details.
 
 ## Features
+* Generic probe: one flat probe word, the same layout is shared by the trigger vector and the sample buffer
 * Optional external trigger port to synchronise with other ILAs
 * Uses fabric ram for data storage and can be read back with AXI4Lite interface
-* Data acquisition happens continously in a circular buffer
-* Pass through AXI4 Stream ports ensures no delay is introduced due to the IP
+* Data acquisition happens in a circular buffer, one sample per sampling clock edge while armed
+* Probe taps are pass through, no delay is introduced due to the IP
 * Customizable trigger:
     * Trigger can be set with AXI4Lite interface
     * Once setting the triggers condition, the ILA can be armed
     * Number of samples before and after trigger can be adjusted
-    * Can also use aa external trigger
+    * Can also use an external trigger
 * CDC on the ARM and status bits
 * A serial wrapper is also provided to easily use the ILA with the PC
-* A python driver is provided to easily control the ILA from the PC when instantiated with the serial wrapper
+* A C driver for the bare AXI4Lite core, and a python driver (work in progress) for the serial wrapper
 
 # LibreILA core
 This section contains information about the LibreILA core.
 
+## The probe
+The core samples one vector, `w_probe`, of `G_PROBE_WIDTH` bits. That concatenation in [hdl/libre_ila.vhdl](hdl/libre_ila.vhdl) is the single definition of the probe bit order; the sample buffer, the trigger vector and both drivers inherit it. Signals are packed LSB first, in the same order they are listed in `portmap.csv`.
+
+For the stock AXI4S build the probe is:
+
+| Bit range              | Signal |
+|------------------------|--------|
+| 63 downto 0            | TDATA  |
+| 64                     | TLAST  |
+| 65                     | TVALID |
+| 66                     | TREADY |
+
+To probe something else, change `w_probe` (and the ports feeding it) and set `G_PROBE_WIDTH` to match. Nothing else in the core has to be touched.
+
 ## Ports
-The default implementation is with AXI4S ports but can be modified to use generic IOs. 
+The default implementation is with AXI4S ports but can be modified to probe generic IOs.
 * axis_in: AXI4S Slave port: Serves as slave port for the master.
 * axis_out: AXI4S Master port: Serves as master port for the slave
+
+The sampling clock is taken from the probe side (`axis_in_aclk` in the stock build).
 
 * axil: AXI4Lite Slave port: Configuration and readout port
 * i_ext_trig: external trigger port
 * o_trig_out: internal trigger signal for chaining to other ILA instances
 
 ## Configuration Parameters
-* G_EXTERNAL_TRIG : 1: Use external trigger
-* G_DATA_WIDTH    : Width of the AXI4S, keep it multiple of 32
-* G_DEPTH         : Number of samples to store, keep it power of two
+| Generic               | Description                                                  |
+|-----------------------|--------------------------------------------------------------|
+| G_SAMP_CLK_FREQ       | Sampling clock frequency in Hz, reported over AXI4Lite so the host can build the time axis |
+| G_AXIL_CLK_FREQ       | AXI4Lite clock frequency in Hz                               |
+| G_EXTERNAL_TRIG       | 1: use the external trigger pin instead of the trigger vector |
+| G_PROBE_WIDTH         | Total probed bits, keep it a multiple of 32 for best results  |
+| G_SAMP_BUFF_DEPTH     | Number of samples to store, must be a power of two            |
+| C_S_AXIL_DATA_WIDTH   | AXI4Lite data width, do not change                            |
+| C_S_AXIL_ADDR_WIDTH   | AXI4Lite address width, do not change                         |
+
+`G_SAMP_BUFF_DEPTH` (power of two, greater than one) and `G_PROBE_WIDTH` (greater than zero) are checked with asserts at elaboration.
 
 ## axi4lite Register Map
 
-32-bit registers; byte address = `Index * 4`. Sizing auto-scales with data width and depth.
+32-bit registers; byte address = `Index * 4`. Sizing auto-scales with probe width and depth.
 
 ### Input (RW)
 
@@ -60,9 +89,9 @@ The default implementation is with AXI4S ports but can be modified to use generi
 | 4+a    | RW | Trigger vector mask (LSB) |                            |
 | 4+2a-1 | RW | Trigger vector mask (MSB) |                            |
 
-Here, `a` is `C_AXIL_STRIDE`: the same stride constant used to lay out the output sample buffer (see below), i.e. the next power-of-two count of probe lanes (`C_N_LANES = ceil(C_PROBE_WIDTH/32)`), with a minimum of 4. This makes the trigger vector cond/mask registers share the exact same per-sample bit layout as the output sample buffer.
+Here, `a` is `C_AXIL_STRIDE`: the same stride constant used to lay out the output sample buffer (see below), i.e. the next power-of-two count of probe lanes (`C_N_LANES = ceil(G_PROBE_WIDTH/32)`), with a minimum of 4. This makes the trigger vector cond/mask registers share the exact same per-sample bit layout as the output sample buffer.
 
-Further input registers are auto added depending on the data width.
+Further input registers are auto added depending on the probe width.
 
 Total input registers: 4 + C_AXIL_STRIDE * 2
 
@@ -72,29 +101,29 @@ Total input registers: 4 + C_AXIL_STRIDE * 2
 |-------|----|---------------------|---------------------------------------|
 |   0   | RO | Status              | ILA status register                   |
 |   1   | RO | Magic key           | 0xb01dface                            |
-|   2   | RO | Samp Clk Freqcy     | Sampling clock frequency (Hz)         |
-|   3   | RO | Width               | C_PROBE_WIDTH, total probed bits      |
-|   4   | RO | Buffer Depth        | Depth of the sampling buffer          |
+|   2   | RO | Samp Clk Freqcy     | Sampling clock frequency (Hz), G_SAMP_CLK_FREQ |
+|   3   | RO | Width               | G_PROBE_WIDTH, total probed bits      |
+|   4   | RO | Buffer Depth        | G_SAMP_BUFF_DEPTH, sampling buffer depth |
 |   5   | RO | Reserved            | Reserved                              |
 |   6   | RO | samp_buff_trig_idx  | Index of the trigger sample           |
 |   7   | RO | samp_buff_frst_idx  | Index of the first sample             |
 
-After this, sampling buffer is mapped with strides to ease the resource usage on the fabric. Each samp_buff is written as a bunch with number of registers used for each samp_buff as power of two to ease computation. For example, if the G_DATA_WIDTH is kept 64 and number of signals is 3 then the probe is 67 bits wide, needing 3 lanes, and the stride is rounded up to 4. Inside each stride, the data each stored in following format:
- 
+After this, sampling buffer is mapped with strides to ease the resource usage on the fabric. Each samp_buff is written as a bunch with number of registers used for each samp_buff as power of two to ease computation. For example, in the stock AXI4S build the bus is 64 bits wide and three signalling bits are probed alongside it, so the probe is 67 bits wide, needing 3 lanes, and the stride is rounded up to 4. Inside each stride, the data each stored in following format:
+
 | Offset                | RW | Register Name                                     | Description                        |
 |-----------------------|----|---------------------------------------------------|------------------------------------|
 | 0                     | RO | samp_buff(31 downto 0)                            | The LSBs of the probe word         |
 | 1                     | RO | samp_buff(63 downto 32)                           |                                    |
-| C_N_LANES-1           | RO | samp_buff(C_PROBE_WIDTH-1 downto 32*(C_N_LANES-1))| The MSBs, zero padded              |
+| C_N_LANES-1           | RO | samp_buff(G_PROBE_WIDTH-1 downto 32*(C_N_LANES-1))| The MSBs, zero padded              |
 | C_N_LANES to stride-1 | RO | zero                                              | Padding up to the stride boundary  |
 
-The probe word here is the same vector the trigger uses, TDATA in the low bits then TLAST/TVALID/TREADY, so lane `n` holds probe bits `32n+31 downto 32n`. See the trigger vector section below for the bit layout.
+The probe word here is the same vector the trigger uses, so lane `n` holds probe bits `32n+31 downto 32n`. See the probe and trigger vector sections for the bit layout.
 
-Total output registers: 8 + C_AXIL_STRIDE * G_DEPTH
+Total output registers: 8 + C_AXIL_STRIDE * G_SAMP_BUFF_DEPTH
 
-Total number of registers: 12 + C_AXIL_STRIDE * 2 + C_AXIL_STRIDE * G_DEPTH
+Total number of registers: 12 + C_AXIL_STRIDE * 2 + C_AXIL_STRIDE * G_SAMP_BUFF_DEPTH
 
-#### Status 
+#### Status
 This is the status register of the ILA. The ARMED, TRIGD and DONE signal bits are CDCed with 2FF to the AXI4Lite domain and hence suffer a slight delay. The internal status register does not have CDC and used for debugging.
 | bit | Name   | Description                                  |
 |-----|--------|----------------------------------------------|
@@ -104,15 +133,12 @@ This is the status register of the ILA. The ARMED, TRIGD and DONE signal bits ar
 | 4-3 | STATUS | Internal status register of the ILA (No CDC) |
 
 ## Trigger vector
-The trigger vector, condition and mask registers are merged into a single, unified per-bit vector that shares the exact same bit layout as one row of the output sample buffer (see the AXI4Lite register map and the output register section above): TDATA occupies the low bits, followed by the AXI4S control signals, followed by reserved/padding bits up to the `C_AXIL_STRIDE`-register boundary.
+The trigger vector, condition and mask registers are merged into a single, unified per-bit vector that shares the exact same bit layout as one row of the output sample buffer (see the AXI4Lite register map and the output register section above): the probe word occupies the low bits, followed by reserved/padding bits up to the `C_AXIL_STRIDE`-register boundary.
 
-| Bit range                              | Signal                          |
-|-----------------------------------------|---------------------------------|
-| G_DATA_WIDTH-1 downto 0                 | TDATA                           |
-| G_DATA_WIDTH                            | TLAST                           |
-| G_DATA_WIDTH+1                          | TVALID                          |
-| G_DATA_WIDTH+2                          | TREADY                          |
-| G_DATA_WIDTH+3 to (C_AXIL_STRIDE*32)-1  | Reserved (leave mask bit at '0') |
+| Bit range                              | Signal                           |
+|----------------------------------------|----------------------------------|
+| G_PROBE_WIDTH-1 downto 0               | The probe word                   |
+| G_PROBE_WIDTH to (C_AXIL_STRIDE*32)-1  | Reserved (leave mask bit at '0') |
 
 For every bit, the corresponding cond bit is the expected value of that signal and the corresponding mask bit enables that bit for the trigger check (`mask='1'` means the bit participates; `mask='0'` means it's ignored). A bit is considered "matching" when the live signal equals its cond bit.
 
@@ -120,56 +146,75 @@ The trigger configuration register (index 2, bit0) selects how the enabled bits 
 * `0` (AND): the ILA triggers only once **every** enabled bit is matching.
 * `1` (OR): the ILA triggers as soon as **any** enabled bit is matching.
 
-Since TDATA now participates in the same per-bit vector as the control signals, individual TDATA bits can be combined with TREADY/TVALID/TLAST in either AND or OR mode -- there is no longer a separate, single-bit "whole word matches" path for TDATA.
+Since the whole probe word participates in the same per-bit vector, data bits can be combined with the signalling bits in either AND or OR mode -- there is no separate, single-bit "whole word matches" path for the data.
 
 ## Trigger
 
+### Arming and trigger position
+A write to Arm_FT moves the ILA from IDLE to ARMED and capture starts. A second write while armed forces the trigger. The trigger position register holds the number of pre-trigger samples; the core keeps capturing for `G_SAMP_BUFF_DEPTH - trigger position - 1` samples after the trigger and then goes to DONE.
+
 ### External Trigger
-The external trigger is a bit-wide input port. Use of external port needs to be enabled at the time of instantiation. The signal is synchronised to the AXI4S clock domain and rising edge of the signal is used to trigger the ILA.
+The external trigger is a bit-wide input port. Use of external port needs to be enabled at the time of instantiation with `G_EXTERNAL_TRIG = 1`, and it replaces the trigger vector comparator: in that build the ILA triggers only on the rising edge of `i_ext_trig`, synchronised to the sampling clock domain. The resulting trigger is also driven out on `o_trig_out` for chaining.
 
 ## Output format
-The output register can be seen in the above section. Internally, all the samples are stored in a LSRAM block. The AXI4Lite slave serves as read port for the RAM block. The offsetted read values are fed to the RAM port. This allows the design to make full use of the independent clock of the LSRAM of the PolarFire LSRAM block (Microchip document G238606).
+The output register can be seen in the above section. Internally, all the samples are stored in a LSRAM block, one 32-bit lane per `C_S_AXIL_DATA_WIDTH` slice of the probe word. The probe word is packed LSB first into lane 0 upwards and zero padded up to the lane boundary, so lane `n` carries probe bits `32n+31 downto 32n` and the last lane is zero padded in its upper bits. On readout the lanes are padded further, up to `C_AXIL_STRIDE` registers per sample, so that a sample index maps to an address with a shift instead of a multiply.
 
-STATE HOW THE SIGNALS ARE APPENDED AND WORD ALIGNED WHILE STORING
+The AXI4Lite slave serves as read port for the RAM block. The offsetted read values are fed to the RAM port. This allows the design to make full use of the independent clock of the LSRAM of the PolarFire LSRAM block (Microchip document G238606).
 
 ## Clock domains
-The core operates in the sampling clock domain which is AXI4S in the default case. The AXI4Lite is separate domain.
+The core operates in the sampling clock domain, which is the probe clock (`axis_in_aclk` in the stock AXI4S build) and is described to software by `G_SAMP_CLK_FREQ`. The AXI4Lite is a separate domain, `G_AXIL_CLK_FREQ`.
 
 ## Serving suggestions
-This design contains minimal AXI4S ports, user can add rest of the ports from the standard.
+The stock build contains minimal AXI4S ports, user can add rest of the ports from the standard to the probe.
 
 This can be further optimised for the data storage compression although I don't prefer that as it will make the readout complex.
-
-If needed, user can also modify to use masked data values for triggering.
 
 # LibreILA UART Wrapper
 This section contains information about the LibreILA UART Wrapper (libre_ila_uart.vhdl).
 
 > Note that, it is assumed that the UART fifo are large enough that there is no overflow on the UART side.
 
+The wrapper instantiates the core, so it carries the same generics, plus `G_UART_RX_FIFO_DEPTH`, `G_UART_TX_FIFO_DEPTH` and `BAUD_RATE`.
+
 ## UART packet format
 The PC is the one managing the ILA. It is connected to the ILA with the UART interface. A custom packet format is defined to read/write the addresses. The packet format for the upstream and downstream is given below.
 
 ### PC to ILA WRAPPER
 ```text
-| SYNC/VALID | R/W | #words | base address | Write Data Words | 
-|     0x55   | 0/1 | 7 bit  |   32-bits    | 32-bits x #words | 
+| SYNC/VALID | R/W | #words | base address | Write Data Words |
+|     0x55   | 0/1 | 7 bit  |   32-bits    | 32-bits x #words |
 ```
 
 ### ILA WRAPPER to PC
 ```text
-| SYNC/VALID | valid | #words | base address | Read Data Words  | 
-|     0xAA   | 0/1   | 7 bit  |   32-bits    | 32-bits x #words | 
+| SYNC/VALID | valid | #words | base address | Read Data Words  |
+|     0xAA   | 0/1   | 7 bit  |   32-bits    | 32-bits x #words |
 ```
 
 ## Clock domains
-The core operates in the sampling clock domain which is AXI4S in the default case. The AXI4Lite domain clock is kept separate. This block operates on the AXI4Lite clock. The UART clock is derived from the AXI4Lite clock.
+The core operates in the sampling clock domain, the AXI4Lite domain clock is kept separate. This block operates on the AXI4Lite clock. The UART clock is derived from the AXI4Lite clock.
 
 ## Watchdog timer
 The wrapper has a watchdog timer to reset the wrapper in case of any error. The timer is incremented in non-IDLE mode and is reset when a byte is succefully is received via UART or AXI interface. A reset is issued when the timer reaches a certain value.
 
+# Code generation
+Since the core is generic, a build is fully described by two csv files in [codegen/](codegen/):
+
+* `portmap.csv`: the probed signals, one per line as `signal,width,type`, listed LSB first. This defines the probe ports, the `w_probe` concatenation and `G_PROBE_WIDTH`. The same file is read by the python driver to name the signals in the .vcd.
+* `configuration.csv`: the generic values, one per line as `generic,type,value`.
+
+`templates/` holds a starting point for both (`axi4s_min_portmap.csv` is the stock AXI4S probe, `default_configuration.csv` the default generics). The generated VHDL is written to `gen/`, which is not tracked.
+
+> `code_generator.py` and `configuration_generation.py` are work in progress, see the future improvements section.
+
+# Drivers
+* [drivers/baremetal/](drivers/baremetal/): C driver for the bare core over AXI4Lite. The probe is opaque to it, the whole register map is derived from the probe width, buffer depth and sampling clock frequency read back from the core.
+* [drivers/python/](drivers/python/): python driver for the UART wrapper, reads the signal names from `portmap.csv` and dumps a .vcd. Work in progress.
+
 # Future improvements
 
-## A script to modify the probe port
-A python script can be written to modify the probed port. This can be done by reading a configuration from csv file. Support for the inout port can also be added.
-The script will need to modify the port declarations and signal concatment. This method will also make it easier to write a script which generate modified vhdl based on other parameter such as existance of the i_ext_trig port, writing default generics.
+## Finishing the generator script
+The generator needs to write the probe port declarations, the `w_probe` concatenation and the default generics from `portmap.csv` and `configuration.csv`, including the presence of the `i_ext_trig` port. Support for the inout port can also be added.
+
+## Masked data values
+If needed, user can also modify the core to use masked data values for triggering.

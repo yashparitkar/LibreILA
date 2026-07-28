@@ -1,0 +1,16 @@
+####################################################################
+# File: default_configuration.csv
+# Author: Y.U.P. (paritkary25)
+# Last Modified: 2026-07-28 Tue 20:18
+#
+# Description: This file contains the default configuration for the LibreILA core. The simulation tests will use this configuration file to run the tests unless mentioned otherwised.
+####################################################################
+
+G_SAMP_CLK_FREQ,integer,100000000
+G_AXIL_CLK_FREQ,integer,100000000
+G_EXTERNAL_TRIG,integer,0
+G_SAMP_BUFF_DEPTH,natural,2048
+GEN_TYPE,integer,0
+G_UART_RX_FIFO_DEPTH,natural,1024
+G_UART_TX_FIFO_DEPTH,natural,1024
+G_BAUD_RATE,integer,115200

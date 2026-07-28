@@ -25,6 +25,24 @@ gen
 # Events log
 events_log*
 
-# Report-writing scratch space (notes/data dumps for the project report,
-# not part of the repo deliverable)
+# Report-writing
 report_staging/
+
+# .tex
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.lof
+*.lot
+*.synctex.gz
+*.vrb
+*.bcf
+*.run.xml
+docs/tex/*.pdf

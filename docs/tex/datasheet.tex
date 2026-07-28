@@ -1,6 +1,6 @@
 % File: datasheet.tex
 % Author: Y.U.P. (paritkary25)
-% Last Modified: 2026-07-28 Tue 12:39
+% Last Modified: 2026-07-28 Tue 12:47
 %
 % Description: LaTeX source file for the LibreILA datasheet. This covers the technical specifications and features of the LibreILA tool.
 
@@ -86,7 +86,7 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
         % centre (not its baseline) sits on the row baseline, matching the [c]
         % alignment of the nested tabular in the next cell.
         {
-            \raisebox{-0.5\height}{\includegraphics[width = 4cm]{./images/libre_ila_logo.pdf}}
+            \raisebox{-0.5\height}{\includegraphics[width = 4cm]{./images/libre_ila_logo_converted.pdf}}
         } &
         {
             \begin{tabular}[c]{l}
@@ -118,16 +118,16 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
 \section{Revision History}
 
 \renewcommand{\arraystretch}{1.5}
+% ignore the warning about overfull hbox. The next column is gonna be always empty
 \begin{table}[H]
     \centering
     \begin{tabularx}{\textwidth}{|l|c|X|}
         \hline
         \rowcolor{gray!40} \textbf{Version} & \textbf{Date} & \textbf{Comments} \\
         \hline
-        0.0 & 25 July 2026 & Document created. Yash Partikar \\
+        0.0 & 25 July 2026 & Document created.\\
         \hline
         \end{tabularx}
-%    \caption{General characteristics of the payload}
     \label{tab:hisotry}
 \end{table}
 
@@ -163,7 +163,7 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
 % ---------------------------------------------------------------
 \begin{figure}[t]
     \centering
-    \includegraphics[width=\linewidth]{./images/libre_ila_logo.pdf}
+    \includegraphics[width=\linewidth]{./images/libre_ila_logo_converted.pdf}
     \caption{Column-wide figure: sits inside a single column.}
     \label{fig:logo-column}
 \end{figure}
@@ -178,7 +178,7 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
 % ---------------------------------------------------------------
 \begin{figure*}[t]
     \centering
-    \includegraphics[width=0.6\textwidth, height = 5cm]{./images/libre_ila_logo.pdf}
+    \includegraphics[width=0.6\textwidth, height = 5cm]{./images/libre_ila_logo_converted.pdf}
     \caption{Page-wide figure: spans across both columns.}
     \label{fig:logo-full}
 \end{figure*}

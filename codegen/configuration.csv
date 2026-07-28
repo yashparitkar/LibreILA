@@ -1,8 +1,27 @@
- G_AXIS_CLK_FREQ,integer,100000000
- G_AXIL_CLK_FREQ,integer,100000000
- G_EXTERNAL_TRIG,integer,0
- G_DATA_WIDTH,natural,64
- G_DEPTH,natural,2048
- G_UART_RX_FIFO_DEPTH,natural,1024
- G_UART_TX_FIFO_DEPTH,natural,1024
- BAUD_RATE,integer,115200
+####################################################################
+# File: configuration.csv
+# Author: Y.U.P. (paritkary25)
+# Last Modified: 2026-07-28 Tue 20:14
+#
+# Description: This file contains the configuration for the LibreILA core.
+####################################################################
+
+# G_SAMP_CLK_FREQ: Clock speed of the sampling (probe) domain
+# G_AXIL_CLK_FREQ: Clock speed of the AXIS
+# G_EXTERNAL_TRIG: 1 for external trigger pin, 0 for internal trigger
+# G_SAMP_BUFF_DEPTH: Depth of the sampling buffer in samples
+# GEN_TYPE: Type of the generated core. It can be one of the following:
+#   - 0: The core is generated as a standalone core with AXI4-Lite interface.
+#   - 1: The core is generated with a UART interface for communication with the host.
+# G_UART_RX_FIFO_DEPTH: Depth of the UART RX FIFO in bytes
+# G_UART_TX_FIFO_DEPTH: Depth of the UART TX FIFO in bytes
+# G_BAUD_RATE: Baud rate for the UART
+
+G_SAMP_CLK_FREQ,integer,100000000
+G_AXIL_CLK_FREQ,integer,100000000
+G_EXTERNAL_TRIG,integer,1
+G_SAMP_BUFF_DEPTH,natural,2048
+GEN_TYPE,integer,1
+G_UART_RX_FIFO_DEPTH,natural,1024
+G_UART_TX_FIFO_DEPTH,natural,1024
+G_BAUD_RATE,natural,115200

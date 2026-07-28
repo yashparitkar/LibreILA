@@ -21,13 +21,13 @@ mask[LIBRE_ILA_BIT_WORD(MY_PROBE_ERR_BIT)] |= LIBRE_ILA_BIT_MASK(MY_PROBE_ERR_BI
 LIBRE_ILA_configure_trigger(&ila, cond, mask, LIBRE_ILA_TRIG_MODE_AND);
 ```
 
-For the stock AXI4S build the probe is TDATA in bits `[G_DATA_WIDTH-1:0]`, then TLAST, TVALID and TREADY — so a 64-bit bus gives `CORE_LIBRE_ILA_PROBE_WIDTH` of 67. That concatenation lives in one place, `w_probe` in [hdl/libre_ila.vhdl](../../hdl/libre_ila.vhdl); change it there and the sample buffer and trigger vector follow.
+For the stock AXI4S build the probe is TDATA in the low bits, then TLAST, TVALID and TREADY — so a 64-bit bus gives `CORE_LIBRE_ILA_PROBE_WIDTH` of 67. That concatenation lives in one place, `w_probe` in [hdl/libre_ila.vhdl](../../hdl/libre_ila.vhdl); change it there and the sample buffer and trigger vector follow.
 
 ## Definitions needed
 Make sure to #define following variables, the whole register map is derived from them
-* CORE_LIBRE_ILA_PROBE_WIDTH : Total probed bits, `C_PROBE_WIDTH` in the HDL
-* CORE_LIBRE_ILA_SAMP_BUFF_DEPTH : Depth of the sample buffer in number of samples
-* CORE_LIBRE_ILA_SAMP_FREQ_HZ : Sampling clock frequency in Hz
+* CORE_LIBRE_ILA_PROBE_WIDTH : Total probed bits, `G_PROBE_WIDTH` in the HDL
+* CORE_LIBRE_ILA_SAMP_BUFF_DEPTH : Depth of the sample buffer in number of samples, `G_SAMP_BUFF_DEPTH` in the HDL
+* CORE_LIBRE_ILA_SAMP_FREQ_HZ : Sampling clock frequency in Hz, `G_SAMP_CLK_FREQ` in the HDL
 
 `LIBRE_ILA_init()` cross-checks every one of them against the values the hardware reports, so a mismatch is caught before any register offset is used.
 

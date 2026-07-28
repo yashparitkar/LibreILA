@@ -2,7 +2,7 @@
 -- File: libre_ila.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-07-27 Mon 21:03
+-- Last Modified: 2026-07-28 Tue 20:07
 --
 -- Description: An ILA for AXI4-Stream
 -- Usage:
@@ -20,12 +20,12 @@ library ieee;
 
 entity libre_ila is
   generic (
-    -- Clock speed of the AXIS, used in plotting
-    G_AXIS_CLK_FREQ     : integer := 100000000;
+    -- Clock speed of the sampling (probe) domain, used in plotting
+    G_SAMP_CLK_FREQ     : integer := 100000000;
     G_AXIL_CLK_FREQ     : integer := 100000000;
     G_EXTERNAL_TRIG     : integer := 0;    -- 1 for external trigger pin
-    G_DATA_WIDTH        : natural := 64;   -- Keep it a multiple of 32 for best results
-    G_DEPTH             : natural := 2048; -- Keep it a power of two for best results
+    G_PROBE_WIDTH       : natural := 67;
+    G_SAMP_BUFF_DEPTH   : natural := 2048; -- Keep it a power of two
     C_S_AXIL_DATA_WIDTH : integer := 32;   -- DONT CHANGE
     C_S_AXIL_ADDR_WIDTH : integer := 32    -- DONT CHANGE
   );
@@ -41,7 +41,7 @@ entity libre_ila is
     axis_in_tready : out   std_logic;
     axis_in_tvalid : in    std_logic;
     axis_in_tlast  : in    std_logic;
-    axis_in_tdata  : in    std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+    axis_in_tdata  : in    std_logic_vector(63 downto 0);
     -----------------------------------------------------------------
 
     -- Probe Output -------------------------------------------------
@@ -49,7 +49,7 @@ entity libre_ila is
     axis_out_tready : in    std_logic;
     axis_out_tvalid : out   std_logic;
     axis_out_tlast  : out   std_logic;
-    axis_out_tdata  : out   std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+    axis_out_tdata  : out   std_logic_vector(63 downto 0);
     -----------------------------------------------------------------
 
     -- AXI4Lite slave port
@@ -85,23 +85,10 @@ architecture rtl of libre_ila is
   -- Making of the RAM buffer ---------------------------------------
   -- The RAM multilane with each lane of C_S_AXIL_DATA_WIDTH for easier
   -- muxing later
-  constant C_ADDR_WIDTH : integer := integer(ceil(log2(real(G_DEPTH))));
-
-  ------------------------ USER PARAMETER ---------------------------
-  -- Number of signalling ports used in the ILA, make sure to change
-  -- with the actual number of ports, eg, TKEEP is TDATA/8
-
-  -- Currently its TREADY, TVALID and TLAST, so 3 signals
-  constant C_AXIS_N_SIGNALS : integer := 3;
-  ---------------------- USER PARAMETER ENDS ------------------------
-
-  -- The signalling ports and TDATA are one probe word from here on, the
-  -- signals sitting immediately above the data bits. Nothing downstream
-  -- treats the two halves differently, see w_wr_data below.
-  constant C_PROBE_WIDTH : integer := G_DATA_WIDTH + C_AXIS_N_SIGNALS;
+  constant C_ADDR_WIDTH : integer := integer(ceil(log2(real(G_SAMP_BUFF_DEPTH))));
 
   -- Registers one sample takes, the probe word packed 32 bits at a time
-  constant C_N_LANES : integer := integer(ceil(real(C_PROBE_WIDTH) / real(C_S_AXIL_DATA_WIDTH)));
+  constant C_N_LANES : integer := integer(ceil(real(G_PROBE_WIDTH) / real(C_S_AXIL_DATA_WIDTH)));
 
   -- Function for stride length calculation -------------------------
 
@@ -131,11 +118,36 @@ architecture rtl of libre_ila is
 
   end function get_stride;
 
-  -- Automatically scales based on C_PROBE_WIDTH
+  -- Power of two check for G_SAMP_BUFF_DEPTH -----------------------
+  -- G_SAMP_BUFF_DEPTH must be a power of two, r_wr_idx is a C_ADDR_WIDTH counter that
+  -- wraps on 2**C_ADDR_WIDTH. Any other depth leaves the buffer tail
+  -- unreachable and breaks the modular arithmetic in post_trig_sample_tgt.
+
+  pure function is_power_of_two (
+    val : natural
+  ) return boolean is
+
+    variable pow : natural;
+
+  begin
+
+    pow := 1;
+
+    while pow < val loop
+
+      pow := pow * 2;
+
+    end loop;
+
+    return (pow = val);
+
+  end function is_power_of_two;
+
+  -- Automatically scales based on G_PROBE_WIDTH
   constant C_AXIL_STRIDE : integer := get_stride(C_N_LANES);
   -------------------------------------------------------------------
 
-  type t_lane is array (0 to G_DEPTH - 1) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+  type t_lane is array (0 to G_SAMP_BUFF_DEPTH - 1) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
 
   type t_lane_arr is array (0 to C_N_LANES - 1) of t_lane;
 
@@ -144,13 +156,13 @@ architecture rtl of libre_ila is
   attribute syn_ramstyle of samp_buff : signal is "lsram";
 
   signal r_wr_idx  : unsigned(C_ADDR_WIDTH - 1 downto 0);
-  signal w_probe   : std_logic_vector(C_PROBE_WIDTH - 1 downto 0);
+  signal w_probe   : std_logic_vector(G_PROBE_WIDTH - 1 downto 0);
   signal w_wr_data : std_logic_vector(C_S_AXIL_DATA_WIDTH * C_N_LANES - 1  downto 0);
   signal en_wr     : std_logic;
   -------------------------------------------------------------------
 
   -- Calculating required number of the AXILite regs ----------------
-  -- Note that, the additional ( C_AXIL_STRIDE * G_DEPTH ) registers are coming from the
+  -- Note that, the additional ( C_AXIL_STRIDE * G_SAMP_BUFF_DEPTH ) registers are coming from the
   -- buffer itself
   -- The trigger vector cond/mask block reuses C_AXIL_STRIDE so it lines up
   -- with the output sample stride layout, see trig_cond/trig_mask below.
@@ -159,7 +171,7 @@ architecture rtl of libre_ila is
   constant C_AXIL_N_CTRL_REGS     : integer := C_AXIL_N_CTRL_REGS_IN + C_AXIL_N_CTRL_REGS_OUT;
 
   -- Total AXI4Lite regs
-  constant C_AXIL_N_REGS : integer := C_AXIL_N_CTRL_REGS + (C_AXIL_STRIDE  * G_DEPTH);
+  constant C_AXIL_N_REGS : integer := C_AXIL_N_CTRL_REGS + (C_AXIL_STRIDE  * G_SAMP_BUFF_DEPTH);
   ------------------------------------------------------------------
 
   -- ILA STATES -----------------------------------------------------
@@ -188,7 +200,7 @@ architecture rtl of libre_ila is
   --
   -- Actual sample train:
   -- | pre trigg samples | post trig samples                        |
-  --                     ^ trig_tgt                         G_DEPTH ^
+  --                     ^ trig_tgt               G_SAMP_BUFF_DEPTH ^
   --
   -- Inside the circular buffer:
   -- post trig samples   | pre trig samples | post trig samples     |
@@ -256,7 +268,7 @@ architecture rtl of libre_ila is
   -- ADDR_LSB = 3 for 64 bits (n downto 3)
   constant ADDR_LSB : integer := (C_S_AXIL_DATA_WIDTH / 32) + 1;
 
-  -- THIS NEEDS MODIFICATION FOR ACCOMODATING THE G_DEPTH data regs
+  -- THIS NEEDS MODIFICATION FOR ACCOMODATING THE G_SAMP_BUFF_DEPTH data regs
   -- constant OPT_MEM_ADDR_BITS : integer := integer(ceil(log2(real(C_AXIL_N_CTRL_REGS)))) - 1;
   constant OPT_MEM_ADDR_BITS : integer := integer(ceil(log2(real(C_AXIL_N_REGS)))) - 1;
 
@@ -278,6 +290,20 @@ architecture rtl of libre_ila is
 -------------------------------------------------------------------
 
 begin
+  -- Generic check --------------------------------------------------
+  assert (G_PROBE_WIDTH > 0)
+    report "G_PROBE_WIDTH must be greater than 0"
+    severity failure;
+
+  -- A depth of 1 would give C_ADDR_WIDTH = 0, so two samples is the floor
+  assert (G_SAMP_BUFF_DEPTH > 1)
+    report "G_SAMP_BUFF_DEPTH must be greater than 1"
+    severity failure;
+
+  assert is_power_of_two(G_SAMP_BUFF_DEPTH)
+    report "G_SAMP_BUFF_DEPTH must be a power of two"
+    severity failure;
+  -------------------------------------------------------------------
 
   -- Shorting of the ports ------------------------------------------
   axis_out_aclk   <= axis_in_aclk;
@@ -409,7 +435,7 @@ begin
             if ((trig = '1') or (arm_axis = '1')) then
               trig_idx             <= r_wr_idx;
               ila_state            <= ILA_TRIGD;
-              post_trig_sample_tgt <= G_DEPTH - trig_tgt - 1;
+              post_trig_sample_tgt <= G_SAMP_BUFF_DEPTH - trig_tgt - 1;
             else
               trig_idx             <= (others => '0');
               post_trig_sample_cnt <= (others => '0');
@@ -704,8 +730,8 @@ begin
   p_rlg : process (axil_araddr, slv_reg_in, slv_reg_out, samp_buff) is
 
     variable rd_idx           : integer range 0 to C_AXIL_N_REGS - 1;
-    variable samp_rd_idx      : integer range 0 to ((G_DEPTH + 1) * C_AXIL_STRIDE);
-    variable stride_idx       : integer range 0 to G_DEPTH - 1;
+    variable samp_rd_idx      : integer range 0 to ((G_SAMP_BUFF_DEPTH + 1) * C_AXIL_STRIDE);
+    variable stride_idx       : integer range 0 to G_SAMP_BUFF_DEPTH - 1;
     variable intra_stride_idx : integer range 0 to C_AXIL_STRIDE - 1;
 
   begin
@@ -718,7 +744,7 @@ begin
     elsif (rd_idx < C_AXIL_N_CTRL_REGS) then
       -- Mapping of the output regs
       s_axil_rdata <= slv_reg_out(rd_idx - C_AXIL_N_CTRL_REGS_IN);
-    elsif (rd_idx < (C_AXIL_N_CTRL_REGS + G_DEPTH  * C_AXIL_STRIDE)) then
+    elsif (rd_idx < (C_AXIL_N_CTRL_REGS + G_SAMP_BUFF_DEPTH  * C_AXIL_STRIDE)) then
       -- Mapping of the RAM regs
       samp_rd_idx      := rd_idx - C_AXIL_N_CTRL_REGS;
       stride_idx       := samp_rd_idx / C_AXIL_STRIDE;
@@ -764,13 +790,13 @@ begin
 
   slv_reg_out(1) <= x"B01DFACE";
 
-  slv_reg_out(2) <= STD_LOGIC_VECTOR(to_unsigned(G_AXIS_CLK_FREQ, C_S_AXIL_DATA_WIDTH));
+  slv_reg_out(2) <= STD_LOGIC_VECTOR(to_unsigned(G_SAMP_CLK_FREQ, C_S_AXIL_DATA_WIDTH));
 
   -- Total probed bits, data and signalling ports together. Software derives
   -- the lane count from this alone, it has no reason to know the split.
-  slv_reg_out(3) <= STD_LOGIC_VECTOR(to_unsigned(C_PROBE_WIDTH, C_S_AXIL_DATA_WIDTH));
+  slv_reg_out(3) <= STD_LOGIC_VECTOR(to_unsigned(G_PROBE_WIDTH, C_S_AXIL_DATA_WIDTH));
 
-  slv_reg_out(4) <= STD_LOGIC_VECTOR(to_unsigned(G_DEPTH, C_S_AXIL_DATA_WIDTH));
+  slv_reg_out(4) <= STD_LOGIC_VECTOR(to_unsigned(G_SAMP_BUFF_DEPTH, C_S_AXIL_DATA_WIDTH));
 
   slv_reg_out(5) <= (others => '0');
 

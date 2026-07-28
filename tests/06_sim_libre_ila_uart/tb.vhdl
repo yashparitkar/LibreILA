@@ -43,7 +43,8 @@ architecture sim of tb is
 
   constant C_AXIL_WORD_BYTES : natural := 4;
   -- The probe word the DUT samples, TDATA plus the signalling ports, one
-  -- flat vector. Mirrors C_PROBE_WIDTH / C_N_LANES in hdl/libre_ila.vhdl.
+  -- flat vector. This is what gets driven into G_PROBE_WIDTH, the DUT no
+  -- longer derives it from the TDATA width, see hdl/libre_ila.vhdl.
   constant C_N_SIGNALS   : natural := 3;
   constant C_PROBE_WIDTH : natural := C_DATA_WIDTH + C_N_SIGNALS;
   constant C_N_LANES     : natural := integer(ceil(real(C_PROBE_WIDTH) / 32.0));
@@ -125,11 +126,11 @@ architecture sim of tb is
 
   component libre_ila_uart is
     generic (
-      G_AXIS_CLK_FREQ      : integer;
+      G_SAMP_CLK_FREQ      : integer;
       G_AXIL_CLK_FREQ      : integer;
       G_EXTERNAL_TRIG      : integer;
-      G_DATA_WIDTH         : natural;
-      G_DEPTH              : natural;
+      G_PROBE_WIDTH        : natural;
+      G_SAMP_BUFF_DEPTH    : natural;
       C_S_AXIL_DATA_WIDTH  : integer;
       C_S_AXIL_ADDR_WIDTH  : integer;
       G_UART_RX_FIFO_DEPTH : natural;
@@ -151,13 +152,13 @@ architecture sim of tb is
       axis_in_tready : out   std_logic;
       axis_in_tvalid : in    std_logic;
       axis_in_tlast  : in    std_logic;
-      axis_in_tdata  : in    std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+      axis_in_tdata  : in    std_logic_vector(63 downto 0);
 
       axis_out_aclk   : out   std_logic;
       axis_out_tready : in    std_logic;
       axis_out_tvalid : out   std_logic;
       axis_out_tlast  : out   std_logic;
-      axis_out_tdata  : out   std_logic_vector(G_DATA_WIDTH - 1 downto 0)
+      axis_out_tdata  : out   std_logic_vector(63 downto 0)
     );
   end component libre_ila_uart;
 
@@ -376,11 +377,11 @@ begin
 
   dut : component libre_ila_uart
     generic map (
-      g_axis_clk_freq      => C_AXIL_CLK_FREQ,
+      g_samp_clk_freq      => C_AXIL_CLK_FREQ,
       g_axil_clk_freq      => C_AXIL_CLK_FREQ,
       g_external_trig      => 0,
-      g_data_width         => C_DATA_WIDTH,
-      g_depth              => C_DEPTH,
+      g_probe_width        => C_PROBE_WIDTH,
+      g_samp_buff_depth    => C_DEPTH,
       c_s_axil_data_width  => 32,
       c_s_axil_addr_width  => 32,
       g_uart_rx_fifo_depth => 64,

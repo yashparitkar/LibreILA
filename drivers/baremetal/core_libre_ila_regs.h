@@ -76,7 +76,7 @@
 
 #include <stdint.h>
 
-/* Total number of probed bits, C_PROBE_WIDTH in the HDL, reported whole by the
+/* Total number of probed bits, G_PROBE_WIDTH in the HDL, reported whole by the
  * WIDTH register. The hardware does not split it and neither does this driver.
  * The default is the stock AXI4S build, 64 bits of TDATA plus the three
  * signalling ports. */
@@ -86,8 +86,8 @@
 #endif
 
 #ifndef CORE_LIBRE_ILA_SAMP_BUFF_DEPTH
-#define CORE_LIBRE_ILA_SAMP_BUFF_DEPTH 1024u
-#warning "CORE_LIBRE_ILA_SAMP_BUFF_DEPTH is not defined, using default value of 1024. Please define it in your project settings or in a header file before including this file."
+#define CORE_LIBRE_ILA_SAMP_BUFF_DEPTH 2048u
+#warning "CORE_LIBRE_ILA_SAMP_BUFF_DEPTH is not defined, using default value of 2048. Please define it in your project settings or in a header file before including this file."
 #endif
 
 // We are already harrassing the user to define these variables, why not add frequency too?

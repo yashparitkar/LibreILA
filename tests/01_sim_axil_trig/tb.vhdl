@@ -35,7 +35,8 @@ architecture sim of tb is
 
   constant C_AXIL_WORD_BYTES : natural := 4;
   -- The probe word the DUT samples, TDATA plus the signalling ports, one
-  -- flat vector. Mirrors C_PROBE_WIDTH / C_N_LANES in hdl/libre_ila.vhdl.
+  -- flat vector. This is what gets driven into G_PROBE_WIDTH, the DUT no
+  -- longer derives it from the TDATA width, see hdl/libre_ila.vhdl.
   constant C_N_SIGNALS   : natural := 3;
   constant C_PROBE_WIDTH : natural := C_DATA_WIDTH + C_N_SIGNALS;
   constant C_N_LANES     : natural := integer(ceil(real(C_PROBE_WIDTH) / 32.0));
@@ -206,9 +207,9 @@ begin
 
   dut : entity work.libre_ila
     generic map (
-      g_external_trig => 0,
-      g_data_width    => C_DATA_WIDTH,
-      g_depth         => C_DEPTH
+      g_external_trig   => 0,
+      g_probe_width     => C_PROBE_WIDTH,
+      g_samp_buff_depth => C_DEPTH
     )
     port map (
       i_rst_sync      => i_rst_sync,

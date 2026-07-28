@@ -10,7 +10,7 @@ all: all svg2pdf datasheet manual copy clean
 
 svg2pdf:
 	for f in $$(find ./images -name '*.svg'); do \
-		inkscape -D "$$f" -o "$${f%.svg}.pdf"; \
+		inkscape -D "$$f" -o "$${f%.svg}_converted.pdf"; \
 	done
 
 datasheet: svg2pdf
@@ -40,4 +40,4 @@ clean:
 		-name '*.pdf' \
 	\) -delete
 	rm -f Chapters/*.pdf Appendices/*.pdf
-	rm -f images/*.pdf
+	rm -f images/*_converted.pdf

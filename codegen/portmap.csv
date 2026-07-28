@@ -1,1 +1,36 @@
+####################################################################
+# File: portmap.csv
+# Author: Y.U.P. (paritkary25)
+# Last Modified: 2026-07-28 Tue 20:06
+#
+# Description: The portmap used for the LibreILA core code generation is read from this file. The portmap is used to map the signals in the design to the ports in the generated code.
+####################################################################
+
+# Columns: signal, width, type
+#   signal: The name of the signal/port in the design.
+#   width: The width of the signal/port in bits.
+#   type: The type of the port. It can be one of the following:
+#     - input: The port is an input on slave side of the design.
+#     - output: The port is an output on slave side of the design.
+#     - inout: The port is an inout on slave side of the design.
+# 
+# The ports are packed in the order they are listed in this file. The
+# first port listed will be the least significant bits of the packed port.
+# This same order is used for plotting the signals in the waveform viewer. 
+#
+# Blank lines and lines starting with '#' are ignored.
+# templates/axi4s_min_portmap.csv holds the stock 64-bit AXI4S probe.
+#
+# Example, the reference AXI4S configuration used by the tests and drivers:
+#   signal,width,type
+#   axis_tdata,64,in
+#   axis_tlast,1,in
+#   axis_tvalid,1,in
+#   axis_tready,1,out
+# 
+# Example, IIC
+#   signal,width,type
+#   sda,1,inout
+#   scl,1,out
+
 signal,width,type

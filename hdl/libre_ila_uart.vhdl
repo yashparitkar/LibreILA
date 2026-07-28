@@ -2,7 +2,7 @@
 -- File: libre_ila_uart.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-21 Tue 20:12
--- Last Modified: 2026-07-28 Tue 09:28
+-- Last Modified: 2026-07-28 Tue 20:18
 --
 -- Description: This is a wrapper for the libre_ila. This exposes two UART
 -- pins through which the ILA can be controller allowing the external debug
@@ -21,16 +21,16 @@ library ieee;
 
 entity libre_ila_uart is
   generic (
-    G_AXIS_CLK_FREQ      : integer := 100_000_000;
+    G_SAMP_CLK_FREQ      : integer := 100_000_000;
     G_AXIL_CLK_FREQ      : integer := 100_000_000;
     G_EXTERNAL_TRIG      : integer := 0;      -- 1 for external trigger pin
-    G_DATA_WIDTH         : natural := 64;     -- Keep it a multiple of 32 for best results
-    G_DEPTH              : natural := 2048;   -- Keep it a power of two for best results
+    G_PROBE_WIDTH        : natural := 67;     -- Keep it a multiple of 32 for best results
+    G_SAMP_BUFF_DEPTH    : natural := 2048;   -- Keep it a power of two for best results
     C_S_AXIL_DATA_WIDTH  : integer := 32;     -- DONT CHANGE
     C_S_AXIL_ADDR_WIDTH  : integer := 32;     -- DONT CHANGE
     G_UART_RX_FIFO_DEPTH : natural := 1024;   -- Depth of the FIFO for UART RX
     G_UART_TX_FIFO_DEPTH : natural := 1024;   -- Depth of the FIFO for UART TX
-    BAUD_RATE            : integer := 115_200 -- Baud rate for UART communication
+    G_BAUD_RATE          : integer := 115_200 -- Baud rate for UART communication
   );
   port (
     i_rst_sync : in    std_logic;
@@ -51,7 +51,7 @@ entity libre_ila_uart is
     axis_in_tready : out   std_logic;
     axis_in_tvalid : in    std_logic;
     axis_in_tlast  : in    std_logic;
-    axis_in_tdata  : in    std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+    axis_in_tdata  : in    std_logic_vector(63 downto 0);
     -----------------------------------------------------------------
 
     -- Probe Output -------------------------------------------------
@@ -59,7 +59,7 @@ entity libre_ila_uart is
     axis_out_tready : in    std_logic;
     axis_out_tvalid : out   std_logic;
     axis_out_tlast  : out   std_logic;
-    axis_out_tdata  : out   std_logic_vector(G_DATA_WIDTH - 1 downto 0)
+    axis_out_tdata  : out   std_logic_vector(63 downto 0)
     -----------------------------------------------------------------
   );
 end entity libre_ila_uart;
@@ -186,10 +186,10 @@ architecture rtl of libre_ila_uart is
   --   Our star of the show
   component libre_ila is
     generic (
-      G_AXIS_CLK_FREQ     : integer;
+      G_SAMP_CLK_FREQ     : integer;
       G_EXTERNAL_TRIG     : integer;
-      G_DATA_WIDTH        : natural;
-      G_DEPTH             : natural;
+      G_PROBE_WIDTH       : natural;
+      G_SAMP_BUFF_DEPTH   : natural;
       C_S_AXIL_DATA_WIDTH : integer;
       C_S_AXIL_ADDR_WIDTH : integer
     );
@@ -203,13 +203,13 @@ architecture rtl of libre_ila_uart is
       axis_in_tready : out   std_logic;
       axis_in_tvalid : in    std_logic;
       axis_in_tlast  : in    std_logic;
-      axis_in_tdata  : in    std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+      axis_in_tdata  : in    std_logic_vector(63 downto 0);
 
       axis_out_aclk   : out   std_logic;
       axis_out_tready : in    std_logic;
       axis_out_tvalid : out   std_logic;
       axis_out_tlast  : out   std_logic;
-      axis_out_tdata  : out   std_logic_vector(G_DATA_WIDTH - 1 downto 0);
+      axis_out_tdata  : out   std_logic_vector(63 downto 0);
 
       s_axil_aclk    : in    std_logic;
       s_axil_aresetn : in    std_logic;
@@ -294,10 +294,10 @@ begin
   libre_ila_inst : component libre_ila
     generic map (
       -- Clock speed of the AXIS, used in plotting
-      g_axis_clk_freq     => G_AXIS_CLK_FREQ,
+      g_samp_clk_freq     => G_SAMP_CLK_FREQ,
       g_external_trig     => G_EXTERNAL_TRIG,
-      g_data_width        => G_DATA_WIDTH,
-      g_depth             => G_DEPTH,
+      g_probe_width       => G_PROBE_WIDTH,
+      g_samp_buff_depth   => G_SAMP_BUFF_DEPTH,
       c_s_axil_data_width => C_S_AXIL_DATA_WIDTH,
       c_s_axil_addr_width => C_S_AXIL_ADDR_WIDTH
     )
@@ -381,7 +381,7 @@ begin
 
   uart_inst : component uart
     generic map (
-      baud            => BAUD_RATE,
+      baud            => G_BAUD_RATE,
       clock_frequency => G_AXIL_CLK_FREQ
     )
     port map (
