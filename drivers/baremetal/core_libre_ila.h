@@ -135,7 +135,7 @@ The LIBRE_ILA_init() function initializes the CoreLibreILA driver instance with 
 
 The init function checks the connection to the hardware by reading the MAGIC_KEY register, if the read value does not match the expected MAGIC_KEY value, the function returns failure status.
 
-It also checks the synthesis time parameters reported by the hardware against the CORE_LIBRE_ILA_* values this driver was built with, since the whole register map is derived from them.
+It also checks the synthesis time parameters reported by the hardware against the CORE_LIBRE_ILA_* values this driver was built with, since the whole register map is derived from them. The hardware reports one probe width, so there is a single width to agree on.
 
   @param this_libre_ila
     Pointer to the libre_ila_instance_t data structure instance holding all data

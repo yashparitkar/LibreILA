@@ -1,0 +1,190 @@
+% File: datasheet.tex
+% Author: Y.U.P. (paritkary25)
+% Last Modified: 2026-07-28 Tue 12:39
+%
+% Description: LaTeX source file for the LibreILA datasheet. This covers the technical specifications and features of the LibreILA tool.
+
+\documentclass[twocolumn]{article}
+\usepackage{float}
+\usepackage{stfloats}   % allows full-width (figure*/table*) floats at the bottom of a page too
+\usepackage[margin=2.5cm]{geometry}
+\setlength{\columnsep}{0.8cm}   % gutter between the two columns
+% \usepackage{xurl}
+\usepackage{tabularx}
+\usepackage[utf8x]{inputenc}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage[linktocpage]{hyperref}
+% \usepackage{wasysym}
+\usepackage{graphicx}
+\usepackage{lipsum}
+% \usepackage{epsfig}
+% Default graphic width. Use \linewidth (NOT \textwidth): inside a normal
+% `figure` \linewidth is the column width, inside a `figure*` it is the full
+% page width, so the same default works in both cases.
+\setkeys{Gin}{width=0.8\linewidth}
+% \usepackage[normalem]{ulem}
+% \usepackage{enumerate}
+\usepackage{listings}
+\usepackage[nohyperlinks,nolist]{acronym}
+
+
+\lstset{ %
+basicstyle=\footnotesize,       % the size of the fonts that are used for the code
+showspaces=false,               % show spaces adding particular underscores
+showstringspaces=false,         % underline spaces within strings
+showtabs=false,                 % show tabs within strings adding particular underscores
+frame=single,                   % adds a frame around the code
+tabsize=2,                      % sets default tabsize to 2 spaces
+breaklines=true,                % sets automatic line breaking
+breakatwhitespace=false,        % sets if automatic breaks should only happen at whitespace
+}
+
+\hypersetup{
+ colorlinks=true,
+ citecolor=violet,
+ linkcolor=blue,
+ urlcolor=blue
+}
+
+\usepackage{fancyhdr}
+
+
+\usepackage{subfiles} % Allows compiling individual chapters/appendices standalone; load last
+
+
+\fancyhead[L]{LibreILA Datasheet}
+\fancyhead[R]{Yash Paritkar}
+\fancyfoot[L]{\leftmark}
+\fancyfoot[C]{}
+\fancyfoot[R]{\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0.5pt}
+\pagestyle{fancy}
+
+
+\newcommand{\todo}[1]{\textbf{\color{red}TODO: #1}}
+\newcommand{\arya}{\color{blue}} 
+\newcommand{\degr}{\ensuremath{^\circ}}
+
+\title{LibreILA Datasheet}
+\author{Yash Paritkar (github/paritkary25)}
+\date{July 2026}
+
+\begin{document}
+%% Front matter: full page width, no columns %%%%%%%%%%%%%%%%%%%%%%%%
+\onecolumn
+
+%% Title page %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\thispagestyle{plain}
+\twocolumn
+\begin{table*}
+    \begin{tabular}{cc}
+        % \raisebox shifts the image down by half its height so that its vertical
+        % centre (not its baseline) sits on the row baseline, matching the [c]
+        % alignment of the nested tabular in the next cell.
+        {
+            \raisebox{-0.5\height}{\includegraphics[width = 4cm]{./images/libre_ila_logo.pdf}}
+        } &
+        {
+            \begin{tabular}[c]{l}
+                \textbf{\Large LibreILA Datasheet} \\
+                \textbf{Version: 0.0} \\
+                \textbf{Date: July 2026} \\
+                \textbf{Author: Yash Paritkar (github/paritkary25)} \\
+            \end{tabular}
+        }
+    \end{tabular}
+\end{table*}
+
+\section{Features}
+\lipsum[1]
+
+\section{Application}
+\begin{itemize}
+    \item RTL debugging
+    \item FPGA prototyping
+    \item Generic logic analyzer
+\end{itemize}
+
+\section{Description}
+\lipsum[2-5]
+
+\newpage
+\tableofcontents
+
+\section{Revision History}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|c|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Version} & \textbf{Date} & \textbf{Comments} \\
+        \hline
+        0.0 & 25 July 2026 & Document created. Yash Partikar \\
+        \hline
+        \end{tabularx}
+%    \caption{General characteristics of the payload}
+    \label{tab:hisotry}
+\end{table}
+
+
+\input{acronym}
+
+%% Body: back to one column %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\onecolumn
+\section{Functional description}
+\lipsum[1-3]
+
+\section{Core parameters and interface signals}
+\lipsum[4-6]
+
+\section{Register summary}
+\subsection{TRIG\_IDX}
+\lipsum[7]
+
+\subsection{ARM\_FT}
+\lipsum[8]
+
+\section{Additional references}
+\lipsum[9-10]
+
+\section{Device utilization and performance}
+\lipsum[11-12]
+
+
+% ---------------------------------------------------------------
+% EXAMPLE 1: figure confined to ONE column (the default).
+% `figure` + \linewidth => the image never exceeds the column width.
+% Placement: [t]/[b]/[h] work as usual; [H] (float package) also works.
+% ---------------------------------------------------------------
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{./images/libre_ila_logo.pdf}
+    \caption{Column-wide figure: sits inside a single column.}
+    \label{fig:logo-column}
+\end{figure}
+
+% ---------------------------------------------------------------
+% EXAMPLE 2: figure spanning BOTH columns (full page width).
+% Starred float `figure*` + \textwidth.
+% Caveats: starred floats may only go to the top of a page ([t]) --
+% [h] and [H] are silently ignored -- and they can only appear on the
+% *next* page, never the current one. The stfloats package loaded in
+% the preamble additionally enables [b].
+% ---------------------------------------------------------------
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.6\textwidth, height = 5cm]{./images/libre_ila_logo.pdf}
+    \caption{Page-wide figure: spans across both columns.}
+    \label{fig:logo-full}
+\end{figure*}
+
+% The same rule applies to tables: `table` stays in one column,
+% `table*` spans both. Note that \begin{table*} does not work with
+% [H]; use [t] or [b].
+
+\end{document}

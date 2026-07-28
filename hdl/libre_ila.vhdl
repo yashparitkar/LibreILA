@@ -2,7 +2,7 @@
 -- File: libre_ila.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-07-27 Mon 16:50
+-- Last Modified: 2026-07-27 Mon 21:03
 --
 -- Description: An ILA for AXI4-Stream
 -- Usage:
@@ -36,7 +36,7 @@ entity libre_ila is
     i_ext_trig : in    std_logic;
     o_trig_out : out   std_logic;
 
-    -- Probe Input ports --------------------------------------------
+    -- Probe Input --------------------------------------------------
     axis_in_aclk   : in    std_logic;
     axis_in_tready : out   std_logic;
     axis_in_tvalid : in    std_logic;
@@ -44,7 +44,7 @@ entity libre_ila is
     axis_in_tdata  : in    std_logic_vector(G_DATA_WIDTH - 1 downto 0);
     -----------------------------------------------------------------
 
-    -- Probe Output ports -------------------------------------------
+    -- Probe Output -------------------------------------------------
     axis_out_aclk   : out   std_logic;
     axis_out_tready : in    std_logic;
     axis_out_tvalid : out   std_logic;
@@ -93,10 +93,15 @@ architecture rtl of libre_ila is
 
   -- Currently its TREADY, TVALID and TLAST, so 3 signals
   constant C_AXIS_N_SIGNALS : integer := 3;
-
-  -- Now, 3 signals can be fit inside a 1 32 bit regs hence,
-  constant C_N_LANES : integer := G_DATA_WIDTH / 32 + 1;
   ---------------------- USER PARAMETER ENDS ------------------------
+
+  -- The signalling ports and TDATA are one probe word from here on, the
+  -- signals sitting immediately above the data bits. Nothing downstream
+  -- treats the two halves differently, see w_wr_data below.
+  constant C_PROBE_WIDTH : integer := G_DATA_WIDTH + C_AXIS_N_SIGNALS;
+
+  -- Registers one sample takes, the probe word packed 32 bits at a time
+  constant C_N_LANES : integer := integer(ceil(real(C_PROBE_WIDTH) / real(C_S_AXIL_DATA_WIDTH)));
 
   -- Function for stride length calculation -------------------------
 
@@ -126,7 +131,7 @@ architecture rtl of libre_ila is
 
   end function get_stride;
 
-  -- Automatically scales based on G_DATA_WIDTH
+  -- Automatically scales based on C_PROBE_WIDTH
   constant C_AXIL_STRIDE : integer := get_stride(C_N_LANES);
   -------------------------------------------------------------------
 
@@ -139,12 +144,13 @@ architecture rtl of libre_ila is
   attribute syn_ramstyle of samp_buff : signal is "lsram";
 
   signal r_wr_idx  : unsigned(C_ADDR_WIDTH - 1 downto 0);
+  signal w_probe   : std_logic_vector(C_PROBE_WIDTH - 1 downto 0);
   signal w_wr_data : std_logic_vector(C_S_AXIL_DATA_WIDTH * C_N_LANES - 1  downto 0);
   signal en_wr     : std_logic;
   -------------------------------------------------------------------
 
   -- Calculating required number of the AXILite regs ----------------
-  -- Note that, the additional ( (G_DATA_WIDTH / 32 + 1) * G_DEPTH ) registers are coming from the
+  -- Note that, the additional ( C_AXIL_STRIDE * G_DEPTH ) registers are coming from the
   -- buffer itself
   -- The trigger vector cond/mask block reuses C_AXIL_STRIDE so it lines up
   -- with the output sample stride layout, see trig_cond/trig_mask below.
@@ -204,9 +210,9 @@ architecture rtl of libre_ila is
   signal ext_trig      : std_logic;
   signal ext_trig_prev : std_logic;
 
-  -- Merged trigger vector -- one bit per sample bit, laid out identically to
-  -- the output sample stride (w_wr_data): TDATA bits, then TLAST/TVALID/TREADY,
-  -- then zero padding up to the stride boundary.
+  -- Merged trigger vector -- one bit per probed bit, laid out identically to
+  -- the sampled probe word (w_probe), then zero padding up to the stride
+  -- boundary.
   constant C_TRIG_VECT_WIDTH : integer := C_AXIL_STRIDE * C_S_AXIL_DATA_WIDTH;
 
   signal trig_sample_word : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
@@ -269,7 +275,7 @@ architecture rtl of libre_ila is
   -- State machine variables
   signal state_read  : std_logic_vector(1 downto 0);
   signal state_write : std_logic_vector(1 downto 0);
-  -------------------------------------------------------------------
+-------------------------------------------------------------------
 
 begin
 
@@ -282,14 +288,16 @@ begin
   -------------------------------------------------------------------
 
   -- MUXING of the ports --------------------------------------------
-  w_wr_data <=
-  (
-    (C_S_AXIL_DATA_WIDTH * C_N_LANES - 1)  downto (G_DATA_WIDTH + C_AXIS_N_SIGNALS) => '0'
-  )
-    & axis_out_tready
-    & axis_in_tvalid
-    & axis_in_tlast
-    & axis_in_tdata;
+  -- The probe word, TDATA in the low bits and the signalling ports right
+  -- above it. This concatenation is the single definition of the probe bit
+  -- order, the sample buffer and the trigger vector both inherit it.
+  w_probe <= axis_out_tready
+             & axis_in_tvalid
+             & axis_in_tlast
+             & axis_in_tdata;
+
+  -- Zero padded up to the lane boundary on its way into the buffer
+  w_wr_data <= std_logic_vector(resize(unsigned(w_probe), w_wr_data'length));
   -------------------------------------------------------------------
 
   -- Creating trigger ----------------------------------------------
@@ -300,8 +308,7 @@ begin
             trig_and;
 
     -- Same bit layout as w_wr_data, zero-extended up to the stride boundary
-    trig_sample_word <= (C_TRIG_VECT_WIDTH - 1 downto C_S_AXIL_DATA_WIDTH * C_N_LANES => '0')
-                         & w_wr_data;
+    trig_sample_word <= std_logic_vector(resize(unsigned(w_wr_data), C_TRIG_VECT_WIDTH));
 
     trig_vect <= trig_sample_word xnor trig_cond;
 
@@ -759,8 +766,9 @@ begin
 
   slv_reg_out(2) <= STD_LOGIC_VECTOR(to_unsigned(G_AXIS_CLK_FREQ, C_S_AXIL_DATA_WIDTH));
 
-  slv_reg_out(3)(31 downto 16) <= STD_LOGIC_VECTOR(to_unsigned(C_AXIS_N_SIGNALS, 16));
-  slv_reg_out(3)(15 downto  0) <= STD_LOGIC_VECTOR(to_unsigned(G_DATA_WIDTH, 16));
+  -- Total probed bits, data and signalling ports together. Software derives
+  -- the lane count from this alone, it has no reason to know the split.
+  slv_reg_out(3) <= STD_LOGIC_VECTOR(to_unsigned(C_PROBE_WIDTH, C_S_AXIL_DATA_WIDTH));
 
   slv_reg_out(4) <= STD_LOGIC_VECTOR(to_unsigned(G_DEPTH, C_S_AXIL_DATA_WIDTH));
 

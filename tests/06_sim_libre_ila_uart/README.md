@@ -1,0 +1,1 @@
+This is end to end dataflow test. The UART is tested on sim with upto 1,843,200 baud rate, better to stick to 921,600 for the hardware.

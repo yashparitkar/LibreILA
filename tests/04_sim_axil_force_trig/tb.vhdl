@@ -26,7 +26,7 @@ architecture sim of tb is
   constant C_AXIS_PERIOD      : time    := 10 ns;
   constant C_AXIL_PERIOD      : time    := 10 ns;
   constant C_TRIG_IDX         : natural := 3;
-  constant C_FORCE_TRIG_POINT : natural := 20; -- Force trigger injected here
+  constant C_FORCE_TRIG_POINT : natural := 20;  -- Force trigger injected here
   constant C_TRIGGER_POINT    : natural := 100; -- Natural trigger condition (TLAST=1)
   constant C_SAMPLE_COUNT     : natural := 192;
 
@@ -35,10 +35,15 @@ architecture sim of tb is
   constant TRIGGER_MASK : std_logic_vector(31 downto 0) := x"00000007";
 
   constant C_AXIL_WORD_BYTES : natural := 4;
-  -- Matches the DUT's C_AXIL_STRIDE: next power-of-two register count for
-  -- (TDATA lanes + 1 control lane), minimum 4 -- same constant the DUT uses
-  -- to size both the trigger vector block and the output sample stride.
-  constant C_STRIDE          : natural := 2 ** integer(ceil(log2(real(C_DATA_WIDTH / 32 + 1))));
+  -- The probe word the DUT samples, TDATA plus the signalling ports, one
+  -- flat vector. Mirrors C_PROBE_WIDTH / C_N_LANES in hdl/libre_ila.vhdl.
+  constant C_N_SIGNALS   : natural := 3;
+  constant C_PROBE_WIDTH : natural := C_DATA_WIDTH + C_N_SIGNALS;
+  constant C_N_LANES     : natural := integer(ceil(real(C_PROBE_WIDTH) / 32.0));
+  -- Matches the DUT's C_AXIL_STRIDE: next power-of-two lane count, minimum 4
+  -- -- same constant the DUT uses to size both the trigger vector block and
+  -- the output sample stride.
+  constant C_STRIDE          : natural := maximum(4, 2 ** integer(ceil(log2(real(C_N_LANES)))));
   constant C_INPUT_REG_COUNT : natural := 4 + 2 * C_STRIDE;
   constant C_OUTPUT_REG_BASE : natural := C_INPUT_REG_COUNT * C_AXIL_WORD_BYTES;
   constant C_SAMPLE_RAM_BASE : natural := (C_INPUT_REG_COUNT + 8) * C_AXIL_WORD_BYTES;
@@ -49,8 +54,8 @@ architecture sim of tb is
   constant C_TRIG_POS_ADDR  : std_logic_vector(31 downto 0) := x"00000000";
   constant C_ARM_FT_ADDR    : std_logic_vector(31 downto 0) := x"00000004";
   constant C_TRIG_CFG_ADDR  : std_logic_vector(31 downto 0) := x"00000008";
-  constant C_TRIG_COND_BASE : natural := 4 * C_AXIL_WORD_BYTES;
-  constant C_TRIG_MASK_BASE : natural := (4 + C_STRIDE) * C_AXIL_WORD_BYTES;
+  constant C_TRIG_COND_BASE : natural                       := 4 * C_AXIL_WORD_BYTES;
+  constant C_TRIG_MASK_BASE : natural                       := (4 + C_STRIDE) * C_AXIL_WORD_BYTES;
   -- TLAST/TVALID/TREADY live in the word right above the TDATA words, matching
   -- the w_wr_data bit layout the DUT merges the trigger vector against.
   constant C_CTRL_WORD_IDX  : natural                       := C_DATA_WIDTH / 32;
@@ -248,9 +253,9 @@ begin
 
     while true loop
 
-      axis_in_aclk  <= '0';
+      axis_in_aclk <= '0';
       wait for C_AXIS_PERIOD / 2;
-      axis_in_aclk  <= '1';
+      axis_in_aclk <= '1';
       wait for C_AXIS_PERIOD / 2;
 
     end loop;
@@ -273,13 +278,13 @@ begin
 
   p_stimulus : process is
 
-    variable read_data           : std_logic_vector(31 downto 0);
-    variable status              : std_logic_vector(31 downto 0);
-    variable captured_trig_val   : integer := -1;
+    variable read_data         : std_logic_vector(31 downto 0);
+    variable status            : std_logic_vector(31 downto 0);
+    variable captured_trig_val : integer := -1;
 
     type t_lane_data is array (natural range <>) of std_logic_vector(31 downto 0);
 
-    variable lane_data : t_lane_data(0 to C_DATA_WIDTH / 32);
+    variable lane_data : t_lane_data(0 to C_N_LANES - 1);
 
   begin
 
@@ -324,8 +329,11 @@ begin
     end loop;
 
     axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_STATUS_ADDR, status);
-    report "04_sim_force_trig: Status after initial ARM = 0x" & to_hstring(status) severity note;
-    assert status(0) = '1' report "04_sim_force_trig: ILA failed to ARM" severity error;
+    report "04_sim_force_trig: Status after initial ARM = 0x" & to_hstring(status)
+      severity note;
+    assert status(0) = '1'
+      report "04_sim_force_trig: ILA failed to ARM"
+      severity error;
 
     -- STEP 2: Stream samples and issue FORCE TRIGGER (before natural trigger at sample)
     for sample_index in 0 to C_SAMPLE_COUNT - 1 loop
@@ -387,7 +395,7 @@ begin
     -- STEP 4: Read buffer RAM and verify force trigger index
     for sample_index in 0 to C_SAMPLE_PRINT_COUNT - 1 loop
 
-      for lane_index in 0 to (C_DATA_WIDTH / 32) loop
+      for lane_index in 0 to C_N_LANES - 1 loop
 
         wait until rising_edge(s_axil_aclk);
         axil_read(
@@ -420,11 +428,11 @@ begin
 
     -- STEP 5: Confirm captured trigger data reflects Force Trigger (~sample 30-34), NOT natural trigger (sample 80)
     assert captured_trig_val >= C_FORCE_TRIG_POINT and captured_trig_val < C_TRIGGER_POINT
-      report "04_sim_force_trig FAILURE: Trigger occurred at sample " & integer'image(captured_trig_val) & 
+      report "04_sim_force_trig FAILURE: Trigger occurred at sample " & integer'image(captured_trig_val) &
              ", expected near Force Trigger point (" & integer'image(C_FORCE_TRIG_POINT) & ")"
       severity error;
 
-    report "04_sim_force_trig SUCCESS: Force Trigger took effect at sample " & integer'image(captured_trig_val) & 
+    report "04_sim_force_trig SUCCESS: Force Trigger took effect at sample " & integer'image(captured_trig_val) &
            " (well before condition match at sample " & integer'image(C_TRIGGER_POINT) & ")."
       severity note;
 

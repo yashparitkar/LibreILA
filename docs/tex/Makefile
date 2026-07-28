@@ -4,17 +4,22 @@ MANUAL := manual
 LATEX := pdflatex -interaction=nonstopmode
 BIBTEX := bibtex
 
-.PHONY: all datasheet manual copy clean
+.PHONY: all svg2pdf datasheet manual copy clean
 
-all: all datasheet manual copy clean
+all: all svg2pdf datasheet manual copy clean
 
-datasheet:
+svg2pdf:
+	for f in $$(find ./images -name '*.svg'); do \
+		inkscape -D "$$f" -o "$${f%.svg}.pdf"; \
+	done
+
+datasheet: svg2pdf
 	-$(LATEX) $(DATASHEET).tex
 	-$(BIBTEX) $(DATASHEET)
 	-$(LATEX) $(DATASHEET).tex
 	-$(LATEX) $(DATASHEET).tex
 
-manual:
+manual: svg2pdf
 	-$(LATEX) $(MANUAL).tex
 	-$(BIBTEX) $(MANUAL)
 	-$(LATEX) $(MANUAL).tex
@@ -35,3 +40,4 @@ clean:
 		-name '*.pdf' \
 	\) -delete
 	rm -f Chapters/*.pdf Appendices/*.pdf
+	rm -f images/*.pdf

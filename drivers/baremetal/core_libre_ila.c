@@ -54,12 +54,12 @@ cmd_status_t LIBRE_ILA_init
     // 1. Check if the LIBRE_ILA instance pointer is NULL.
     // 2. Check if the MAGIC_KEY read from the hardware instance matches the expected value
     // 3. Check buffer depth and probe width against the hardware instance.
+    //    The probe is one flat vector, there is a single width to agree on.
     // 4. Check if the clock frequency matches the expected value
 
     uint32_t mgckey_value;
     uint32_t buffer_depth_value;
-    uint32_t data_width_value;
-    uint32_t signal_width_value;
+    uint32_t probe_width_value;
     uint32_t samp_clk_freq_value;
 
     if (this_libre_ila == NULL)
@@ -83,18 +83,11 @@ cmd_status_t LIBRE_ILA_init
         return CMD_STATUS_BAD_CONFIG; // Connection failed, return failure status
     }
 
-    /* The two halves of WIDTH are checked separately, the lane count and hence
-     * the whole register map is derived from the data half alone. */
-    data_width_value = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_WIDTH_REG_DATA_WIDTH_FIELD);
+    /* One width to check, the lane count and hence the whole register map is
+     * derived from it. */
+    probe_width_value = HAL_get_32bit_reg(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_WIDTH);
 
-    if (data_width_value != CORE_LIBRE_ILA_DATA_WIDTH)
-    {
-        return CMD_STATUS_BAD_CONFIG; // Connection failed, return failure status
-    }
-
-    signal_width_value = HAL_get_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_WIDTH_REG_SIGNAL_WIDTH_FIELD);
-
-    if (signal_width_value != CORE_LIBRE_ILA_SIGNAL_WIDTH)
+    if (probe_width_value != CORE_LIBRE_ILA_PROBE_WIDTH)
     {
         return CMD_STATUS_BAD_CONFIG; // Connection failed, return failure status
     }

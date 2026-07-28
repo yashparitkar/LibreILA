@@ -38,7 +38,7 @@
  *   0x00  STATUS              ARMED / TRIGD / DONE / STATE
  *   0x04  MGCKEY              0xb01dface
  *   0x08  SAMP_CLK_FREQ       synthesis time sampling clock frequency
- *   0x0C  WIDTH               DATA_WIDTH and SIGNAL_WIDTH
+ *   0x0C  WIDTH               total probed bits
  *   0x10  DEPTH               sample buffer depth
  *   0x14  RSVD                reserved
  *   0x18  SAMP_BUFF_TRIG_IDX  buffer index of the trigger sample
@@ -76,18 +76,13 @@
 
 #include <stdint.h>
 
-/* Width of the wide payload part of the probe, G_DATA_WIDTH in the HDL. It is
- * the part the hardware lays out from bit 0 upwards and sizes its lanes on. */
-#ifndef CORE_LIBRE_ILA_DATA_WIDTH
-#define CORE_LIBRE_ILA_DATA_WIDTH 64u
-#warning "CORE_LIBRE_ILA_DATA_WIDTH is not defined, using default value of 64. Please define it in your project settings or in a header file before including this file."
-#endif
-
-/* Number of extra probed bits carried immediately above the data bits,
- * C_AXIS_N_SIGNALS in the HDL. Using 3 here as the default value. */
-#ifndef CORE_LIBRE_ILA_SIGNAL_WIDTH
-#define CORE_LIBRE_ILA_SIGNAL_WIDTH 3u
-#warning "CORE_LIBRE_ILA_SIGNAL_WIDTH is not defined, using default value of 3. Please define it in your project settings or in a header file before including this file."
+/* Total number of probed bits, C_PROBE_WIDTH in the HDL, reported whole by the
+ * WIDTH register. The hardware does not split it and neither does this driver.
+ * The default is the stock AXI4S build, 64 bits of TDATA plus the three
+ * signalling ports. */
+#ifndef CORE_LIBRE_ILA_PROBE_WIDTH
+#define CORE_LIBRE_ILA_PROBE_WIDTH 67u
+#warning "CORE_LIBRE_ILA_PROBE_WIDTH is not defined, using default value of 67. Please define it in your project settings or in a header file before including this file."
 #endif
 
 #ifndef CORE_LIBRE_ILA_SAMP_BUFF_DEPTH
@@ -101,15 +96,9 @@
 #warning "CORE_LIBRE_ILA_SAMP_FREQ_HZ is not defined, using default value of 100 MHz. Please define it in your project settings or in a header file before including this file."
 #endif
 
-/* Total number of probed bits. The two halves above only exist because the
- * hardware reports them separately, everything past this point works on one
- * flat vector of CORE_LIBRE_ILA_PROBE_WIDTH bits. */
-#define CORE_LIBRE_ILA_PROBE_WIDTH \
-        (CORE_LIBRE_ILA_DATA_WIDTH + CORE_LIBRE_ILA_SIGNAL_WIDTH)
-
-/* Registers a single sample actually occupies, mirrors C_N_LANES. The extra
- * lane above the data ones is where the signal bits land. */
-#define CORE_LIBRE_ILA_N_LANES  (CORE_LIBRE_ILA_DATA_WIDTH / 32u + 1u)
+/* Registers a single sample actually occupies, the probe word packed 32 bits
+ * at a time. Mirrors C_N_LANES in the HDL. */
+#define CORE_LIBRE_ILA_N_LANES  ((CORE_LIBRE_ILA_PROBE_WIDTH + 31u) / 32u)
 
 /* Register stride, the next power of two above the lane count with a minimum
  * of 4 so the control registers always fit. Mirrors the HDL get_stride().
@@ -399,7 +388,7 @@
 /*******************************************************************************
  * Register: WIDTH_REG
  *
- * Description: This register stores the synthesis time width of the probe, split into the two halves the hardware sizes itself on. It is used to provide information about the probe width to the software for timing analysis and debugging purposes.
+ * Description: This register stores the synthesis time width of the probe, as one number. It is used to provide information about the probe width to the software for timing analysis and debugging purposes.
  */
 #define CORE_LIBRE_ILA_REGS_WIDTH_REG_OFFSET       (0x0CU + CORE_LIBRE_ILA_OP_REGS_OFFSET)
 #define CORE_LIBRE_ILA_REGS_WIDTH_REG_LENGTH       0x04U
@@ -410,32 +399,18 @@
 #define CORE_LIBRE_ILA_REGS_WIDTH_REG_WRITE_MASK   0x00000000U
 
 /**
- * Field Name: DATA_WIDTH
+ * Field Name: PROBE_WIDTH
  *
- * Field Desc: Width of the wide payload part of the probe, the bits starting at probe bit 0. This field is read-only.
+ * Field Desc: Total number of probed bits the hardware was synthesised with. This field is read-only, and it is the only width the hardware reports, the lane count follows from it.
  */
 
-#define CORE_LIBRE_ILA_REGS_WIDTH_REG_DATA_WIDTH_FIELD_OFFSET     \
+#define CORE_LIBRE_ILA_REGS_WIDTH_REG_PROBE_WIDTH_FIELD_OFFSET     \
                 (CORE_LIBRE_ILA_REGS_WIDTH_REG_OFFSET)
-#define CORE_LIBRE_ILA_REGS_WIDTH_REG_DATA_WIDTH_FIELD_SHIFT      (0U)
-#define CORE_LIBRE_ILA_REGS_WIDTH_REG_DATA_WIDTH_FIELD_NS_MASK    ((uint32_t)(0x0000FFFFUL))
-#define CORE_LIBRE_ILA_REGS_WIDTH_REG_DATA_WIDTH_FIELD_MASK \
-      (CORE_LIBRE_ILA_REGS_WIDTH_REG_DATA_WIDTH_FIELD_NS_MASK << \
-         CORE_LIBRE_ILA_REGS_WIDTH_REG_DATA_WIDTH_FIELD_SHIFT)
-
-/**
- * Field Name: SIGNAL_WIDTH
- *
- * Field Desc: Number of extra probed bits carried immediately above the data bits. This field is read-only.
- */
-
-#define CORE_LIBRE_ILA_REGS_WIDTH_REG_SIGNAL_WIDTH_FIELD_OFFSET     \
-                (CORE_LIBRE_ILA_REGS_WIDTH_REG_OFFSET)
-#define CORE_LIBRE_ILA_REGS_WIDTH_REG_SIGNAL_WIDTH_FIELD_SHIFT      (16U)
-#define CORE_LIBRE_ILA_REGS_WIDTH_REG_SIGNAL_WIDTH_FIELD_NS_MASK    ((uint32_t)(0x0000FFFFUL))
-#define CORE_LIBRE_ILA_REGS_WIDTH_REG_SIGNAL_WIDTH_FIELD_MASK \
-      (CORE_LIBRE_ILA_REGS_WIDTH_REG_SIGNAL_WIDTH_FIELD_NS_MASK << \
-         CORE_LIBRE_ILA_REGS_WIDTH_REG_SIGNAL_WIDTH_FIELD_SHIFT)
+#define CORE_LIBRE_ILA_REGS_WIDTH_REG_PROBE_WIDTH_FIELD_SHIFT      (0U)
+#define CORE_LIBRE_ILA_REGS_WIDTH_REG_PROBE_WIDTH_FIELD_NS_MASK    ((uint32_t)(0xFFFFFFFFUL))
+#define CORE_LIBRE_ILA_REGS_WIDTH_REG_PROBE_WIDTH_FIELD_MASK \
+      (CORE_LIBRE_ILA_REGS_WIDTH_REG_PROBE_WIDTH_FIELD_NS_MASK << \
+         CORE_LIBRE_ILA_REGS_WIDTH_REG_PROBE_WIDTH_FIELD_SHIFT)
 
 /*******************************************************************************
  * Register: DEPTH_REG

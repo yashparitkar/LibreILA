@@ -35,16 +35,22 @@ architecture sim of tb is
   constant C_AXIL_PERIOD   : time    := 10 ns;
   constant C_AXIL_CLK_FREQ : integer := 100_000_000;
   -- Standard RS232 baud rate.
-  constant C_BAUD_RATE     : integer := 230_400;
+  constant C_BAUD_RATE : integer := 8*230_400;
 
   constant C_TRIG_IDX      : natural := 3;
   constant C_TRIGGER_POINT : natural := 80;
   constant C_SAMPLE_COUNT  : natural := 192;
 
   constant C_AXIL_WORD_BYTES : natural := 4;
-  -- Matches the DUT's C_AXIL_STRIDE (see hdl/libre_ila.vhdl): next
-  -- power-of-two register count for (TDATA lanes + 1 control lane).
-  constant C_STRIDE          : natural := 2 ** integer(ceil(log2(real(C_DATA_WIDTH / 32 + 1))));
+  -- The probe word the DUT samples, TDATA plus the signalling ports, one
+  -- flat vector. Mirrors C_PROBE_WIDTH / C_N_LANES in hdl/libre_ila.vhdl.
+  constant C_N_SIGNALS   : natural := 3;
+  constant C_PROBE_WIDTH : natural := C_DATA_WIDTH + C_N_SIGNALS;
+  constant C_N_LANES     : natural := integer(ceil(real(C_PROBE_WIDTH) / 32.0));
+  -- Matches the DUT's C_AXIL_STRIDE: next power-of-two lane count, minimum 4
+  -- -- same constant the DUT uses to size both the trigger vector block and
+  -- the output sample stride.
+  constant C_STRIDE          : natural := maximum(4, 2 ** integer(ceil(log2(real(C_N_LANES)))));
   constant C_INPUT_REG_COUNT : natural := 4 + 2 * C_STRIDE;
   constant C_OUTPUT_REG_BASE : natural := C_INPUT_REG_COUNT * C_AXIL_WORD_BYTES;
   constant C_SAMPLE_RAM_BASE : natural := (C_INPUT_REG_COUNT + 8) * C_AXIL_WORD_BYTES;
@@ -69,7 +75,8 @@ architecture sim of tb is
   -- high; TDATA and padding words are left at '0' (don't-care mask).
   -- cond words 0..3 then mask words 0..3, written as one 8-word burst
   -- starting at C_TRIG_COND_BASE.
-  constant C_TRIG_BLOCK : t_word_array(0 to 7) := (
+  constant C_TRIG_BLOCK : t_word_array(0 to 7) :=
+  (
     0 => x"00000000",
     1 => x"00000000",
     2 => x"00000007",
@@ -86,7 +93,7 @@ architecture sim of tb is
   signal s_axil_aclk   : std_logic := '0';
 
   signal i_ext_trig : std_logic := '0';
-  signal o_trig_out  : std_logic;
+  signal o_trig_out : std_logic;
 
   signal axis_in_tready : std_logic;
   signal axis_in_tvalid : std_logic                                   := '0';
@@ -104,7 +111,7 @@ architecture sim of tb is
 
   -- "PC" side UART core
   signal pc_tx_data : std_logic_vector(7 downto 0) := (others => '0');
-  signal pc_tx_stb  : std_logic                     := '0';
+  signal pc_tx_stb  : std_logic                    := '0';
   signal pc_tx_ack  : std_logic;
   signal pc_rx_data : std_logic_vector(7 downto 0);
   signal pc_rx_stb  : std_logic;
@@ -127,7 +134,7 @@ architecture sim of tb is
       C_S_AXIL_ADDR_WIDTH  : integer;
       G_UART_RX_FIFO_DEPTH : natural;
       G_UART_TX_FIFO_DEPTH : natural;
-      BAUD_RATE             : integer
+      BAUD_RATE            : integer
     );
     port (
       i_rst_sync : in    std_logic;
@@ -193,6 +200,7 @@ architecture sim of tb is
   end component fifo;
 
   -- Push one byte out over the "PC" UART (received by the DUT)
+
   procedure pc_tx_byte (
     signal clk     : in std_logic;
     signal din     : out std_logic_vector(7 downto 0);
@@ -212,6 +220,7 @@ architecture sim of tb is
   end procedure pc_tx_byte;
 
   -- Pop one byte received from the DUT (buffered in pc_rxfifo)
+
   procedure pc_rx_byte (
     signal clk     : in std_logic;
     signal rd_en   : out std_logic;
@@ -222,7 +231,7 @@ architecture sim of tb is
   begin
 
     wait until rising_edge(clk) and nempty = '1';
-    val := rd_data;
+    val   := rd_data;
     rd_en <= '1';
 
     wait until rising_edge(clk);
@@ -233,6 +242,7 @@ architecture sim of tb is
   -- Full "PC to ILA wrapper" write transaction: SYNC, REQ (W, #words),
   -- address, data words (MSB first), then consume+check the echoed
   -- response header.
+
   procedure uart_ila_write (
     signal clk     : in std_logic;
     signal din     : out std_logic_vector(7 downto 0);
@@ -267,23 +277,36 @@ architecture sim of tb is
     end loop;
 
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = x"AA" report "uart_ila_write: bad sync in echo header" severity error;
+    assert b = x"AA"
+      report "uart_ila_write: bad sync in echo header"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = ('1' & std_logic_vector(to_unsigned(n, 7))) report "uart_ila_write: bad req echo" severity error;
+    assert b = ('1' & std_logic_vector(to_unsigned(n, 7)))
+      report "uart_ila_write: bad req echo"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = addr(31 downto 24) report "uart_ila_write: bad addr echo byte0" severity error;
+    assert b = addr(31 downto 24)
+      report "uart_ila_write: bad addr echo byte0"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = addr(23 downto 16) report "uart_ila_write: bad addr echo byte1" severity error;
+    assert b = addr(23 downto 16)
+      report "uart_ila_write: bad addr echo byte1"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = addr(15 downto 8) report "uart_ila_write: bad addr echo byte2" severity error;
+    assert b = addr(15 downto 8)
+      report "uart_ila_write: bad addr echo byte2"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = addr(7 downto 0) report "uart_ila_write: bad addr echo byte3" severity error;
+    assert b = addr(7 downto 0)
+      report "uart_ila_write: bad addr echo byte3"
+      severity error;
 
   end procedure uart_ila_write;
 
   -- Full "PC to ILA wrapper" read transaction: SYNC, REQ (R, #words),
   -- address, then consume+check the echoed response header and
   -- unpack the trailing data words (MSB first) into `result`.
+
   procedure uart_ila_read (
     signal clk      : in std_logic;
     signal din      : out std_logic_vector(7 downto 0);
@@ -297,7 +320,11 @@ architecture sim of tb is
     variable result : out t_word_array
   ) is
 
-    variable b, b3, b2, b1, b0 : std_logic_vector(7 downto 0);
+    variable b  : std_logic_vector(7 downto 0);
+    variable b3 : std_logic_vector(7 downto 0);
+    variable b2 : std_logic_vector(7 downto 0);
+    variable b1 : std_logic_vector(7 downto 0);
+    variable b0 : std_logic_vector(7 downto 0);
 
   begin
 
@@ -309,18 +336,29 @@ architecture sim of tb is
     pc_tx_byte(clk, din, din_stb, din_ack, addr(7 downto 0));
 
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = x"AA" report "uart_ila_read: bad sync in echo header" severity error;
+    assert b = x"AA"
+      report "uart_ila_read: bad sync in echo header"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
     assert b = ('0' & std_logic_vector(to_unsigned(n, 7))) or b = ('1' & std_logic_vector(to_unsigned(n, 7)))
-      report "uart_ila_read: bad req echo" severity error;
+      report "uart_ila_read: bad req echo"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = addr(31 downto 24) report "uart_ila_read: bad addr echo byte0" severity error;
+    assert b = addr(31 downto 24)
+      report "uart_ila_read: bad addr echo byte0"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = addr(23 downto 16) report "uart_ila_read: bad addr echo byte1" severity error;
+    assert b = addr(23 downto 16)
+      report "uart_ila_read: bad addr echo byte1"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = addr(15 downto 8) report "uart_ila_read: bad addr echo byte2" severity error;
+    assert b = addr(15 downto 8)
+      report "uart_ila_read: bad addr echo byte2"
+      severity error;
     pc_rx_byte(clk, rd_en, rd_data, nempty, b);
-    assert b = addr(7 downto 0) report "uart_ila_read: bad addr echo byte3" severity error;
+    assert b = addr(7 downto 0)
+      report "uart_ila_read: bad addr echo byte3"
+      severity error;
 
     for i in 0 to n - 1 loop
 
@@ -466,18 +504,18 @@ begin
     );
 
     uart_ila_write(
-      s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
-      pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
-      C_TRIG_COND_BASE, C_TRIG_BLOCK
-    );
+                   s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
+                   pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
+                   C_TRIG_COND_BASE, C_TRIG_BLOCK
+                 );
 
     -- Read back the configuration we just wrote before arming, to prove
     -- the UART write path actually landed in the core's registers
     uart_ila_read(
-      s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
-      pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
-      C_TRIG_COND_BASE, 8, samp_words(0 to 7)
-    );
+                  s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
+                  pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
+                  C_TRIG_COND_BASE, 8, samp_words(0 to 7)
+                );
 
     for i in 0 to 7 loop
 
@@ -501,12 +539,15 @@ begin
     );
 
     uart_ila_read(
-      s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
-      pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
-      C_STATUS_ADDR, 1, status_word
-    );
-    report "06_sim_libre_ila_uart: status after arm = 0x" & to_hstring(status_word(0)) severity note;
-    assert status_word(0)(0) = '1' report "06_sim_libre_ila_uart: ILA failed to ARM" severity error;
+                  s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
+                  pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
+                  C_STATUS_ADDR, 1, status_word
+                );
+    report "06_sim_libre_ila_uart: status after arm = 0x" & to_hstring(status_word(0))
+      severity note;
+    assert status_word(0)(0) = '1'
+      report "06_sim_libre_ila_uart: ILA failed to ARM"
+      severity error;
 
     -- Stream probe stimulus, same pattern as 01_sim_axil_trig: TLAST
     -- pulses at the trigger point, TREADY backpressure elsewhere.
@@ -540,10 +581,10 @@ begin
     for attempt in 0 to 63 loop
 
       uart_ila_read(
-        s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
-        pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
-        C_STATUS_ADDR, 1, status_word
-      );
+                    s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
+                    pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
+                    C_STATUS_ADDR, 1, status_word
+                  );
       exit when status_word(0)(2) = '1';
 
     end loop;
@@ -553,20 +594,20 @@ begin
       severity error;
 
     uart_ila_read(
-      s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
-      pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
-      C_MAGIC_ADDR, 1, magic_word
-    );
+                  s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
+                  pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
+                  C_MAGIC_ADDR, 1, magic_word
+                );
     assert magic_word(0) = x"B01DFACE"
       report "06_sim_libre_ila_uart: magic key mismatch"
       severity error;
 
     -- Read the whole sample buffer back in a single UART transaction
     uart_ila_read(
-      s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
-      pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
-      C_SAMP_ADDR, C_SAMP_WORDS, samp_words
-    );
+                  s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
+                  pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
+                  C_SAMP_ADDR, C_SAMP_WORDS, samp_words
+                );
 
     for sample_index in 0 to C_DEPTH - 1 loop
 

@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="182 36 316 272" width="316" height="272" role="img">
+  <title>LibreILA logo</title>
+  <desc>A retro oscilloscope-style logo: a CRT device showing two digital waveform traces under one amber trigger marker. The top trace is a clean green digital signal; the bottom trace ends in a red pentagon marking an undefined logic value. The wordmark LibreILA appears below in monospace phosphor green.</desc>
+  <defs>
+    <linearGradient id="bezelGrad" x1="0" y1="44" x2="0" y2="246" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2b302b"></stop>
+      <stop offset="1" stop-color="#14171a"></stop>
+    </linearGradient>
+  </defs>
+
+  <rect x="190" y="44" width="300" height="202" rx="18" fill="url(#bezelGrad)" stroke="#3a3f3a" stroke-width="1"></rect>
+  <rect x="210" y="62" width="260" height="140" rx="8" fill="#050a06" stroke="#163a20" stroke-width="1"></rect>
+
+  <g stroke="#164024" stroke-width="0.5" opacity="0.4">
+    <line x1="275" y1="62" x2="275" y2="202"></line>
+    <line x1="340" y1="62" x2="340" y2="202"></line>
+    <line x1="405" y1="62" x2="405" y2="202"></line>
+    <line x1="210" y1="97" x2="470" y2="97"></line>
+    <line x1="210" y1="132" x2="470" y2="132"></line>
+    <line x1="210" y1="167" x2="470" y2="167"></line>
+  </g>
+
+  <g fill="none" stroke="#39ff6a" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M224,127 L250,127 L250,92 L285,92 L285,127 L310,127 L310,92 L350,92 L350,127 L380,127 L380,92 L420,92 L420,127 L452,127" stroke-width="9" opacity="0.07"></path>
+    <path d="M224,127 L250,127 L250,92 L285,92 L285,127 L310,127 L310,92 L350,92 L350,127 L380,127 L380,92 L420,92 L420,127 L452,127" stroke-width="6" opacity="0.14"></path>
+    <path d="M224,127 L250,127 L250,92 L285,92 L285,127 L310,127 L310,92 L350,92 L350,127 L380,127 L380,92 L420,92 L420,127 L452,127" stroke-width="3.5" opacity="0.3"></path>
+    <path d="M224,127 L250,127 L250,92 L285,92 L285,127 L310,127 L310,92 L350,92 L350,127 L380,127 L380,92 L420,92 L420,127 L452,127" stroke-width="1.6"></path>
+  </g>
+
+  <line x1="310" y1="84" x2="310" y2="198" stroke="#ffb454" stroke-width="0.5" stroke-dasharray="3 3" opacity="0.7"></line>
+  <polygon points="303,74 317,74 310,84" fill="#ffb454"></polygon>
+
+  <polygon points="310,192 335,157 452,157 452,192" fill="#050a06"></polygon>
+  <polygon points="310,192 335,157 452,157 452,192" fill="#ff3b3b" fill-opacity="0.15"></polygon>
+  <path d="M310,192 L335,157 L452,157 M310,192 L452,192" fill="none" stroke="#ff3b3b" stroke-width="5" stroke-opacity="0.2" stroke-linejoin="round" stroke-linecap="round"></path>
+  <path d="M310,192 L335,157 L452,157 M310,192 L452,192" fill="none" stroke="#ff3b3b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+
+  <g fill="none" stroke="#39ff6a" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M224,192 L250,192 L250,157 L285,157 L285,192 L310,192" stroke-width="9" opacity="0.07"></path>
+    <path d="M224,192 L250,192 L250,157 L285,157 L285,192 L310,192" stroke-width="6" opacity="0.14"></path>
+    <path d="M224,192 L250,192 L250,157 L285,157 L285,192 L310,192" stroke-width="3.5" opacity="0.3"></path>
+    <path d="M224,192 L250,192 L250,157 L285,157 L285,192 L310,192" stroke-width="1.6"></path>
+  </g>
+
+  <circle cx="228" cy="224" r="9" fill="#2a2f2b" stroke="#55584f" stroke-width="1"></circle>
+  <circle cx="262" cy="224" r="9" fill="#2a2f2b" stroke="#55584f" stroke-width="1"></circle>
+  <circle cx="452" cy="224" r="10" fill="#39ff6a" opacity="0.15"></circle>
+  <circle cx="452" cy="224" r="4" fill="#39ff6a"></circle>
+
+  <text x="340" y="291" text-anchor="middle" font-family="&#39;Courier New&#39;, monospace" font-size="28" font-weight="500" letter-spacing="2" fill="#39ff6a">LibreILA</text>
+</svg>

@@ -20,15 +20,15 @@ end entity tb;
 
 architecture sim of tb is
 
-  constant C_DATA_WIDTH    : natural := 64;
-  constant C_DEPTH         : natural := 8;
+  constant C_DATA_WIDTH : natural := 64;
+  constant C_DEPTH      : natural := 8;
 
   -- Clock domain frequency configuration
   constant C_AXIS_FREQ_MHZ : real := 100.0;
   constant C_AXIL_FREQ_MHZ : real := 200.0;
 
-  constant C_AXIS_PERIOD   : time := integer(1_000_000.0 / C_AXIS_FREQ_MHZ) * 1 ps;
-  constant C_AXIL_PERIOD   : time := integer(1_000_000.0 / C_AXIL_FREQ_MHZ) * 1 ps;
+  constant C_AXIS_PERIOD : time := integer(1_000_000.0 / C_AXIS_FREQ_MHZ) * 1 ps;
+  constant C_AXIL_PERIOD : time := integer(1_000_000.0 / C_AXIL_FREQ_MHZ) * 1 ps;
 
   constant C_TRIG_IDX      : natural := 3;
   constant C_TRIGGER_POINT : natural := 80;
@@ -39,10 +39,15 @@ architecture sim of tb is
   constant TRIGGER_DATA_MASK : std_logic_vector(63 downto 0) := x"00000000_00000555";
 
   constant C_AXIL_WORD_BYTES : natural := 4;
-  -- Matches the DUT's C_AXIL_STRIDE: next power-of-two register count for
-  -- (TDATA lanes + 1 control lane), minimum 4 -- same constant the DUT uses
-  -- to size both the trigger vector block and the output sample stride.
-  constant C_STRIDE          : natural := 2 ** integer(ceil(log2(real(C_DATA_WIDTH / 32 + 1))));
+  -- The probe word the DUT samples, TDATA plus the signalling ports, one
+  -- flat vector. Mirrors C_PROBE_WIDTH / C_N_LANES in hdl/libre_ila.vhdl.
+  constant C_N_SIGNALS   : natural := 3;
+  constant C_PROBE_WIDTH : natural := C_DATA_WIDTH + C_N_SIGNALS;
+  constant C_N_LANES     : natural := integer(ceil(real(C_PROBE_WIDTH) / 32.0));
+  -- Matches the DUT's C_AXIL_STRIDE: next power-of-two lane count, minimum 4
+  -- -- same constant the DUT uses to size both the trigger vector block and
+  -- the output sample stride.
+  constant C_STRIDE : natural := maximum(4, 2 ** integer(ceil(log2(real(C_N_LANES)))));
   -- The DUT maps output registers after the input-register block.
   constant C_INPUT_REG_COUNT : natural := 4 + 2 * C_STRIDE;
   constant C_OUTPUT_REG_BASE : natural := C_INPUT_REG_COUNT * C_AXIL_WORD_BYTES;
@@ -54,8 +59,8 @@ architecture sim of tb is
   constant C_TRIG_POS_ADDR  : std_logic_vector(31 downto 0) := x"00000000";
   constant C_ARM_FT_ADDR    : std_logic_vector(31 downto 0) := x"00000004";
   constant C_TRIG_CFG_ADDR  : std_logic_vector(31 downto 0) := x"00000008";
-  constant C_TRIG_COND_BASE : natural := 4 * C_AXIL_WORD_BYTES;
-  constant C_TRIG_MASK_BASE : natural := (4 + C_STRIDE) * C_AXIL_WORD_BYTES;
+  constant C_TRIG_COND_BASE : natural                       := 4 * C_AXIL_WORD_BYTES;
+  constant C_TRIG_MASK_BASE : natural                       := (4 + C_STRIDE) * C_AXIL_WORD_BYTES;
 
   -- The current address decoder exposes the buffer RAM window.
   constant C_SAMPLE_PRINT_COUNT : natural                       := C_DEPTH;
@@ -248,9 +253,9 @@ begin
 
     while true loop
 
-      axis_in_aclk  <= '0';
+      axis_in_aclk <= '0';
       wait for C_AXIS_PERIOD / 2;
-      axis_in_aclk  <= '1';
+      axis_in_aclk <= '1';
       wait for C_AXIS_PERIOD / 2;
 
     end loop;
@@ -278,7 +283,7 @@ begin
 
     type t_lane_data is array (natural range <>) of std_logic_vector(31 downto 0);
 
-    variable lane_data : t_lane_data(0 to C_DATA_WIDTH / 32);
+    variable lane_data : t_lane_data(0 to C_N_LANES - 1);
 
   begin
 
@@ -304,10 +309,10 @@ begin
 
       wait until rising_edge(s_axil_aclk);
       axil_write(
-        s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready,
-        std_logic_vector(to_unsigned(C_TRIG_COND_BASE + word_idx * C_AXIL_WORD_BYTES, 32)),
-        TRIGGER_DATA(31 + word_idx * 32 downto word_idx * 32)
-      );
+                 s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready,
+                 std_logic_vector(to_unsigned(C_TRIG_COND_BASE + word_idx * C_AXIL_WORD_BYTES, 32)),
+                 TRIGGER_DATA(31 + word_idx * 32 downto word_idx * 32)
+               );
 
     end loop;
 
@@ -316,10 +321,10 @@ begin
 
       wait until rising_edge(s_axil_aclk);
       axil_write(
-        s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready,
-        std_logic_vector(to_unsigned(C_TRIG_MASK_BASE + word_idx * C_AXIL_WORD_BYTES, 32)),
-        TRIGGER_DATA_MASK(31 + word_idx * 32 downto word_idx * 32)
-      );
+                 s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready,
+                 std_logic_vector(to_unsigned(C_TRIG_MASK_BASE + word_idx * C_AXIL_WORD_BYTES, 32)),
+                 TRIGGER_DATA_MASK(31 + word_idx * 32 downto word_idx * 32)
+               );
 
     end loop;
 
@@ -397,7 +402,7 @@ begin
     -- Reading back output samples from RAM window
     for sample_index in 0 to C_SAMPLE_PRINT_COUNT - 1 loop
 
-      for lane_index in 0 to (C_DATA_WIDTH / 32) loop
+      for lane_index in 0 to C_N_LANES - 1 loop
 
         wait until rising_edge(s_axil_aclk);
         axil_read(

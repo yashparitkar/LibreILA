@@ -1,3 +1,9 @@
+% File: manual.tex
+% Author: Y.U.P. (paritkary25)
+% Last Modified: 2026-07-28 Tue 11:53
+%
+% Description: LaTeX source file for the LibreILA user manual. This covers mainly the usage instructions for the LibreILA tool.
+
 \documentclass{article}
 \usepackage{float}
 \usepackage[margin=2.5cm]{geometry}
@@ -61,7 +67,7 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
 
 \begin{figure}
     \centering
-    \includegraphics[trim=0 0 0 0,clip=true,width=0.75\linewidth]{./images/oshw-logo-800-px-original.png}
+    \includegraphics[trim=0 0 0 0,clip=true,width=0.75\linewidth]{./images/libre_ila_logo.pdf}
     % \caption{Caption}
     \label{fig:rendering}
 \end{figure}
@@ -96,11 +102,7 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
 \listoftables
 
 \section*{List of Acronyms}
-\begin{acronym}[sort = true]
-    % A
-    % I
-    \acro{ILA}{Integrated Logic Analyzer}
-\end{acronym}
+\input{acronym}
 
 \newpage
 \section{Introduction}

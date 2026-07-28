@@ -19,10 +19,9 @@ This project is licensed under CERN Open Hardware Licence Version 2 - Permissive
 * Pass through AXI4 Stream ports ensures no delay is introduced due to the IP
 * Customizable trigger:
     * Trigger can be set with AXI4Lite interface
-    * Any AXI4S signal can be set as a trigger condition
     * Once setting the triggers condition, the ILA can be armed
     * Number of samples before and after trigger can be adjusted
-    * Can also use a external trigger
+    * Can also use aa external trigger
 * CDC on the ARM and status bits
 * A serial wrapper is also provided to easily use the ILA with the PC
 * A python driver is provided to easily control the ILA from the PC when instantiated with the serial wrapper
@@ -31,9 +30,10 @@ This project is licensed under CERN Open Hardware Licence Version 2 - Permissive
 This section contains information about the LibreILA core.
 
 ## Ports
-Current implementation only uses TDATA, TVALID, TREADY and TLAST ports. 
+The default implementation is with AXI4S ports but can be modified to use generic IOs. 
 * axis_in: AXI4S Slave port: Serves as slave port for the master.
 * axis_out: AXI4S Master port: Serves as master port for the slave
+
 * axil: AXI4Lite Slave port: Configuration and readout port
 * i_ext_trig: external trigger port
 * o_trig_out: internal trigger signal for chaining to other ILA instances
@@ -60,7 +60,7 @@ Current implementation only uses TDATA, TVALID, TREADY and TLAST ports.
 | 4+a    | RW | Trigger vector mask (LSB) |                            |
 | 4+2a-1 | RW | Trigger vector mask (MSB) |                            |
 
-Here, `a` is `C_AXIL_STRIDE`: the same stride constant used to lay out the output sample buffer (see below), i.e. the next power-of-two register count for (TDATA lanes + 1 control lane), with a minimum of 4. This makes the trigger vector cond/mask registers share the exact same per-sample bit layout as the output sample buffer.
+Here, `a` is `C_AXIL_STRIDE`: the same stride constant used to lay out the output sample buffer (see below), i.e. the next power-of-two count of probe lanes (`C_N_LANES = ceil(C_PROBE_WIDTH/32)`), with a minimum of 4. This makes the trigger vector cond/mask registers share the exact same per-sample bit layout as the output sample buffer.
 
 Further input registers are auto added depending on the data width.
 
@@ -73,24 +73,26 @@ Total input registers: 4 + C_AXIL_STRIDE * 2
 |   0   | RO | Status              | ILA status register                   |
 |   1   | RO | Magic key           | 0xb01dface                            |
 |   2   | RO | Samp Clk Freqcy     | Sampling clock frequency (Hz)         |
-|   3   | RO | Width               | #signals(16bit) & axi4s width (16bit) |
+|   3   | RO | Width               | C_PROBE_WIDTH, total probed bits      |
 |   4   | RO | Buffer Depth        | Depth of the sampling buffer          |
 |   5   | RO | Reserved            | Reserved                              |
 |   6   | RO | samp_buff_trig_idx  | Index of the trigger sample           |
 |   7   | RO | samp_buff_frst_idx  | Index of the first sample             |
 
-After this, sampling buffer is mapped with strides to ease the resource usage on the fabric. Each samp_buff is written as a bunch with number of registers used for each samp_buff as power of two to ease computation. For example, if the G_DATA_WIDTH is kept 64 and number of signals is 3 then total 4 32-bit registers are needed to properly show the data. Hence, stride will be of 4. Inside each stride, the data each stored in following format:
+After this, sampling buffer is mapped with strides to ease the resource usage on the fabric. Each samp_buff is written as a bunch with number of registers used for each samp_buff as power of two to ease computation. For example, if the G_DATA_WIDTH is kept 64 and number of signals is 3 then the probe is 67 bits wide, needing 3 lanes, and the stride is rounded up to 4. Inside each stride, the data each stored in following format:
  
-| Offset   | RW | Register Name                            | Description                |
-|---------|----|------------------------------------------|----------------------------|
-|  0       | RO | samp_buff(31 downto  0)                  | The LSBs of the AXI4S data |
-|  1       | RO | samp_buff(63 downto 32)                  |                            |
-| stride-2 | RO | samp_buff(G_DEPTH-1  downto G_DEPTH-32 ) | The MSBs of the AXI4S data |
-| stride-1 | RO | samp_buff(G_DEPTH+31 downto G_DEPTH    ) | AXI4S signals              |
+| Offset                | RW | Register Name                                     | Description                        |
+|-----------------------|----|---------------------------------------------------|------------------------------------|
+| 0                     | RO | samp_buff(31 downto 0)                            | The LSBs of the probe word         |
+| 1                     | RO | samp_buff(63 downto 32)                           |                                    |
+| C_N_LANES-1           | RO | samp_buff(C_PROBE_WIDTH-1 downto 32*(C_N_LANES-1))| The MSBs, zero padded              |
+| C_N_LANES to stride-1 | RO | zero                                              | Padding up to the stride boundary  |
 
-Total output registers: 8 + ( G_DATA_WIDTH/32 + 1) * G_DEPTH
+The probe word here is the same vector the trigger uses, TDATA in the low bits then TLAST/TVALID/TREADY, so lane `n` holds probe bits `32n+31 downto 32n`. See the trigger vector section below for the bit layout.
 
-Total number of registers: 12 + C_AXIL_STRIDE * 2 + (G_DATA_WIDTH/32 + 1) * G_DEPTH
+Total output registers: 8 + C_AXIL_STRIDE * G_DEPTH
+
+Total number of registers: 12 + C_AXIL_STRIDE * 2 + C_AXIL_STRIDE * G_DEPTH
 
 #### Status 
 This is the status register of the ILA. The ARMED, TRIGD and DONE signal bits are CDCed with 2FF to the AXI4Lite domain and hence suffer a slight delay. The internal status register does not have CDC and used for debugging.
@@ -142,6 +144,8 @@ If needed, user can also modify to use masked data values for triggering.
 
 # LibreILA UART Wrapper
 This section contains information about the LibreILA UART Wrapper (libre_ila_uart.vhdl).
+
+> Note that, it is assumed that the UART fifo are large enough that there is no overflow on the UART side.
 
 ## UART packet format
 The PC is the one managing the ILA. It is connected to the ILA with the UART interface. A custom packet format is defined to read/write the addresses. The packet format for the upstream and downstream is given below.

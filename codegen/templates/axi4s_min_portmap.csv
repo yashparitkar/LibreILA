@@ -1,1 +1,5 @@
 signal,width,type
+axis_tdata,64,in
+axis_tlast,1,in
+axis_tvalid,1,in
+axis_tready,1,out

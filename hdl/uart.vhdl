@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 -- File: uart.vhdl
 -- Author: pabennett/uart; modified a bit by paritkary25
--- Last Modified: 2026/07/24 10:52
+-- Last Modified: 2026-07-28 Tue 11:06
 -------------------------------------------------------------------------------
 -- Original work: pabennett/uart
 -- Copyright 2015 Peter Bennett
@@ -71,16 +71,26 @@ architecture rtl of uart is
   ---------------------------------------------------------------------------
   -- Baud generation constants
   ---------------------------------------------------------------------------
-  constant C_TX_DIV       : integer := CLOCK_FREQUENCY / BAUD;
-  constant C_RX_DIV       : integer := CLOCK_FREQUENCY / (BAUD * 16);
-  constant C_TX_DIV_WIDTH : integer := integer(log2(real(C_TX_DIV))) + 1;
-  constant C_RX_DIV_WIDTH : integer := integer(log2(real(C_RX_DIV))) + 1;
+  -- Baud ticks come from a phase accumulator rather than an integer clock
+  -- divider. An integer divider quantises the bit period to a whole number
+  -- of clocks, and the 16x oversampled rx divider quantises it to a multiple
+  -- of 16 clocks, so the rx sample point drifts off the tx bit centre
+  -- whenever CLOCK_FREQUENCY is not an exact multiple of BAUD * 16. At
+  -- 100 MHz / 460800 baud that cost 4.15% per bit -- enough to sample the
+  -- stop bit inside data bit 7 and drop every byte. The accumulator spreads
+  -- the remainder across the bit instead, giving an average tick rate of
+  -- exactly BAUD (tx) and BAUD * 16 (rx) with at most one clock of jitter
+  -- on any individual tick.
+  constant C_ACC_WIDTH : integer  := integer(ceil(log2(real(CLOCK_FREQUENCY)))) + 1;
+  constant C_ACC_MOD   : unsigned := to_unsigned(CLOCK_FREQUENCY, C_ACC_WIDTH);
+  constant C_TX_INC    : unsigned := to_unsigned(BAUD, C_ACC_WIDTH);
+  constant C_RX_INC    : unsigned := to_unsigned(BAUD * 16, C_ACC_WIDTH);
   ---------------------------------------------------------------------------
   -- Baud generation signals
   ---------------------------------------------------------------------------
-  signal tx_baud_counter : unsigned(C_TX_DIV_WIDTH - 1 downto 0);
+  signal tx_baud_counter : unsigned(C_ACC_WIDTH - 1 downto 0);
   signal tx_baud_tick    : std_logic;
-  signal rx_baud_counter : unsigned(C_RX_DIV_WIDTH - 1 downto 0);
+  signal rx_baud_counter : unsigned(C_ACC_WIDTH - 1 downto 0);
   signal rx_baud_tick    : std_logic;
   ---------------------------------------------------------------------------
   -- Transmitter signals
@@ -116,8 +126,8 @@ architecture rtl of uart is
 begin
 
   -- INPUT CHECKING ---------------------------------------------------------
-  assert ((BAUD * 16) <= CLOCK_FREQUENCY)
-    report "CLOCK should be greater than 16 * BAUD"
+  assert ((BAUD * 16) * 2 <= CLOCK_FREQUENCY)
+    report "CLOCK should be greater than 16 * BAUD * (2 margin)"
     severity failure;
   ---------------------------------------------------------------------------
 
@@ -138,11 +148,11 @@ begin
         rx_baud_counter <= (others => '0');
         rx_baud_tick    <= '0';
       else
-        if (rx_baud_counter = C_RX_DIV - 1) then
-          rx_baud_counter <= (others => '0');
+        if (rx_baud_counter + C_RX_INC >= C_ACC_MOD) then
+          rx_baud_counter <= rx_baud_counter + C_RX_INC - C_ACC_MOD;
           rx_baud_tick    <= '1';
         else
-          rx_baud_counter <= rx_baud_counter + 1;
+          rx_baud_counter <= rx_baud_counter + C_RX_INC;
           rx_baud_tick    <= '0';
         end if;
       end if;
@@ -308,11 +318,11 @@ begin
         tx_baud_counter <= (others => '0');
         tx_baud_tick    <= '0';
       else
-        if (tx_baud_counter = C_TX_DIV - 1) then
-          tx_baud_counter <= (others => '0');
+        if (tx_baud_counter + C_TX_INC >= C_ACC_MOD) then
+          tx_baud_counter <= tx_baud_counter + C_TX_INC - C_ACC_MOD;
           tx_baud_tick    <= '1';
         else
-          tx_baud_counter <= tx_baud_counter + 1;
+          tx_baud_counter <= tx_baud_counter + C_TX_INC;
           tx_baud_tick    <= '0';
         end if;
       end if;
