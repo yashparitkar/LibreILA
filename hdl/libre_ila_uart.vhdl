@@ -2,7 +2,7 @@
 -- File: libre_ila_uart.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-21 Tue 20:12
--- Last Modified: 2026-07-28 Tue 20:18
+-- Last Modified: 2026-07-29 Wed 12:43
 --
 -- Description: This is a wrapper for the libre_ila. This exposes two UART
 -- pins through which the ILA can be controller allowing the external debug
@@ -26,14 +26,17 @@ entity libre_ila_uart is
     G_EXTERNAL_TRIG      : integer := 0;      -- 1 for external trigger pin
     G_PROBE_WIDTH        : natural := 67;     -- Keep it a multiple of 32 for best results
     G_SAMP_BUFF_DEPTH    : natural := 2048;   -- Keep it a power of two for best results
-    C_S_AXIL_DATA_WIDTH  : integer := 32;     -- DONT CHANGE
-    C_S_AXIL_ADDR_WIDTH  : integer := 32;     -- DONT CHANGE
     G_UART_RX_FIFO_DEPTH : natural := 1024;   -- Depth of the FIFO for UART RX
     G_UART_TX_FIFO_DEPTH : natural := 1024;   -- Depth of the FIFO for UART TX
-    G_BAUD_RATE          : integer := 115_200 -- Baud rate for UART communication
+    G_BAUD_RATE          : integer := 115_200; -- Baud rate for UART communication
+    C_S_AXIL_DATA_WIDTH  : integer := 32;     -- DONT CHANGE
+    C_S_AXIL_ADDR_WIDTH  : integer := 32      -- DONT CHANGE
   );
   port (
     i_rst_sync : in    std_logic;
+
+    -- Sampling clock, the clock of the domain the probe lives in
+    samp_aclk : in    std_logic;
 
     -- AXI4Lite clock
     s_axil_aclk : in    std_logic;
@@ -42,25 +45,18 @@ entity libre_ila_uart is
     uart_rx : in    std_logic;
     uart_tx : out   std_logic;
 
+    -- Probe Slave ^^DI ---------------------------------------------
+    -- Faces the master of the probed link, so it carries the port
+    -- directions of that link's slave.
+    -----------------------------------------------------------------
+
+    -- Probe Master ^^DO --------------------------------------------
+    -- Faces the slave of the probed link, every direction mirrored.
+    -----------------------------------------------------------------
+
     -- External tigger
     i_ext_trig : in    std_logic;
-    o_trig_out : out   std_logic;
-
-    -- Probe Input --------------------------------------------------
-    axis_in_aclk   : in    std_logic;
-    axis_in_tready : out   std_logic;
-    axis_in_tvalid : in    std_logic;
-    axis_in_tlast  : in    std_logic;
-    axis_in_tdata  : in    std_logic_vector(63 downto 0);
-    -----------------------------------------------------------------
-
-    -- Probe Output -------------------------------------------------
-    axis_out_aclk   : out   std_logic;
-    axis_out_tready : in    std_logic;
-    axis_out_tvalid : out   std_logic;
-    axis_out_tlast  : out   std_logic;
-    axis_out_tdata  : out   std_logic_vector(63 downto 0)
-    -----------------------------------------------------------------
+    o_trig_out : out   std_logic
   );
 end entity libre_ila_uart;
 
@@ -187,6 +183,7 @@ architecture rtl of libre_ila_uart is
   component libre_ila is
     generic (
       G_SAMP_CLK_FREQ     : integer;
+      G_AXIL_CLK_FREQ     : integer;
       G_EXTERNAL_TRIG     : integer;
       G_PROBE_WIDTH       : natural;
       G_SAMP_BUFF_DEPTH   : natural;
@@ -196,20 +193,16 @@ architecture rtl of libre_ila_uart is
     port (
       i_rst_sync : in    std_logic;
 
+      samp_aclk : in    std_logic;
+
       i_ext_trig : in    std_logic;
       o_trig_out : out   std_logic;
 
-      axis_in_aclk   : in    std_logic;
-      axis_in_tready : out   std_logic;
-      axis_in_tvalid : in    std_logic;
-      axis_in_tlast  : in    std_logic;
-      axis_in_tdata  : in    std_logic_vector(63 downto 0);
+      -- Probe slave ^^DI -------------------------------------------
+      ---------------------------------------------------------------
 
-      axis_out_aclk   : out   std_logic;
-      axis_out_tready : in    std_logic;
-      axis_out_tvalid : out   std_logic;
-      axis_out_tlast  : out   std_logic;
-      axis_out_tdata  : out   std_logic_vector(63 downto 0);
+      -- Probe master ^^DO ------------------------------------------
+      ---------------------------------------------------------------
 
       s_axil_aclk    : in    std_logic;
       s_axil_aresetn : in    std_logic;
@@ -293,8 +286,8 @@ begin
 
   libre_ila_inst : component libre_ila
     generic map (
-      -- Clock speed of the AXIS, used in plotting
       g_samp_clk_freq     => G_SAMP_CLK_FREQ,
+      g_axil_clk_freq     => G_AXIL_CLK_FREQ,
       g_external_trig     => G_EXTERNAL_TRIG,
       g_probe_width       => G_PROBE_WIDTH,
       g_samp_buff_depth   => G_SAMP_BUFF_DEPTH,
@@ -305,23 +298,18 @@ begin
     port map (
       i_rst_sync => i_rst_sync,
 
+      -- Sampling clock
+      samp_aclk => samp_aclk,
+
       -- External tigger
       i_ext_trig => i_ext_trig,
       o_trig_out => o_trig_out,
 
-      -- AXI4S_IN port
-      axis_in_aclk   => axis_in_aclk,
-      axis_in_tready => axis_in_tready,
-      axis_in_tvalid => axis_in_tvalid,
-      axis_in_tlast  => axis_in_tlast,
-      axis_in_tdata  => axis_in_tdata,
+      -- Probe Slave Mapping ^^MI -----------------------------------
+      ---------------------------------------------------------------
 
-      -- AXI4S_OUT port
-      axis_out_aclk   => axis_out_aclk,
-      axis_out_tready => axis_out_tready,
-      axis_out_tvalid => axis_out_tvalid,
-      axis_out_tlast  => axis_out_tlast,
-      axis_out_tdata  => axis_out_tdata,
+      -- Probe Master Mapping ^^MO ----------------------------------
+      ---------------------------------------------------------------
 
       -- AXI4Lite slave port
       s_axil_aclk    => s_axil_aclk,

@@ -1,11 +1,11 @@
 ####################################################################
 # File: default_portmap.csv
 # Author: Y.U.P. (paritkary25)
-# Last Modified: 2026-07-28 Tue 20:28
+# Last Modified: 2026-07-28 Tue 20:46
 #
 # Description: Default portmap for the AXI4S probe used in the LibreILA core code generation. 
 ####################################################################
-signal,width,type
+# signal,width,type
 axis_tdata,64,in
 axis_tlast,1,in
 axis_tvalid,1,in

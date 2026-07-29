@@ -89,22 +89,21 @@ architecture sim of tb is
   );
 
   signal i_rst_sync    : std_logic := '1';
-  signal axis_in_aclk  : std_logic := '0';
-  signal axis_out_aclk : std_logic;
+  signal samp_aclk     : std_logic := '0';
   signal s_axil_aclk   : std_logic := '0';
 
   signal i_ext_trig : std_logic := '0';
   signal o_trig_out : std_logic;
 
-  signal axis_in_tready : std_logic;
-  signal axis_in_tvalid : std_logic                                   := '0';
-  signal axis_in_tlast  : std_logic                                   := '0';
-  signal axis_in_tdata  : std_logic_vector(C_DATA_WIDTH - 1 downto 0) := (others => '0');
+  signal probe_slave_axis_tready : std_logic;
+  signal probe_slave_axis_tvalid : std_logic                                   := '0';
+  signal probe_slave_axis_tlast  : std_logic                                   := '0';
+  signal probe_slave_axis_tdata  : std_logic_vector(C_DATA_WIDTH - 1 downto 0) := (others => '0');
 
-  signal axis_out_tready : std_logic := '1';
-  signal axis_out_tvalid : std_logic;
-  signal axis_out_tlast  : std_logic;
-  signal axis_out_tdata  : std_logic_vector(C_DATA_WIDTH - 1 downto 0);
+  signal probe_master_axis_tready : std_logic := '1';
+  signal probe_master_axis_tvalid : std_logic;
+  signal probe_master_axis_tlast  : std_logic;
+  signal probe_master_axis_tdata  : std_logic_vector(C_DATA_WIDTH - 1 downto 0);
 
   -- Serial link between the DUT and the simulated "PC"
   signal dut_uart_rx : std_logic; -- driven by pc_uart_inst.tx
@@ -135,7 +134,7 @@ architecture sim of tb is
       C_S_AXIL_ADDR_WIDTH  : integer;
       G_UART_RX_FIFO_DEPTH : natural;
       G_UART_TX_FIFO_DEPTH : natural;
-      BAUD_RATE            : integer
+      G_BAUD_RATE          : integer
     );
     port (
       i_rst_sync : in    std_logic;
@@ -148,17 +147,16 @@ architecture sim of tb is
       i_ext_trig : in    std_logic;
       o_trig_out : out   std_logic;
 
-      axis_in_aclk   : in    std_logic;
-      axis_in_tready : out   std_logic;
-      axis_in_tvalid : in    std_logic;
-      axis_in_tlast  : in    std_logic;
-      axis_in_tdata  : in    std_logic_vector(63 downto 0);
+      samp_aclk               : in    std_logic;
+      probe_slave_axis_tready : out   std_logic;
+      probe_slave_axis_tvalid : in    std_logic;
+      probe_slave_axis_tlast  : in    std_logic;
+      probe_slave_axis_tdata  : in    std_logic_vector(63 downto 0);
 
-      axis_out_aclk   : out   std_logic;
-      axis_out_tready : in    std_logic;
-      axis_out_tvalid : out   std_logic;
-      axis_out_tlast  : out   std_logic;
-      axis_out_tdata  : out   std_logic_vector(63 downto 0)
+      probe_master_axis_tready : in    std_logic;
+      probe_master_axis_tvalid : out   std_logic;
+      probe_master_axis_tlast  : out   std_logic;
+      probe_master_axis_tdata  : out   std_logic_vector(63 downto 0)
     );
   end component libre_ila_uart;
 
@@ -386,7 +384,7 @@ begin
       c_s_axil_addr_width  => 32,
       g_uart_rx_fifo_depth => 64,
       g_uart_tx_fifo_depth => 64,
-      baud_rate            => C_BAUD_RATE
+      g_baud_rate          => C_BAUD_RATE
     )
     port map (
       i_rst_sync => i_rst_sync,
@@ -399,17 +397,16 @@ begin
       i_ext_trig => i_ext_trig,
       o_trig_out => o_trig_out,
 
-      axis_in_aclk   => axis_in_aclk,
-      axis_in_tready => axis_in_tready,
-      axis_in_tvalid => axis_in_tvalid,
-      axis_in_tlast  => axis_in_tlast,
-      axis_in_tdata  => axis_in_tdata,
+      samp_aclk               => samp_aclk,
+      probe_slave_axis_tready => probe_slave_axis_tready,
+      probe_slave_axis_tvalid => probe_slave_axis_tvalid,
+      probe_slave_axis_tlast  => probe_slave_axis_tlast,
+      probe_slave_axis_tdata  => probe_slave_axis_tdata,
 
-      axis_out_aclk   => axis_out_aclk,
-      axis_out_tready => axis_out_tready,
-      axis_out_tvalid => axis_out_tvalid,
-      axis_out_tlast  => axis_out_tlast,
-      axis_out_tdata  => axis_out_tdata
+      probe_master_axis_tready => probe_master_axis_tready,
+      probe_master_axis_tvalid => probe_master_axis_tvalid,
+      probe_master_axis_tlast  => probe_master_axis_tlast,
+      probe_master_axis_tdata  => probe_master_axis_tdata
     );
 
   pc_uart_inst : component uart
@@ -450,9 +447,9 @@ begin
 
     while true loop
 
-      axis_in_aclk <= '0';
+      samp_aclk <= '0';
       wait for C_AXIS_PERIOD / 2;
-      axis_in_aclk <= '1';
+      samp_aclk <= '1';
       wait for C_AXIS_PERIOD / 2;
 
     end loop;
@@ -486,7 +483,7 @@ begin
 
     for settle_index in 1 to 4 loop
 
-      wait until rising_edge(axis_in_aclk);
+      wait until rising_edge(samp_aclk);
 
     end loop;
 
@@ -528,7 +525,7 @@ begin
 
     for settle_index in 1 to 4 loop
 
-      wait until rising_edge(axis_in_aclk);
+      wait until rising_edge(samp_aclk);
 
     end loop;
 
@@ -554,29 +551,29 @@ begin
     -- pulses at the trigger point, TREADY backpressure elsewhere.
     for sample_index in 0 to C_SAMPLE_COUNT - 1 loop
 
-      wait until falling_edge(axis_in_aclk);
-      axis_in_tvalid <= '1';
-      axis_in_tdata  <= std_logic_vector(to_unsigned(sample_index, C_DATA_WIDTH));
+      wait until falling_edge(samp_aclk);
+      probe_slave_axis_tvalid <= '1';
+      probe_slave_axis_tdata  <= std_logic_vector(to_unsigned(sample_index, C_DATA_WIDTH));
 
       if (sample_index = C_TRIGGER_POINT) then
-        axis_in_tlast <= '1';
+        probe_slave_axis_tlast <= '1';
       else
-        axis_in_tlast <= '0';
+        probe_slave_axis_tlast <= '0';
       end if;
 
       if (sample_index mod 5 = 3 and sample_index /= C_TRIGGER_POINT) then
-        axis_out_tready <= '0';
+        probe_master_axis_tready <= '0';
       else
-        axis_out_tready <= '1';
+        probe_master_axis_tready <= '1';
       end if;
 
-      wait until rising_edge(axis_in_aclk);
+      wait until rising_edge(samp_aclk);
 
     end loop;
 
-    axis_in_tvalid  <= '0';
-    axis_in_tlast   <= '0';
-    axis_out_tready <= '1';
+    probe_slave_axis_tvalid  <= '0';
+    probe_slave_axis_tlast   <= '0';
+    probe_master_axis_tready <= '1';
 
     -- Poll STATUS over UART until DONE asserts
     for attempt in 0 to 63 loop

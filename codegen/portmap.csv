@@ -1,36 +1,66 @@
 ####################################################################
 # File: portmap.csv
 # Author: Y.U.P. (paritkary25)
-# Last Modified: 2026-07-28 Tue 20:06
+# Last Modified: 2026-07-28 Tue 20:46
 #
 # Description: The portmap used for the LibreILA core code generation is read from this file. The portmap is used to map the signals in the design to the ports in the generated code.
 ####################################################################
 
 # Columns: signal, width, type
-#   signal: The name of the signal/port in the design.
+#   signal: The name of the signal/port in the design. The generator emits
+#     it twice, as probe_slave_<signal> and probe_master_<signal>.
 #   width: The width of the signal/port in bits.
-#   type: The type of the port. It can be one of the following:
-#     - input: The port is an input on slave side of the design.
-#     - output: The port is an output on slave side of the design.
-#     - inout: The port is an inout on slave side of the design.
-# 
+#   type: The direction the port has on the probe_slave_ side, i.e. the side
+#     facing the master of the probed link. probe_master_ gets the mirror of
+#     it. It can be one of the following:
+#     - in: Driven by the probed link's master, so it enters on the slave
+#       side and leaves on the master side.
+#     - out: Driven by the probed link's slave, so it enters on the master
+#       side and leaves on the slave side. AXI4S TREADY is the example.
+#     - mon: Parallel tap. Slave side input only, no master port and no pass
+#       through, the core never drives it. Use it for a bus that cannot be
+#       spliced in series.
+#
+#   inout is not accepted. A signal assignment cannot pass a bidirectional
+#   line through: the core would become a second driver on the master side
+#   and nothing would propagate back. Splice on the fabric side of the IO
+#   buffer instead and list the signals the tristate is built from, e.g. for
+#   a QPI flash sio_o (driven data, in), sio_oe (turnaround, in) and sio_i
+#   (read data, out). That captures the turnaround too, which a pad probe
+#   cannot. Where the bus cannot be spliced at all, use 'mon'.
+#
 # The ports are packed in the order they are listed in this file. The
 # first port listed will be the least significant bits of the packed port.
-# This same order is used for plotting the signals in the waveform viewer. 
+# This same order is used for plotting the signals in the waveform viewer.
 #
 # Blank lines and lines starting with '#' are ignored.
-# templates/axi4s_min_portmap.csv holds the stock 64-bit AXI4S probe.
+# templates/default_portmap.csv holds the stock 64-bit AXI4S probe.
 #
 # Example, the reference AXI4S configuration used by the tests and drivers:
-#   signal,width,type
+#   # signal,width,type
 #   axis_tdata,64,in
 #   axis_tlast,1,in
 #   axis_tvalid,1,in
 #   axis_tready,1,out
-# 
-# Example, IIC
-#   signal,width,type
-#   sda,1,inout
-#   scl,1,out
-
-signal,width,type
+#
+# Example, a QPI flash spliced on the fabric side of the IO buffer. The
+# bidirectional SIO lines are listed as the three signals the tristate is
+# built from, so the turnaround is captured and can be triggered on:
+#   # signal,width,type
+#   qspi_cs_n,1,in
+#   qspi_sck,1,in
+#   qspi_sio_o,4,in
+#   qspi_sio_oe,1,in
+#   qspi_sio_i,4,out
+#
+# Example, the same flash bus tapped in parallel because the controller only
+# exposes a single bidirectional port. No pass through, capture only:
+#   # signal,width,type
+#   qspi_cs_n,1,mon
+#   qspi_sck,1,mon
+#   qspi_sio,4,mon
+# signal,width,type
+axis_tdata,64,in
+axis_tlast,1,in
+axis_tvalid,1,in
+axis_tready,1,out

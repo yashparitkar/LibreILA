@@ -69,22 +69,21 @@ architecture sim of tb is
   constant C_TRIG_IDX_ADDR      : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 6 * C_AXIL_WORD_BYTES, 32));
 
   signal i_rst_sync    : std_logic := '1';
-  signal axis_in_aclk  : std_logic := '0';
-  signal axis_out_aclk : std_logic := '0';
+  signal samp_aclk     : std_logic := '0';
   signal s_axil_aclk   : std_logic := '0';
 
   signal i_ext_trig : std_logic := '0';
   signal o_trig_out : std_logic;
 
-  signal axis_in_tready : std_logic;
-  signal axis_in_tvalid : std_logic                                   := '0';
-  signal axis_in_tlast  : std_logic                                   := '0';
-  signal axis_in_tdata  : std_logic_vector(C_DATA_WIDTH - 1 downto 0) := (others => '0');
+  signal probe_slave_axis_tready : std_logic;
+  signal probe_slave_axis_tvalid : std_logic                                   := '0';
+  signal probe_slave_axis_tlast  : std_logic                                   := '0';
+  signal probe_slave_axis_tdata  : std_logic_vector(C_DATA_WIDTH - 1 downto 0) := (others => '0');
 
-  signal axis_out_tready : std_logic := '1';
-  signal axis_out_tvalid : std_logic;
-  signal axis_out_tlast  : std_logic;
-  signal axis_out_tdata  : std_logic_vector(C_DATA_WIDTH - 1 downto 0);
+  signal probe_master_axis_tready : std_logic := '1';
+  signal probe_master_axis_tvalid : std_logic;
+  signal probe_master_axis_tlast  : std_logic;
+  signal probe_master_axis_tdata  : std_logic_vector(C_DATA_WIDTH - 1 downto 0);
 
   signal s_axil_aresetn : std_logic                     := '0';
   signal s_axil_awaddr  : std_logic_vector(31 downto 0) := (others => '0');
@@ -213,40 +212,39 @@ begin
       g_samp_buff_depth => C_DEPTH
     )
     port map (
-      i_rst_sync      => i_rst_sync,
-      axis_in_aclk    => axis_in_aclk,
-      axis_out_aclk   => axis_out_aclk,
-      i_ext_trig      => i_ext_trig,
-      o_trig_out      => o_trig_out,
-      axis_in_tready  => axis_in_tready,
-      axis_in_tvalid  => axis_in_tvalid,
-      axis_in_tlast   => axis_in_tlast,
-      axis_in_tdata   => axis_in_tdata,
-      axis_out_tready => axis_out_tready,
-      axis_out_tvalid => axis_out_tvalid,
-      axis_out_tlast  => axis_out_tlast,
-      axis_out_tdata  => axis_out_tdata,
-      s_axil_aclk     => s_axil_aclk,
-      s_axil_aresetn  => s_axil_aresetn,
-      s_axil_awaddr   => s_axil_awaddr,
-      s_axil_awprot   => s_axil_awprot,
-      s_axil_awvalid  => s_axil_awvalid,
-      s_axil_awready  => s_axil_awready,
-      s_axil_wdata    => s_axil_wdata,
-      s_axil_wstrb    => s_axil_wstrb,
-      s_axil_wvalid   => s_axil_wvalid,
-      s_axil_wready   => s_axil_wready,
-      s_axil_bresp    => s_axil_bresp,
-      s_axil_bvalid   => s_axil_bvalid,
-      s_axil_bready   => s_axil_bready,
-      s_axil_araddr   => s_axil_araddr,
-      s_axil_arprot   => s_axil_arprot,
-      s_axil_arvalid  => s_axil_arvalid,
-      s_axil_arready  => s_axil_arready,
-      s_axil_rdata    => s_axil_rdata,
-      s_axil_rresp    => s_axil_rresp,
-      s_axil_rvalid   => s_axil_rvalid,
-      s_axil_rready   => s_axil_rready
+      i_rst_sync               => i_rst_sync,
+      samp_aclk                => samp_aclk,
+      i_ext_trig               => i_ext_trig,
+      o_trig_out               => o_trig_out,
+      probe_slave_axis_tready  => probe_slave_axis_tready,
+      probe_slave_axis_tvalid  => probe_slave_axis_tvalid,
+      probe_slave_axis_tlast   => probe_slave_axis_tlast,
+      probe_slave_axis_tdata   => probe_slave_axis_tdata,
+      probe_master_axis_tready => probe_master_axis_tready,
+      probe_master_axis_tvalid => probe_master_axis_tvalid,
+      probe_master_axis_tlast  => probe_master_axis_tlast,
+      probe_master_axis_tdata  => probe_master_axis_tdata,
+      s_axil_aclk              => s_axil_aclk,
+      s_axil_aresetn           => s_axil_aresetn,
+      s_axil_awaddr            => s_axil_awaddr,
+      s_axil_awprot            => s_axil_awprot,
+      s_axil_awvalid           => s_axil_awvalid,
+      s_axil_awready           => s_axil_awready,
+      s_axil_wdata             => s_axil_wdata,
+      s_axil_wstrb             => s_axil_wstrb,
+      s_axil_wvalid            => s_axil_wvalid,
+      s_axil_wready            => s_axil_wready,
+      s_axil_bresp             => s_axil_bresp,
+      s_axil_bvalid            => s_axil_bvalid,
+      s_axil_bready            => s_axil_bready,
+      s_axil_araddr            => s_axil_araddr,
+      s_axil_arprot            => s_axil_arprot,
+      s_axil_arvalid           => s_axil_arvalid,
+      s_axil_arready           => s_axil_arready,
+      s_axil_rdata             => s_axil_rdata,
+      s_axil_rresp             => s_axil_rresp,
+      s_axil_rvalid            => s_axil_rvalid,
+      s_axil_rready            => s_axil_rready
     );
 
   p_axis_clk : process is
@@ -254,9 +252,9 @@ begin
 
     while true loop
 
-      axis_in_aclk <= '0';
+      samp_aclk <= '0';
       wait for C_AXIS_PERIOD / 2;
-      axis_in_aclk <= '1';
+      samp_aclk <= '1';
       wait for C_AXIS_PERIOD / 2;
 
     end loop;
@@ -295,7 +293,7 @@ begin
 
     for settle_index in 1 to 4 loop
 
-      wait until rising_edge(axis_in_aclk);
+      wait until rising_edge(samp_aclk);
 
     end loop;
 
@@ -316,7 +314,7 @@ begin
 
     for settle_index in 1 to 4 loop
 
-      wait until rising_edge(axis_in_aclk);
+      wait until rising_edge(samp_aclk);
 
     end loop;
 
@@ -325,7 +323,7 @@ begin
 
     for settle_index in 1 to 16 loop
 
-      wait until rising_edge(axis_in_aclk);
+      wait until rising_edge(samp_aclk);
 
     end loop;
 
@@ -339,18 +337,18 @@ begin
     -- STEP 2: Stream samples and issue FORCE TRIGGER (before natural trigger at sample)
     for sample_index in 0 to C_SAMPLE_COUNT - 1 loop
 
-      wait until falling_edge(axis_in_aclk);
-      axis_in_tvalid <= '1';
-      axis_in_tdata  <= std_logic_vector(to_unsigned(sample_index, C_DATA_WIDTH));
+      wait until falling_edge(samp_aclk);
+      probe_slave_axis_tvalid <= '1';
+      probe_slave_axis_tdata  <= std_logic_vector(to_unsigned(sample_index, C_DATA_WIDTH));
 
       -- Natural condition occurs ONLY at sample 80
       if (sample_index = C_TRIGGER_POINT) then
-        axis_in_tlast <= '1';
+        probe_slave_axis_tlast <= '1';
       else
-        axis_in_tlast <= '0';
+        probe_slave_axis_tlast <= '0';
       end if;
 
-      axis_out_tready <= '1';
+      probe_master_axis_tready <= '1';
       i_ext_trig      <= '0';
 
       -- Inject FORCE TRIGGER write to Arm_FT (0x04) when sample_index matches C_FORCE_TRIG_POINT
@@ -360,14 +358,14 @@ begin
         axil_arm(s_axil_aclk, s_axil_awaddr, s_axil_awvalid, s_axil_wdata, s_axil_wvalid, s_axil_bready, s_axil_bvalid, s_axil_awready, s_axil_wready, C_ARM_FT_ADDR, x"00000001");
       end if;
 
-      wait until rising_edge(axis_in_aclk);
+      wait until rising_edge(samp_aclk);
 
     end loop;
 
     i_ext_trig      <= '0';
-    axis_in_tvalid  <= '0';
-    axis_in_tlast   <= '0';
-    axis_out_tready <= '1';
+    probe_slave_axis_tvalid  <= '0';
+    probe_slave_axis_tlast   <= '0';
+    probe_master_axis_tready <= '1';
 
     -- STEP 3: Wait for DONE status bit
     for attempt in 0 to 511 loop

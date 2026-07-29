@@ -2,12 +2,13 @@
 -- File: libre_ila.vhdl
 -- Author: Y.U.P. (paritkary25)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-07-28 Tue 20:07
+-- Last Modified: 2026-07-29 Wed 12:55
 --
--- Description: An ILA for AXI4-Stream
+-- Description: A generic ILA, the probe is described by codegen/portmap.csv
 -- Usage:
---   * The AXI4Stream ports are pass through ports which are probed and saved
---     to a buffer
+--   * The probe ports are pass through ports which are probed and saved
+--     to a buffer. probe_slave_* faces the master of the probed link,
+--     probe_master_* faces its slave.
 --   * Configure the trigger and arm using the AXI4Lite port
 --   * The buffer is read back using AXI4Lite port
 --   * The data can be read back using the C driver provided
@@ -32,24 +33,20 @@ entity libre_ila is
   port (
     i_rst_sync : in    std_logic;
 
+    -- Sampling clock, the clock of the domain the probe lives in
+    samp_aclk : in    std_logic;
+
     -- External tigger
     i_ext_trig : in    std_logic;
     o_trig_out : out   std_logic;
 
-    -- Probe Input --------------------------------------------------
-    axis_in_aclk   : in    std_logic;
-    axis_in_tready : out   std_logic;
-    axis_in_tvalid : in    std_logic;
-    axis_in_tlast  : in    std_logic;
-    axis_in_tdata  : in    std_logic_vector(63 downto 0);
+    -- Probe Slave ^^DI ---------------------------------------------
+    -- Faces the master of the probed link, so it carries the port
+    -- directions of that link's slave.
     -----------------------------------------------------------------
 
-    -- Probe Output -------------------------------------------------
-    axis_out_aclk   : out   std_logic;
-    axis_out_tready : in    std_logic;
-    axis_out_tvalid : out   std_logic;
-    axis_out_tlast  : out   std_logic;
-    axis_out_tdata  : out   std_logic_vector(63 downto 0);
+    -- Probe Master ^^DO --------------------------------------------
+    -- Faces the slave of the probed link, every direction mirrored.
     -----------------------------------------------------------------
 
     -- AXI4Lite slave port
@@ -182,15 +179,15 @@ architecture rtl of libre_ila is
 
   signal ila_state : std_logic_vector(1 downto 0);
 
-  signal ila_armed_axis : std_logic; -- done in the axis domain
+  signal ila_armed_samp : std_logic; -- done in the samp domain
   signal ila_armed_sync : std_logic;
   signal ila_armed_axil : std_logic; -- done in the axil domain
 
-  signal ila_trigd_axis : std_logic; -- done in the axis domain
+  signal ila_trigd_samp : std_logic; -- done in the samp domain
   signal ila_trigd_sync : std_logic;
   signal ila_trigd_axil : std_logic; -- done in the axil domain
 
-  signal ila_done_axis : std_logic; -- done in the axis domain
+  signal ila_done_samp : std_logic; -- done in the samp domain
   signal ila_done_sync : std_logic;
   signal ila_done_axil : std_logic; -- done in the axil domain
   -------------------------------------------------------------------
@@ -236,7 +233,7 @@ architecture rtl of libre_ila is
 
   -- Control signals interface --------------------------------------
   signal arm_toggler_axilite : std_logic; -- in the axilite domain
-  signal arm_axis            : std_logic; -- synchronised in axis
+  signal arm_samp            : std_logic; -- synchronised in samp
   signal arm_sync            : std_logic_vector(2 downto 0);
   -------------------------------------------------------------------
 
@@ -305,22 +302,15 @@ begin
     severity failure;
   -------------------------------------------------------------------
 
-  -- Shorting of the ports ------------------------------------------
-  axis_out_aclk   <= axis_in_aclk;
-  axis_out_tvalid <= axis_in_tvalid;
-  axis_out_tdata  <= axis_in_tdata;
-  axis_out_tlast  <= axis_in_tlast;
-  axis_in_tready  <= axis_out_tready;
+  -- Shorting of the probe slave and master ports ^^SH ---------------
   -------------------------------------------------------------------
 
-  -- MUXING of the ports --------------------------------------------
-  -- The probe word, TDATA in the low bits and the signalling ports right
-  -- above it. This concatenation is the single definition of the probe bit
-  -- order, the sample buffer and the trigger vector both inherit it.
-  w_probe <= axis_out_tready
-             & axis_in_tvalid
-             & axis_in_tlast
-             & axis_in_tdata;
+  -- MUXING of the probe ports ^^MX ---------------------------------
+  -- The probe word, packed LSB first in the order the signals are listed
+  -- in portmap.csv. This concatenation is the single definition of the
+  -- probe bit order, the sample buffer and the trigger vector both
+  -- inherit it.
+  -------------------------------------------------------------------
 
   -- Zero padded up to the lane boundary on its way into the buffer
   w_wr_data <= std_logic_vector(resize(unsigned(w_probe), w_wr_data'length));
@@ -349,10 +339,10 @@ begin
 
   g_ext_trig_1 : if G_EXTERNAL_TRIG = 1 generate
 
-    p_edge_detect : process (axis_in_aclk) is
+    p_edge_detect : process (samp_aclk) is
     begin
 
-      if rising_edge(axis_in_aclk) then
+      if rising_edge(samp_aclk) then
         if (i_rst_sync = '1') then  -- Optional reset
           --  ext_trig_prev <= '0';
           ext_trig <= '0';
@@ -371,17 +361,17 @@ begin
   ------------------------------------------------------------------
 
   -- Write process inside the FIFO ----------------------------------
-  p_write : process (axis_in_aclk) is
+  p_write : process (samp_aclk) is
   begin
 
-    if rising_edge(axis_in_aclk) then
+    if rising_edge(samp_aclk) then
       if (i_rst_sync = '1') then
         r_wr_idx <= (others => '0');
 
       -- For the ILA purpose, we are sampling on all rising edges,
       -- user can optionally make this sample only valid handshakes.
       -- Example,
-      -- elsif (axis_in_tvalid = '1' and axis_out_tready = '1') then
+      -- elsif (probe_slave_tvalid = '1' and probe_master_tready = '1') then
       elsif (en_wr = '1') then
 
         for lane in 0 to C_N_LANES - 1 loop
@@ -399,10 +389,10 @@ begin
   -------------------------------------------------------------------
 
   -- ILA process ----------------------------------------------------
-  p_ila : process (axis_in_aclk) is
+  p_ila : process (samp_aclk) is
   begin
 
-    if rising_edge(axis_in_aclk) then
+    if rising_edge(samp_aclk) then
       if (i_rst_sync = '1') then
         -- Reseting the trigger positions
         trig_idx             <= (others => '0');
@@ -424,7 +414,7 @@ begin
             trig_idx             <= (others => '0');
             post_trig_sample_cnt <= (others => '0');
 
-            if (arm_axis = '1') then
+            if (arm_samp = '1') then
               ila_state <= ILA_ARMED;
             end if;
 
@@ -432,7 +422,7 @@ begin
 
             en_wr <= '1';
 
-            if ((trig = '1') or (arm_axis = '1')) then
+            if ((trig = '1') or (arm_samp = '1')) then
               trig_idx             <= r_wr_idx;
               ila_state            <= ILA_TRIGD;
               post_trig_sample_tgt <= G_SAMP_BUFF_DEPTH - trig_tgt - 1;
@@ -453,7 +443,7 @@ begin
 
           when ILA_DONE =>
 
-            if (arm_axis = '1') then
+            if (arm_samp = '1') then
               ila_state <= ILA_ARMED;
             end if;
 
@@ -471,10 +461,10 @@ begin
   -------------------------------------------------------------------
 
   -- SIGNAL synchroniser process ---------------------------------------
-  p_signal_cdc : process (axis_in_aclk) is
+  p_signal_cdc : process (samp_aclk) is
   begin
 
-    if (rising_edge(axis_in_aclk)) then
+    if (rising_edge(samp_aclk)) then
       if (i_rst_sync = '1') then
         arm_sync <= (others => '0');
       else
@@ -484,15 +474,15 @@ begin
 
   end process p_signal_cdc;
 
-  arm_axis <= arm_sync(2) xor arm_sync(1);
+  arm_samp <= arm_sync(2) xor arm_sync(1);
   -------------------------------------------------------------------
 
   -- STATE synchroniser process --------------------------------------
-  ila_armed_axis <= '1' when ila_state = ILA_ARMED else
+  ila_armed_samp <= '1' when ila_state = ILA_ARMED else
                     '0';
-  ila_trigd_axis <= '1' when ila_state = ILA_TRIGD else
+  ila_trigd_samp <= '1' when ila_state = ILA_TRIGD else
                     '0';
-  ila_done_axis  <= '1' when ila_state = ILA_DONE else
+  ila_done_samp  <= '1' when ila_state = ILA_DONE else
                     '0';
 
   p_state_cdc : process (s_axil_aclk) is
@@ -509,13 +499,13 @@ begin
         ila_done_axil <= '0';
         ila_done_sync <= '0';
       else
-        ila_armed_sync <= ila_armed_axis;
+        ila_armed_sync <= ila_armed_samp;
         ila_armed_axil <= ila_armed_sync;
 
-        ila_trigd_sync <= ila_trigd_axis;
+        ila_trigd_sync <= ila_trigd_samp;
         ila_trigd_axil <= ila_trigd_sync;
 
-        ila_done_sync <= ila_done_axis;
+        ila_done_sync <= ila_done_samp;
         ila_done_axil <= ila_done_sync;
       end if;
     end if;

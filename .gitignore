@@ -17,6 +17,7 @@ ref.*
 # work and gen folders
 work
 gen
+gen_axis
 
 # Simulation output
 *.vcd
