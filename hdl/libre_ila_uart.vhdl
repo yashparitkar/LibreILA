@@ -2,7 +2,7 @@
 -- File: libre_ila_uart.vhdl
 -- Author: Y.U.P. (yashparitkar)
 -- Created: 2026-07-21 Tue 20:12
--- Last Modified: 2026-07-29 Wed 12:43
+-- Last Modified: 2026-07-29 Wed 21:05
 --
 -- Description: This is a wrapper for the libre_ila. This exposes two UART
 -- pins through which the ILA can be controller allowing the external debug
@@ -23,14 +23,14 @@ entity libre_ila_uart is
   generic (
     G_SAMP_CLK_FREQ      : integer := 100_000_000;
     G_AXIL_CLK_FREQ      : integer := 100_000_000;
-    G_EXTERNAL_TRIG      : integer := 0;      -- 1 for external trigger pin
-    G_PROBE_WIDTH        : natural := 67;     -- Keep it a multiple of 32 for best results
-    G_SAMP_BUFF_DEPTH    : natural := 2048;   -- Keep it a power of two for best results
-    G_UART_RX_FIFO_DEPTH : natural := 1024;   -- Depth of the FIFO for UART RX
-    G_UART_TX_FIFO_DEPTH : natural := 1024;   -- Depth of the FIFO for UART TX
+    G_EXTERNAL_TRIG      : integer := 0;       -- 1 for external trigger pin
+    G_PROBE_WIDTH        : natural := 67;      -- Keep it a multiple of 32 for best results
+    G_SAMP_BUFF_DEPTH    : natural := 2048;    -- Keep it a power of two for best results
+    G_UART_RX_FIFO_DEPTH : natural := 1024;    -- Depth of the FIFO for UART RX
+    G_UART_TX_FIFO_DEPTH : natural := 1024;    -- Depth of the FIFO for UART TX
     G_BAUD_RATE          : integer := 115_200; -- Baud rate for UART communication
-    C_S_AXIL_DATA_WIDTH  : integer := 32;     -- DONT CHANGE
-    C_S_AXIL_ADDR_WIDTH  : integer := 32      -- DONT CHANGE
+    C_S_AXIL_DATA_WIDTH  : integer := 32;      -- DONT CHANGE
+    C_S_AXIL_ADDR_WIDTH  : integer := 32       -- DONT CHANGE
   );
   port (
     i_rst_sync : in    std_logic;
@@ -100,6 +100,7 @@ architecture rtl of libre_ila_uart is
   signal uart_rx_fifo_rd_en   : std_logic;
   signal uart_rx_fifo_rd_data : std_logic_vector(7 downto 0);
   signal uart_rx_fifo_nempty  : std_logic;
+  signal uart_rx_fifo_nfull   : std_logic;
 
   -- o_nempty/o_rd_data lag a pop by one cycle, so the byte must not be
   -- re-examined on that cycle.
@@ -113,6 +114,31 @@ architecture rtl of libre_ila_uart is
   signal word_addr   : std_logic_vector(31 downto 0);
   signal word_data   : std_logic_vector(31 downto 0);
   signal req_type    : std_logic; -- '0' for read, '1' for write
+
+  -- Request sanity checks ------------------------------------------
+  -- The core's AXI4Lite decoder truncates the address it is handed: it
+  -- looks at araddr(ADDR_LSB+OPT_MEM_ADDR_BITS downto ADDR_LSB) and
+  -- nothing else, so the low two bits are dropped rather than rejected
+  -- and rresp/bresp are always OKAY. A misaligned request therefore
+  -- lands silently on a real register, and register 1 is Arm_FT, so a
+  -- stray write can arm the ILA or clobber the trigger configuration.
+  -- Nothing downstream can catch this, so the wrapper does.
+  --
+  -- Range checking is deliberately left to the host. It would need a
+  -- comparator as wide as the address to buy what a driver works out
+  -- for free from the probe width and the buffer depth.
+  --
+  -- req_ok is the verdict for one packet, latched once the address is
+  -- in so it cannot move while the transfer runs, and reported in the
+  -- valid bit of the response header. A request that fails it is
+  -- answered but never put on the AXI bus.
+  signal req_ok : std_logic;
+
+  -- The RX FIFO silently drops a byte the uart hands it while full, and
+  -- a dropped byte desyncs the packet, so latch it rather than let the
+  -- watchdog report it as a bare timeout.
+  signal rx_overflow     : std_logic;
+  signal rx_overflow_clr : std_logic;
 
   -- AXI4Lite read process signals ----------------------------------
   constant ARP_IDLE : std_logic_vector(1 downto 0) := "00";
@@ -363,7 +389,7 @@ begin
       i_wr_data  => uart_data_out,
       i_rd_en    => uart_rx_fifo_rd_en,
       o_rd_data  => uart_rx_fifo_rd_data,
-      o_nfull    => open,
+      o_nfull    => uart_rx_fifo_nfull,
       o_nempty   => uart_rx_fifo_nempty
     );
 
@@ -407,6 +433,36 @@ begin
 
   -------------------------------------------------------------------
 
+  -- RX FIFO overflow process ---------------------------------------
+  -- The uart writes into the RX FIFO unconditionally, so a byte handed
+  -- over while the FIFO is full is simply gone and the packet it
+  -- belonged to is short by a byte from there on. Latch that until the
+  -- next packet reports it.
+  --
+  -- Detection sits above the clear so an overflow landing on the same
+  -- cycle as the clear survives to be reported: losing the report of a
+  -- dropped byte is worse than reporting it one packet late.
+  --
+  -- o_nfull lags a push by a cycle, so a byte dropped in that shadow is
+  -- missed. This is a best effort detector, a clear signal means bytes
+  -- were dropped, it does not promise none were.
+  p_rx_overflow : process (s_axil_aclk) is
+  begin
+
+    if rising_edge(s_axil_aclk) then
+      if (i_rst_sync = '1') then
+        rx_overflow <= '0';
+      elsif ((uart_data_out_stb = '1') and (uart_rx_fifo_nfull = '0')) then
+        rx_overflow <= '1';
+      elsif (rx_overflow_clr = '1') then
+        rx_overflow <= '0';
+      end if;
+    end if;
+
+  end process p_rx_overflow;
+
+  -------------------------------------------------------------------
+
   -- Main process ---------------------------------------------------
   -- Handles the main logic of the wrapper. This includes reading and
   -- writing to the UART FIFOs, and handling the AXI4Lite read and
@@ -430,6 +486,8 @@ begin
         byte_count            <= (others => '0');
         axil_rd_req           <= '0';
         axil_wr_req           <= '0';
+        req_ok                <= '1';
+        rx_overflow_clr       <= '0';
       else
         -- Default values
         uart_tx_fifo_wr_en    <= '0';
@@ -437,6 +495,7 @@ begin
         uart_rx_fifo_rd_en    <= '0';
         wdt_reset             <= '0';
         uart_rx_fifo_rd_en_d1 <= '0';
+        rx_overflow_clr       <= '0';
 
         case iuw_state is
 
@@ -484,7 +543,23 @@ begin
                 byte_count                                                            <= byte_count + 1;
               end if;
             else
-              -- Address received, move to header frame preparation
+              -- Address received, judge the request and move to header
+              -- frame preparation. word_addr has settled by now, its last
+              -- byte landed on the cycle byte_count reached 4.
+              --
+              -- Alignment is judged on the base address alone: the
+              -- transfer advances it by four per word, so bits 1:0 cannot
+              -- change once the base is in.
+              if ((word_addr(1 downto 0) = "00") and (rx_overflow = '0')) then
+                req_ok <= '1';
+              else
+                req_ok <= '0';
+              end if;
+
+              -- The verdict has taken a copy, so let the next packet
+              -- report an overflow of its own
+              rx_overflow_clr <= '1';
+
               wdt_reset  <= '1';
               byte_count <= (others => '0');
               iuw_state  <= IUW_HDR;
@@ -505,7 +580,8 @@ begin
 
                 when "0001" =>
 
-                  uart_tx_fifo_wr_data <= '1' & std_logic_vector(word_target);
+                  -- The valid bit carries the verdict on this request
+                  uart_tx_fifo_wr_data <= req_ok & std_logic_vector(word_target);
 
                 when "0010" =>
 
@@ -553,16 +629,26 @@ begin
 
                 when TXN_FETCH =>
 
-                  -- Request AXI4Lite Read process
-                  axil_rd_req  <= '1';
-                  axil_rd_addr <= word_addr;
+                  -- Request AXI4Lite Read process. A request that failed
+                  -- the sanity checks is answered with zeros instead, so
+                  -- the reply still carries the number of words its
+                  -- header promised, but it never reaches the AXI bus.
+                  if (req_ok = '1') then
+                    axil_rd_req  <= '1';
+                    axil_rd_addr <= word_addr;
+                  end if;
 
-                  if (axil_rd_done = '1') then
+                  if ((axil_rd_done = '1') or (req_ok = '0')) then
                     axil_rd_req <= '0';
                     wdt_reset   <= '1';
-                    word_data   <= axil_rd_data;
                     txn_side    <= TXN_WRITE;
                     byte_count  <= (others => '0');
+
+                    if (req_ok = '1') then
+                      word_data <= axil_rd_data;
+                    else
+                      word_data <= (others => '0');
+                    end if;
                   end if;
 
                 when TXN_WRITE =>
@@ -622,17 +708,25 @@ begin
                       byte_count                                                        <= byte_count + 1;
                     end if;
                   else
-                    -- All bytes received, request AXI4Lite Write process
-                    axil_wr_req  <= '1';
-                    axil_wr_addr <= word_addr;
-                    axil_wr_data <= word_data;
-                    txn_side     <= TXN_WRITE;
+                    -- All bytes received, request AXI4Lite Write process.
+                    -- A request that failed the sanity checks still has
+                    -- its payload drained, leaving those bytes in the
+                    -- FIFO would let the next IUW_IDLE mistake one of
+                    -- them for a sync byte and act on the garbage packet
+                    -- behind it. It just never reaches the AXI bus.
+                    if (req_ok = '1') then
+                      axil_wr_req  <= '1';
+                      axil_wr_addr <= word_addr;
+                      axil_wr_data <= word_data;
+                    end if;
+
+                    txn_side <= TXN_WRITE;
                   end if;
 
                 when TXN_WRITE =>
 
                   -- Wait for AXI4Lite Write process completion
-                  if (axil_wr_done = '1') then
+                  if ((axil_wr_done = '1') or (req_ok = '0')) then
                     axil_wr_req <= '0';
                     word_count  <= word_count + 1;
                     word_addr   <= std_logic_vector(unsigned(word_addr) + 4);

@@ -35,7 +35,7 @@ architecture sim of tb is
   constant C_AXIL_PERIOD   : time    := 10 ns;
   constant C_AXIL_CLK_FREQ : integer := 100_000_000;
   -- Standard RS232 baud rate.
-  constant C_BAUD_RATE : integer := 8*230_400;
+  constant C_BAUD_RATE : integer := 8 * 230_400;
 
   constant C_TRIG_IDX      : natural := 3;
   constant C_TRIGGER_POINT : natural := 80;
@@ -88,9 +88,9 @@ architecture sim of tb is
     7 => x"00000000"
   );
 
-  signal i_rst_sync    : std_logic := '1';
-  signal samp_aclk     : std_logic := '0';
-  signal s_axil_aclk   : std_logic := '0';
+  signal i_rst_sync  : std_logic := '1';
+  signal samp_aclk   : std_logic := '0';
+  signal s_axil_aclk : std_logic := '0';
 
   signal i_ext_trig : std_logic := '0';
   signal o_trig_out : std_logic;
@@ -475,6 +475,13 @@ begin
     variable status_word : t_word_array(0 to 0);
     variable magic_word  : t_word_array(0 to 0);
     variable samp_words  : t_word_array(0 to C_SAMP_WORDS - 1);
+    variable hdr_byte    : std_logic_vector(7 downto 0);
+
+    -- C_TRIG_POS_ADDR with the low two bits set. The core's decoder drops
+    -- those bits, so if the wrapper let this through it would land on
+    -- C_TRIG_POS_ADDR itself.
+    constant C_MISALIGNED_ADDR : std_logic_vector(31 downto 0) :=
+                                                                  std_logic_vector(unsigned(C_TRIG_POS_ADDR) or to_unsigned(2, 32));
 
   begin
 
@@ -522,6 +529,53 @@ begin
         severity error;
 
     end loop;
+
+    -- A misaligned write must be refused, not aliased onto a real
+    -- register. Built byte by byte rather than through uart_ila_write,
+    -- because the point is to send a packet that procedure would never
+    -- produce and to read the valid bit instead of asserting it.
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, x"55");
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, x"81"); -- write, 1 word
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, C_MISALIGNED_ADDR(31 downto 24));
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, C_MISALIGNED_ADDR(23 downto 16));
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, C_MISALIGNED_ADDR(15 downto 8));
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, C_MISALIGNED_ADDR(7 downto 0));
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, x"DE");
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, x"AD");
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, x"BE");
+    pc_tx_byte(s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack, x"EF");
+
+    pc_rx_byte(s_axil_aclk, pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty, hdr_byte);
+    assert hdr_byte = x"AA"
+      report "06_sim_libre_ila_uart: bad sync in the rejected request's header"
+      severity error;
+
+    pc_rx_byte(s_axil_aclk, pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty, hdr_byte);
+    assert hdr_byte(7) = '0'
+      report "06_sim_libre_ila_uart: misaligned request was not rejected"
+      severity error;
+    assert hdr_byte(6 downto 0) = "0000001"
+      report "06_sim_libre_ila_uart: word count echo lost on the rejected request"
+      severity error;
+
+    -- Drain the address echo, a rejected request still answers in full
+    for i in 0 to 3 loop
+
+      pc_rx_byte(s_axil_aclk, pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty, hdr_byte);
+
+    end loop;
+
+    -- The register the truncated address would have hit must be untouched
+    uart_ila_read(
+                  s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
+                  pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
+                  C_TRIG_POS_ADDR, 1, status_word
+                );
+
+    assert status_word(0) = std_logic_vector(to_unsigned(C_TRIG_IDX, 32))
+      report "06_sim_libre_ila_uart: misaligned write reached the register file, trig pos is now 0x"
+             & to_hstring(status_word(0))
+      severity error;
 
     for settle_index in 1 to 4 loop
 

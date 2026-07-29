@@ -19,6 +19,10 @@ work
 gen
 gen_axis
 
+# python bytecode, the host side tests import the driver on every run
+__pycache__/
+*.pyc
+
 # Simulation output
 *.vcd
 *.ghw

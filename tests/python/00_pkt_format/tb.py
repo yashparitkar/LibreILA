@@ -1,0 +1,311 @@
+#####################################################################
+# File: tb.py
+# Author: Y.U.P. (yashparitkar)
+# Created: 2026-07-29 Wed 20:35
+# Last Modified: 2026-07-29 Wed 20:35
+#
+# Description: Packet format test for the python driver
+#   Checks drivers/python/driver.py against a model of the wrapper's
+#   packet parser. This is a host side test, there is no GHDL and no
+#   generated core involved, so it runs anywhere python does.
+#####################################################################
+
+import os
+import sys
+import types
+import unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "drivers", "python"))
+
+# driver.py imports pyserial at module scope and this test never opens a real
+# port, so a stub stands in for it. Keeps the test free of the pyserial
+# dependency and keeps a stray /dev node from ever being touched.
+_pending_port = None
+
+def _fake_serial(port, baudrate=115200, timeout=None):
+    """
+    _fake_serial: Stand in for serial.Serial.
+
+    port: Ignored, no port is opened.
+    baudrate: Ignored.
+    timeout: Ignored.
+
+    returns: The FakeWrapper the test staged in _pending_port.
+    """
+    return _pending_port
+
+_serial_stub        = types.ModuleType("serial")
+_serial_stub.Serial = _fake_serial
+sys.modules["serial"] = _serial_stub
+
+import driver
+
+class FakeWrapper:
+    """
+    FakeWrapper: A byte level model of p_main in hdl/libre_ila_uart.vhdl.
+
+    IUW_IDLE drops every byte that is not 0x55, IUW_REQ takes the R/W bit and
+    the 7 bit word count, IUW_ADDR takes four address bytes MSB first, IUW_HDR
+    emits 0xAA, the valid bit with the word count and the address, and then
+    IUW_RD/IUW_WR move the data words MSB first with the address advancing by
+    four per word. The response header is emitted for a write too.
+    """
+
+    def __init__(self, mem=None):
+        self.mem     = dict(mem or {}) # byte address -> 32 bit word
+        self.rx      = bytearray()     # sent by the PC, not parsed yet
+        self.tx      = bytearray()     # waiting for the PC to read
+        self.packets = []              # ("r"/"w", count, address) as parsed
+        self.flushes = 0
+
+    # pyserial surface ------------------------------------------------------
+    def read(self, count):
+        data = bytes(self.tx[:count])
+        del self.tx[:count]
+
+        return data
+
+    def write(self, data):
+        self.rx += data
+        self._run()
+
+        return len(data)
+
+    def flush(self):
+        None
+
+    def reset_input_buffer(self):
+        self.flushes += 1
+        self.tx.clear()
+
+    # the wrapper's state machine -------------------------------------------
+    def _run(self):
+        while self.rx:
+            # IUW_IDLE: flush anything that is not a sync byte
+            if self.rx[0] != 0x55:
+                del self.rx[0]
+                continue
+
+            if len(self.rx) < 6:
+                return
+
+            request  = self.rx[1]
+            count    = request & 0x7f
+            address  = int.from_bytes(self.rx[2:6], "big")
+            is_write = bool(request & 0x80)
+
+            # IUW_WR fetches the data words a byte at a time, so nothing
+            # happens until the whole packet has landed
+            if is_write and len(self.rx) < 6 + 4 * count:
+                return
+
+            del self.rx[:6]
+            self.packets.append(("w" if is_write else "r", count, address))
+
+            # IUW_HDR, the valid bit is hardwired to '1' in the RTL
+            self.tx.append(0xaa)
+            self.tx.append(0x80 | count)
+            self.tx += address.to_bytes(4, "big")
+
+            for i in range(count):
+                if is_write:
+                    self.mem[address + 4 * i] = int.from_bytes(self.rx[:4], "big")
+                    del self.rx[:4]
+                else:
+                    self.tx += self.mem.get(address + 4 * i, 0).to_bytes(4, "big")
+
+def make_driver(wrapper):
+    """
+    make_driver: Build a driver bound to a FakeWrapper instead of a real port.
+
+    wrapper: The FakeWrapper to answer the driver's traffic.
+
+    returns: The LibreILA_Driver instance.
+    """
+    global _pending_port
+
+    _pending_port = wrapper
+
+    return driver.LibreILA_Driver("/dev/null")
+
+class TestPacketFormat(unittest.TestCase):
+    """
+    TestPacketFormat: The bytes on the wire, checked against the reference
+    procedures uart_ila_read and uart_ila_write in
+    tests/hdl/06_sim_libre_ila_uart/tb.vhdl.
+    """
+
+    def test_read_request_bytes(self):
+        wrapper = FakeWrapper({0x40: 0xb01dface, 0x44: 0xdeadbeef})
+        ila     = make_driver(wrapper)
+        sent    = []
+
+        wrapper.write = lambda d, _w=wrapper.write: (sent.append(bytes(d)), _w(d))[1]
+
+        self.assertEqual(ila.read_regs(0x40, 2), [0xb01dface, 0xdeadbeef])
+
+        # 0x55, R with 2 words, then the address MSB first
+        self.assertEqual(sent[0], bytes([0x55, 0x02, 0x00, 0x00, 0x00, 0x40]))
+
+    def test_write_request_bytes(self):
+        wrapper = FakeWrapper()
+        ila     = make_driver(wrapper)
+        sent    = []
+
+        wrapper.write = lambda d, _w=wrapper.write: (sent.append(bytes(d)), _w(d))[1]
+
+        self.assertIsNone(ila.write_regs(0x100, [0x11223344, 0x55667788]))
+
+        # 0x55, W with 2 words, the address and both words MSB first
+        self.assertEqual(sent[0], bytes([0x55, 0x82, 0x00, 0x00, 0x01, 0x00,
+                                         0x11, 0x22, 0x33, 0x44,
+                                         0x55, 0x66, 0x77, 0x88]))
+        self.assertEqual(wrapper.mem, {0x100: 0x11223344, 0x104: 0x55667788})
+
+    def test_write_ack_is_drained(self):
+        """The wrapper answers a write with a header too, leaving it in the
+        buffer would desync the next transaction."""
+        wrapper = FakeWrapper()
+        ila     = make_driver(wrapper)
+
+        ila.write_regs(0x0, [0x1234])
+        self.assertEqual(len(wrapper.tx), 0)
+
+        # and the next read still lines up
+        self.assertEqual(ila.read_regs(0x0, 1), [0x1234])
+
+    def test_roundtrip(self):
+        wrapper = FakeWrapper()
+        ila     = make_driver(wrapper)
+        words   = [(i * 0x01010101) & 0xffffffff for i in range(64)]
+
+        ila.write_regs(0x200, words)
+        self.assertEqual(ila.read_regs(0x200, 64), words)
+
+class TestChunking(unittest.TestCase):
+    """
+    TestChunking: #words is a 7 bit field, so anything longer than 127 words
+    has to be split. A stock 2048 deep buffer at stride 4 is 8192 words, so
+    every full readout takes this path.
+    """
+
+    def test_write_splits_at_127(self):
+        wrapper = FakeWrapper()
+        ila     = make_driver(wrapper)
+        words   = [0x1000 + i for i in range(300)]
+
+        ila.write_regs(0x80, words)
+
+        self.assertEqual([p[:2] for p in wrapper.packets],
+                         [("w", 127), ("w", 127), ("w", 46)])
+        # each packet picks up where the last one left off, 4 bytes per word
+        self.assertEqual([p[2] for p in wrapper.packets],
+                         [0x80, 0x80 + 127 * 4, 0x80 + 254 * 4])
+        self.assertEqual(ila.read_regs(0x80, 300), words)
+
+    def test_read_splits_at_127(self):
+        wrapper = FakeWrapper({0x80 + 4 * i: 0x2000 + i for i in range(300)})
+        ila     = make_driver(wrapper)
+
+        self.assertEqual(ila.read_regs(0x80, 300), [0x2000 + i for i in range(300)])
+        self.assertEqual([p[:2] for p in wrapper.packets],
+                         [("r", 127), ("r", 127), ("r", 46)])
+
+    def test_full_sample_buffer(self):
+        """The readout read_data will do on the stock build."""
+        depth   = 2048
+        stride  = 4
+        base    = 0x100
+        content = {base + 4 * i: (0xa5a50000 + i) & 0xffffffff for i in range(depth * stride)}
+        wrapper = FakeWrapper(content)
+        ila     = make_driver(wrapper)
+
+        values = ila.read_regs(base, depth * stride)
+
+        self.assertEqual(len(values), depth * stride)
+        self.assertEqual(values, [content[base + 4 * i] for i in range(depth * stride)])
+        # 8192 words in packets of at most 127
+        self.assertEqual(len(wrapper.packets), 65)
+        self.assertTrue(all(p[1] <= 127 for p in wrapper.packets))
+
+    def test_zero_count_sends_nothing(self):
+        wrapper = FakeWrapper()
+        ila     = make_driver(wrapper)
+
+        self.assertEqual(ila.read_regs(0x0, 0), [])
+        ila.write_regs(0x0, [])
+
+        self.assertEqual(wrapper.packets, [])
+
+class TestErrorHandling(unittest.TestCase):
+    """
+    TestErrorHandling: every failure has to surface as an exception. The
+    caller treats any of them as a lost transaction and restarts.
+    """
+
+    def test_stale_bytes_are_flushed(self):
+        wrapper = FakeWrapper({0x10: 0xcafebabe})
+        ila     = make_driver(wrapper)
+
+        wrapper.tx += b"\x00\x01\x02" # leftovers from an aborted transfer
+
+        self.assertEqual(ila.read_regs(0x10, 1), [0xcafebabe])
+
+    def test_negative_word_is_masked(self):
+        wrapper = FakeWrapper()
+        ila     = make_driver(wrapper)
+
+        ila.write_regs(0x0, [-1])
+
+        self.assertEqual(wrapper.mem[0x0], 0xffffffff)
+
+    def test_bad_address_or_count(self):
+        ila = make_driver(FakeWrapper())
+
+        for address, count in ((0x2, 1), (-4, 1), (0x1_0000_0000, 1), (0x0, -1)):
+            with self.assertRaises(ValueError):
+                ila.read_regs(address, count)
+
+        with self.assertRaises(ValueError):
+            ila.write_regs(0x2, [0])
+
+    def test_bad_sync_byte(self):
+        wrapper       = FakeWrapper({0x0: 1})
+        ila           = make_driver(wrapper)
+        wrapper.write = lambda d: wrapper.tx.extend(b"\x5a" * 6)
+
+        with self.assertRaises(OSError):
+            ila.read_regs(0x0, 1)
+
+    def test_valid_bit_clear(self):
+        wrapper       = FakeWrapper({0x0: 1})
+        ila           = make_driver(wrapper)
+        wrapper.write = lambda d: wrapper.tx.extend(bytes([0xaa, 0x01, 0, 0, 0, 0]))
+
+        with self.assertRaises(OSError):
+            ila.read_regs(0x0, 1)
+
+    def test_echo_mismatch(self):
+        wrapper       = FakeWrapper({0x0: 1})
+        ila           = make_driver(wrapper)
+        wrapper.write = lambda d: wrapper.tx.extend(bytes([0xaa, 0x81, 0, 0, 0, 0x40]))
+
+        with self.assertRaises(OSError):
+            ila.read_regs(0x0, 1)
+
+    def test_timeout_on_missing_data(self):
+        """Header lands, the data words never do, as after a watchdog reset."""
+        wrapper       = FakeWrapper({0x0: 1})
+        ila           = make_driver(wrapper)
+        wrapper.write = lambda d: wrapper.tx.extend(bytes([0xaa, 0x81, 0, 0, 0, 0]))
+
+        with self.assertRaises(TimeoutError):
+            ila.read_regs(0x0, 1)
+
+    def test_timeout_is_an_oserror(self):
+        """main.py restarts on any lost transaction, so one except clause has
+        to cover both the timeout and the desync cases."""
+        self.assertTrue(issubclass(TimeoutError, OSError))
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

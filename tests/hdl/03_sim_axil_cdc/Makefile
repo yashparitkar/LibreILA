@@ -1,7 +1,7 @@
 UNIT       := libre_ila
 TOP        := tb
-CODEGEN    := ../../codegen/code_generator.py
-GEN_DIR    := ../../codegen/gen_axis
+CODEGEN    := ../../../codegen/code_generator.py
+GEN_DIR    := ../../../codegen/gen_axis
 GEN_STAMP  := $(GEN_DIR)/.stamp
 SRC        := $(GEN_DIR)/$(UNIT).vhdl tb.vhdl
 WORKDIR    := work
@@ -11,7 +11,7 @@ WAVE       := $(TOP).ghw
 # Everything the stock build is made of. Touch any of it and the next sim
 # regenerates gen_axis/, touch none of it and the generator does not run at
 # all, so back to back sims stay cheap.
-GEN_DEPS   := $(CODEGEN) $(wildcard ../../hdl/*.vhdl) $(wildcard ../../codegen/templates/*.csv)
+GEN_DEPS   := $(CODEGEN) $(wildcard ../../../hdl/*.vhdl) $(wildcard ../../../codegen/templates/*.csv)
 
 .PHONY: all sim wave clean
 

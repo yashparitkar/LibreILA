@@ -197,11 +197,42 @@ The PC is the one managing the ILA. It is connected to the ILA with the UART int
 |     0xAA   | 0/1   | 7 bit  |   32-bits    | 32-bits x #words |
 ```
 
+### Wire details
+The tables above show the fields, not the framing. What actually goes on the wire:
+
+* **Every field wider than a byte goes MSB first**, both the base address and the data words. A 6 byte header, then `4 * #words` bytes of payload.
+* **R/W and #words share one byte**: bit 7 is the R/W bit (`1` write, `0` read), bits 6 downto 0 are the word count. Same for the response byte, where bit 7 is `valid`.
+* **#words is 7 bits, so one packet moves at most 127 words.** Longer transfers are split over several packets with the base address advancing by 4 per word. This is not an edge case: a full readout of the stock 2048 deep buffer at stride 4 is 8192 words, i.e. 65 packets.
+* The base address is a **byte** address and must be 4 byte aligned. The core decodes `araddr(ADDR_LSB+OPT_MEM_ADDR_BITS downto ADDR_LSB)`, so the low two bits and anything above the register map are truncated rather than rejected: a misaligned or out of range address silently aliases onto a real register. Both drivers check alignment on the host side.
+* **The response header is sent for a write as well as a read.** The wrapper emits it from `IUW_HDR` as soon as it has parsed the address, before the write data words have even arrived, so a writer that does not drain the 6 byte ack will desync the next transaction. Only a read is followed by data words.
+* The `valid` bit in the response carries the wrapper's verdict on the request, see the sanity checks below. `0` means the request was refused and never reached the AXI bus.
+
+`tests/python/00_pkt_format` pins all of this down against a model of the parser, and the `uart_ila_read`/`uart_ila_write` procedures in `tests/hdl/06_sim_libre_ila_uart/tb.vhdl` are the reference implementation of the PC side.
+
+## Request sanity checks
+The wrapper judges each request once the base address is in, latches the verdict for the whole packet and reports it in the `valid` bit of the response header. Two things are checked:
+
+* **Address alignment.** The base address must have its low two bits clear. This matters because the core's decoder truncates rather than rejects: a misaligned write would land on a real register, and register 1 is Arm_FT, so a stray write could arm the ILA or clobber the trigger configuration. A 2 bit compare is enough, since the transfer advances the address by 4 per word and cannot change those bits mid-packet.
+* **RX FIFO overflow.** The uart writes into the RX FIFO unconditionally, so a byte handed over while the FIFO is full is gone and the packet is short from there on. The wrapper latches that instead of leaving it to surface as a bare watchdog timeout.
+
+**A request that fails is answered but never put on the AXI bus.** The reply keeps the shape its header promised: a read returns the right number of zero words, and a write still has its payload drained from the FIFO. Draining matters, leaving those bytes behind would let the next `IUW_IDLE` mistake a data byte for a sync byte and act on the garbage packet behind it.
+
+Two limits worth knowing:
+
+* On a **write**, the header goes out before the data words arrive, so an overflow during the payload is reported on the *next* packet's header rather than the one it corrupted. The host sees a timeout followed by a `valid = 0`, which still says "bytes were dropped", just one transaction late.
+* `o_nfull` lags a push by a cycle, so a byte dropped in that shadow is missed. Overflow detection is best effort: `valid = 0` means bytes were dropped, `valid = 1` does not promise none were.
+
+**Range checking is deliberately left to the host.** In hardware it costs a comparator as wide as the address to buy what a driver works out for free from the probe width and buffer depth it already reads back. The python driver checks alignment before sending, so in normal operation the hardware check only ever fires for a buggy or foreign host.
+
 ## Clock domains
 The core operates in the sampling clock domain, the AXI4Lite domain clock is kept separate. This block operates on the AXI4Lite clock. The UART clock is derived from the AXI4Lite clock.
 
 ## Watchdog timer
 The wrapper has a watchdog timer to reset the wrapper in case of any error. The timer is incremented in non-IDLE mode and is reset when a byte is succefully is received via UART or AXI interface. A reset is issued when the timer reaches a certain value.
+
+`WDT_TRIGGER` is `G_AXIL_CLK_FREQ` counts, i.e. one second without progress in a non-IDLE state. The reset drops the wrapper back to `IUW_IDLE` and abandons whatever it had parsed so far, so a half-received packet leaves no trace on the ILA side.
+
+That makes the recovery contract on the host simple: **a timeout means the whole transaction is lost, never partially applied on the read side**, so the host should restart the transaction from its sync byte rather than try to resume mid packet. The python driver raises on both a timeout and a header that fails to match the request, and since `TimeoutError` is a subclass of `OSError`, a caller can cover both with one except clause and restart. Because `IUW_IDLE` discards every byte that is not `0x55`, the next sync byte resynchronises the link on its own.
 
 # Code generation
 Since the core is generic, a build is fully described by two csv files in [codegen/](codegen/):
@@ -249,7 +280,7 @@ The output directory is picked automatically: a run with **both** csv files left
 
 `GEN_TYPE` decides which files come out: `0` emits the bare AXI4Lite core alone, `1` emits it together with the UART wrapper and the fifo/uart blocks it instantiates. The testbenches need the wrapper, so `templates/default_configuration.csv` keeps `GEN_TYPE` at 1.
 
-The testbenches read `codegen/gen_axis/` rather than `hdl/`, so what gets simulated is what the generator actually emits. Each test's Makefile treats that directory as an order-only prerequisite: if it exists it is reused untouched, if it is missing the generator runs first. **After editing anything in `hdl/`, delete `codegen/gen_axis/` (or run `make clean`) or the tests will keep simulating the previous build.**
+The testbenches under `tests/hdl/` read `codegen/gen_axis/` rather than `hdl/`, so what gets simulated is what the generator actually emits. Each of those test Makefiles treats that directory as an order-only prerequisite: if it exists it is reused untouched, if it is missing the generator runs first. **After editing anything in `hdl/`, delete `codegen/gen_axis/` (or run `make clean`) or the tests will keep simulating the previous build.**
 
 The generated files can be passed through VHDL Style Guide (VHDL Style Guide) to make them more readable.
 
@@ -272,9 +303,17 @@ A directive listed for a file but never found in it aborts the run, so a silentl
 Alongside the directives the script rewrites the default of every generic named in `configuration.csv`, plus `G_PROBE_WIDTH` which it sums from the portmap. Only declarations that already carry a `:=` are touched, which confines this to the entity and leaves the wrapper's component declarations alone.
 
 
+# Tests
+[tests/](tests/) is split by what a test needs to run rather than by what it covers:
+
+* [tests/hdl/](tests/hdl/): GHDL simulations of the core and the wrapper, numbered in the order they build up in. These need ghdl and the generated core. `make sim-hdl`
+* [tests/python/](tests/python/): host side tests for the drivers, no ghdl and no generated core, pyserial stubbed so nothing opens a port. `make sim-python`
+
+`make sim` runs both, host side first because those take milliseconds. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on. See [tests/README.md](tests/README.md) for what each one covers.
+
 # Drivers
 * [drivers/baremetal/](drivers/baremetal/): C driver for the bare core over AXI4Lite. The probe is opaque to it, the whole register map is derived from the probe width, buffer depth and sampling clock frequency read back from the core.
-* [drivers/python/](drivers/python/): python driver for the UART wrapper, reads the signal names from `portmap.csv` and dumps a .vcd. Work in progress.
+* [drivers/python/](drivers/python/): python driver for the UART wrapper, reads the signal names from `portmap.csv` and dumps a .vcd. Work in progress. `read_regs`/`write_regs` speak the packet format above, splitting anything longer than 127 words across packets, and raise on a timeout or a mismatched response header.
 
 # Future improvements
 

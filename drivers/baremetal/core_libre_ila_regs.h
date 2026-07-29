@@ -3,7 +3,7 @@
  * @author Y.U.P. (yashparitkar)
  * @brief CoreLibreILA register definitions
  *
- * @note Last Modified: 2026-07-27 Mon
+ * @note Last Modified: 2026-07-29 Wed 20:02
  *
  * @details This file contains the register definitions for the CoreLibreILA module, including register offsets, field offsets, masks, and descriptions. It serves as a reference for software developers to interact with the CoreLibreILA hardware.
  *
