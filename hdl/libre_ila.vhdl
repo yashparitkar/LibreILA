@@ -1,6 +1,6 @@
 -------------------------------------------------------------------------------
 -- File: libre_ila.vhdl
--- Author: Y.U.P. (paritkary25)
+-- Author: Y.U.P. (yashparitkar)
 -- Created: 2026-07-14 Tue 11:11
 -- Last Modified: 2026-07-29 Wed 12:55
 --

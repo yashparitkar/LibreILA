@@ -1,6 +1,6 @@
 -------------------------------------------------------------------------------
 -- File: uart.vhdl
--- Author: pabennett/uart; modified a bit by paritkary25
+-- Author: pabennett/uart; modified a bit by yashparitkar
 -- Last Modified: 2026-07-28 Tue 11:06
 -------------------------------------------------------------------------------
 -- Original work: pabennett/uart

@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @file core_libre_ila_regs.h
- * @author Y.U.P. (paritkary25)
+ * @author Y.U.P. (yashparitkar)
  * @brief CoreLibreILA register definitions
  *
  * @note Last Modified: 2026-07-27 Mon

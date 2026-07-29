@@ -1,5 +1,5 @@
 # File: Makefile
-# Author: Y.U.P. (paritkary25)
+# Author: Y.U.P. (yashparitkar)
 # Last Modified: 2026-07-29 Wed
 #
 # This is project file makefile

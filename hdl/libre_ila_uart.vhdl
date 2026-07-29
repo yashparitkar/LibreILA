@@ -1,6 +1,6 @@
 -------------------------------------------------------------------------------
 -- File: libre_ila_uart.vhdl
--- Author: Y.U.P. (paritkary25)
+-- Author: Y.U.P. (yashparitkar)
 -- Created: 2026-07-21 Tue 20:12
 -- Last Modified: 2026-07-29 Wed 12:43
 --

@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @file core_libre_ila.c
- * @author Y.U.P. (paritkary25)
+ * @author Y.U.P. (yashparitkar)
  * @brief CoreLibreILA bare metal driver implementation.
  *
  * @note Last Modified: 2026-07-27 Mon

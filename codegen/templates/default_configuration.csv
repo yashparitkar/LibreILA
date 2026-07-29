@@ -1,6 +1,6 @@
 ####################################################################
 # File: default_configuration.csv
-# Author: Y.U.P. (paritkary25)
+# Author: Y.U.P. (yashparitkar)
 # Last Modified: 2026-07-28 Tue 20:18
 #
 # Description: This file contains the default configuration for the LibreILA core. The simulation tests will use this configuration file to run the tests unless mentioned otherwised.

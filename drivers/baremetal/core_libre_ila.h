@@ -1,6 +1,6 @@
 /*******************************************************************************
  * @file core_libre_ila.h
- * @author Y.U.P. (paritkary25)
+ * @author Y.U.P. (yashparitkar)
  * @brief Core LIBRE_ILA bare metal driver public API.
  *
  * @note Last Modified: 2026-07-27 Mon
