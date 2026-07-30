@@ -15,12 +15,14 @@ GHDL simulations of the core and the UART wrapper. The numbering is the order th
 
 | Test | What it covers |
 |------|----------------|
-| `00_sim_ext_trig`        | External trigger path |
+| `00_sim_ext_trig`        | External trigger path, at three trigger positions |
 | `01_sim_axil_trig`       | Trigger vector over AXI4Lite |
 | `02_sim_axil_trig_data`  | Trigger plus sample buffer readout |
 | `03_sim_axil_cdc`        | Clock domain crossing on arm and status |
 | `04_sim_axil_force_trig` | Force trigger |
 | `06_sim_libre_ila_uart`  | End to end dataflow through the UART wrapper |
+
+`00_sim_ext_trig` runs its testbench three times over, once per trigger position: `0` (the first slot of the sample buffer), `C_DEPTH` (one past its last slot) and `3` (inside it). Each run gets its own work directory under `work/` holding its own copy of `tb.vhdl` with `C_TRIG_IDX` patched into it, so the three builds and waveforms survive each other. `make sim` runs all three, `make sim-trig_0` or `make wave-trig_3` picks one out, and the variant list lives at the top of that test's Makefile. Every report line carries its `C_TRIG_IDX`, so one log covering three runs still reads.
 
 These read `codegen/gen_axis/` rather than `hdl/`, so what gets simulated is what the generator actually emits. **After editing anything in `hdl/`, delete `codegen/gen_axis/` (or run `make clean`) or the tests will keep simulating the previous build.**
 

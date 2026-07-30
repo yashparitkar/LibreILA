@@ -40,10 +40,11 @@ architecture rtl of fifo is
 
   type t_fifo_data is array (0 to g_DEPTH - 1) of std_logic_vector(g_WIDTH - 1 downto 0);
 
-  signal r_fifo_data : t_fifo_data := (others => (others => '0'));
+  -- Note that we are not clearing RAM by default
+  signal r_fifo_data : t_fifo_data;
 
-  signal r_wr_index : unsigned(C_ADDR_WIDTH  downto 0) := (others => '0');
-  signal r_rd_index : unsigned(C_ADDR_WIDTH  downto 0) := (others => '0');
+  signal r_wr_index : unsigned(C_ADDR_WIDTH  downto 0);
+  signal r_rd_index : unsigned(C_ADDR_WIDTH  downto 0);
 
   signal w_full  : std_logic;
   signal w_empty : std_logic;

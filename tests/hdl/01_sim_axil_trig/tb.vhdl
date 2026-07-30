@@ -2,10 +2,14 @@
 -- File: tb.vhdl
 -- Author: Y.U.P.
 -- Created: 2026/07/14 11:11
--- Last Modified: 2026-07-21 Tue 18:56
+-- Last Modified: 2026-07-30 Thu
 --
 -- Description: Test the ILA with internal trigger when TLAST = '1'
 --   and TVALID = '1' and TREADY = '1'
+--
+-- The Makefile runs this bench once per trigger position, each run in its
+-- own work directory with its own copy of this file and C_TRIG_IDX patched
+-- in it, see the VARIANTS list there.
 ---------------------------------------------------------------------
 
 library ieee;
@@ -21,14 +25,24 @@ end entity tb;
 
 architecture sim of tb is
 
-  constant C_DATA_WIDTH    : natural := 64;
-  constant C_DEPTH         : natural := 8;
-  constant C_AXIS_PERIOD   : time    := 10 ns;
-  constant C_AXIL_PERIOD   : time    := 10 ns;
+  constant C_DATA_WIDTH      : natural := 64;
+  constant C_SAMP_BUFF_DEPTH : natural := 8;
+  constant C_AXIS_PERIOD     : time    := 10 ns;
+  constant C_AXIL_PERIOD     : time    := 10 ns;
+  -- The trigger position under test. The Makefile rewrites the right hand
+  -- side of this one line per work directory, so keep it on a single line and
+  -- keep the name, otherwise the sweep silently falls back to this value.
   constant C_TRIG_IDX      : natural := 3;
   constant C_TRIGGER_POINT : natural := 80;
   constant C_TRIGGER_PULSE : natural := 16;
   constant C_SAMPLE_COUNT  : natural := 192;
+
+  -- The trigger position is the number of samples the DUT keeps from before
+  -- the triggering one, so the capture window is C_TRIG_POS samples of history
+  -- plus the trigger plus the rest of the buffer. The DUT holds the position
+  -- in a counter as wide as the buffer address, so anything from
+  -- C_SAMP_BUFF_DEPTH up arrives truncated and the expectation follows it.
+  constant C_TRIG_POS : natural := C_TRIG_IDX mod C_SAMP_BUFF_DEPTH;
 
   constant TRIGGER_COND : std_logic_vector := x"00000007";
   constant TRIGGER_MASK : std_logic_vector := x"00000007";
@@ -63,9 +77,17 @@ architecture sim of tb is
   constant C_CTRL_COND_ADDR : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_TRIG_COND_BASE + C_CTRL_WORD_IDX * C_AXIL_WORD_BYTES, 32));
   constant C_CTRL_MASK_ADDR : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_TRIG_MASK_BASE + C_CTRL_WORD_IDX * C_AXIL_WORD_BYTES, 32));
 
-  constant C_SAMPLE_PRINT_COUNT : natural                       := C_DEPTH;
+  constant C_SAMPLE_PRINT_COUNT : natural                       := C_SAMP_BUFF_DEPTH;
   constant C_STATUS_ADDR        : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 0 * C_AXIL_WORD_BYTES, 32));
   constant C_MAGIC_ADDR         : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 1 * C_AXIL_WORD_BYTES, 32));
+  -- Output register 6 carries trig_idx, the buffer slot that held the
+  -- triggering sample. The readout order below is what the trigger position
+  -- rotates, this is the anchor it is rotated around.
+  constant C_TRIG_IDX_ADDR      : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 6 * C_AXIL_WORD_BYTES, 32));
+
+  -- Every report carries the trigger position, the three runs of the sweep
+  -- otherwise print the same lines and cannot be told apart in the log.
+  constant C_TEST_ID : string := "01_sim_axil_trig[C_TRIG_IDX=" & integer'image(C_TRIG_IDX) & "]";
 
   signal i_rst_sync    : std_logic := '1';
   signal samp_aclk     : std_logic := '0';
@@ -208,7 +230,7 @@ begin
     generic map (
       g_external_trig   => 0,
       g_probe_width     => C_PROBE_WIDTH,
-      g_samp_buff_depth => C_DEPTH
+      g_samp_buff_depth => C_SAMP_BUFF_DEPTH
     )
     port map (
       i_rst_sync               => i_rst_sync,
@@ -283,7 +305,25 @@ begin
 
     variable lane_data : t_lane_data(0 to C_N_LANES - 1);
 
+    -- The probe counter value read out of every buffer slot, indexed by slot.
+    type t_sample_values is array (natural range <>) of natural;
+
+    variable samples     : t_sample_values(0 to C_SAMP_BUFF_DEPTH - 1);
+    variable trig_slot   : natural;
+    variable prev_slot   : natural;
+    variable wrap_count  : natural := 0;
+    variable oldest_slot : natural := 0;
+    variable oldest      : natural;
+    variable newest      : natural;
+
   begin
+
+    -- The check after the readout wants every slot, so the readout has to
+    -- cover the whole buffer rather than a subset of it.
+    assert C_SAMPLE_PRINT_COUNT = C_SAMP_BUFF_DEPTH
+      report C_TEST_ID & ": readout covers " & integer'image(C_SAMPLE_PRINT_COUNT) &
+             " of " & integer'image(C_SAMP_BUFF_DEPTH) & " buffer slots"
+      severity failure;
 
     wait for 40 ns;
     i_rst_sync     <= '0';
@@ -323,7 +363,7 @@ begin
     end loop;
 
     axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_STATUS_ADDR, status);
-    report "00_sim_ext_trig: status after arm = " & integer'image(to_integer(unsigned(status(2 downto 0))))
+    report C_TEST_ID & ": status after arm = " & integer'image(to_integer(unsigned(status(2 downto 0))))
       severity note;
 
     for sample_index in 0 to C_SAMPLE_COUNT - 1 loop
@@ -365,7 +405,7 @@ begin
     end loop;
 
     assert status(2) = '1'
-      report "00_sim_ext_trig: DONE did not assert"
+      report C_TEST_ID & ": DONE did not assert"
       severity error;
 
     for settle_index in 1 to 4 loop
@@ -376,8 +416,14 @@ begin
 
     axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_MAGIC_ADDR, read_data);
     assert read_data = x"B01DFACE"
-      report "00_sim_ext_trig: magic key mismatch"
+      report C_TEST_ID & ": magic key mismatch"
       severity error;
+
+    wait until rising_edge(s_axil_aclk);
+    axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_TRIG_IDX_ADDR, read_data);
+    trig_slot := to_integer(unsigned(read_data));
+    report C_TEST_ID & ": trig_idx readback, triggering sample sits in buffer slot " & integer'image(trig_slot)
+      severity note;
 
     -- Reading back output samples from RAM window
     for sample_index in 0 to C_SAMPLE_PRINT_COUNT - 1 loop
@@ -399,15 +445,71 @@ begin
 
       end loop;
 
-      report "00_sim_ext_trig: sample " & integer'image(sample_index) &
+      report C_TEST_ID & ": sample " & integer'image(sample_index) &
              " | lane2=0x" & to_hstring(lane_data(2)) &
              " | lane1=0x" & to_hstring(lane_data(1)) &
              " | lane0=0x" & to_hstring(lane_data(0))
         severity note;
 
+      -- The bench drives the probe with a counter that never reaches 2**32,
+      -- so the upper word is a free check that the slot holds a sample at all.
+      assert lane_data(1) = x"00000000"
+        report C_TEST_ID & ": slot " & integer'image(sample_index) &
+               " upper counter word is 0x" & to_hstring(lane_data(1)) & ", expected 0"
+        severity error;
+
+      samples(sample_index) := to_integer(unsigned(lane_data(0)));
+
       wait until rising_edge(s_axil_aclk);
 
     end loop;
+
+    -- The probe carried an incrementing counter, so a correct capture is one
+    -- contiguous run of it wrapped around the buffer: exactly one slot may
+    -- fail to follow its predecessor, and that slot holds the oldest sample.
+    for slot in 0 to C_SAMP_BUFF_DEPTH - 1 loop
+
+      prev_slot := (slot + C_SAMP_BUFF_DEPTH - 1) mod C_SAMP_BUFF_DEPTH;
+
+      if (samples(slot) /= samples(prev_slot) + 1) then
+        wrap_count  := wrap_count + 1;
+        oldest_slot := slot;
+      end if;
+
+    end loop;
+
+    assert wrap_count = 1
+      report C_TEST_ID & ": the " & integer'image(C_SAMP_BUFF_DEPTH) &
+             " slots are not one contiguous run of the probe counter, " &
+             integer'image(wrap_count) & " discontinuities"
+      severity error;
+
+    oldest := samples(oldest_slot);
+    newest := samples((oldest_slot + C_SAMP_BUFF_DEPTH - 1) mod C_SAMP_BUFF_DEPTH);
+
+    -- The slot the DUT reports as the trigger has to be the one holding the
+    -- sample the bench triggered on, otherwise the readback points at
+    -- history that is no longer in the buffer.
+    assert samples(trig_slot) = C_TRIGGER_POINT
+      report C_TEST_ID & ": trig_idx points at slot " & integer'image(trig_slot) &
+             " holding sample " & integer'image(samples(trig_slot)) &
+             ", the bench triggered on sample " & integer'image(C_TRIGGER_POINT)
+      severity error;
+
+    -- A trigger position of p keeps p samples of history, so the window starts
+    -- p samples before the trigger and runs to the end of the buffer.
+    assert oldest = C_TRIGGER_POINT - C_TRIG_POS
+      report C_TEST_ID & ": capture window is " & integer'image(oldest) & ".." &
+             integer'image(newest) & ", trigger position " & integer'image(C_TRIG_POS) &
+             " asks for " & integer'image(C_TRIGGER_POINT - C_TRIG_POS) & ".." &
+             integer'image(C_TRIGGER_POINT - C_TRIG_POS + C_SAMP_BUFF_DEPTH - 1)
+      severity error;
+
+    report C_TEST_ID & ": buffer holds samples " & integer'image(oldest) & ".." &
+           integer'image(newest) & ", oldest in slot " & integer'image(oldest_slot) &
+           ", trigger in slot " & integer'image(trig_slot) &
+           ", as trigger position " & integer'image(C_TRIG_POS) & " asks"
+      severity note;
 
     std.env.stop;
     wait;

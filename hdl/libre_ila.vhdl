@@ -2,7 +2,7 @@
 -- File: libre_ila.vhdl
 -- Author: Y.U.P. (yashparitkar)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-07-29 Wed 12:55
+-- Last Modified: 2026-07-30 Thu 11:37
 --
 -- Description: A generic ILA, the probe is described by codegen/portmap.csv
 -- Usage:
@@ -118,7 +118,7 @@ architecture rtl of libre_ila is
   -- Power of two check for G_SAMP_BUFF_DEPTH -----------------------
   -- G_SAMP_BUFF_DEPTH must be a power of two, r_wr_idx is a C_ADDR_WIDTH counter that
   -- wraps on 2**C_ADDR_WIDTH. Any other depth leaves the buffer tail
-  -- unreachable and breaks the modular arithmetic in post_trig_sample_tgt.
+  -- unreachable and breaks the modular arithmetic in post_trig_samp_tgt.
 
   pure function is_power_of_two (
     val : natural
@@ -204,13 +204,13 @@ architecture rtl of libre_ila is
   --                                        ^ trig_idx
   -- <------- a --------->                  <--------- b ----------->
   -- a + b is the target number of post trig samples
-  -- post_trig_sample_cnt is the counter for that
+  -- post_trig_samp_cnt is the counter for that
 
   signal trig_idx : unsigned(C_ADDR_WIDTH - 1 downto 0);
   signal trig_tgt : unsigned(C_ADDR_WIDTH - 1 downto 0);
 
-  signal post_trig_sample_cnt : unsigned(C_ADDR_WIDTH - 1 downto 0);
-  signal post_trig_sample_tgt : unsigned(C_ADDR_WIDTH - 1 downto 0);
+  signal post_trig_samp_cnt : unsigned(C_ADDR_WIDTH - 1 downto 0);
+  signal post_trig_samp_tgt : unsigned(C_ADDR_WIDTH - 1 downto 0);
 
   signal trig     : std_logic;
   signal trig_or  : std_logic;
@@ -224,11 +224,11 @@ architecture rtl of libre_ila is
   -- boundary.
   constant C_TRIG_VECT_WIDTH : integer := C_AXIL_STRIDE * C_S_AXIL_DATA_WIDTH;
 
-  signal trig_sample_word : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
-  signal trig_vect        : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
-  signal trig_mask        : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
-  signal trig_cond        : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
-  signal trig_cfg         : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+  signal trig_samp_word : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
+  signal trig_vect      : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
+  signal trig_mask      : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
+  signal trig_cond      : std_logic_vector(C_TRIG_VECT_WIDTH - 1 downto 0);
+  signal trig_cfg       : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
   -------------------------------------------------------------------
 
   -- Control signals interface --------------------------------------
@@ -287,6 +287,7 @@ architecture rtl of libre_ila is
 -------------------------------------------------------------------
 
 begin
+
   -- Generic check --------------------------------------------------
   assert (G_PROBE_WIDTH > 0)
     report "G_PROBE_WIDTH must be greater than 0"
@@ -324,9 +325,9 @@ begin
             trig_and;
 
     -- Same bit layout as w_wr_data, zero-extended up to the stride boundary
-    trig_sample_word <= std_logic_vector(resize(unsigned(w_wr_data), C_TRIG_VECT_WIDTH));
+    trig_samp_word <= std_logic_vector(resize(unsigned(w_wr_data), C_TRIG_VECT_WIDTH));
 
-    trig_vect <= trig_sample_word xnor trig_cond;
+    trig_vect <= trig_samp_word xnor trig_cond;
 
     -- OR: trigger if any enabled (mask=1) bit matches its condition
     trig_or <= '0' when (trig_vect and trig_mask) = (trig_vect'range => '0') else
@@ -390,14 +391,21 @@ begin
 
   -- ILA process ----------------------------------------------------
   p_ila : process (samp_aclk) is
+
+    variable v_post_trig_samp_tgt : unsigned(C_ADDR_WIDTH - 1 downto 0);
+
   begin
 
     if rising_edge(samp_aclk) then
+      -- strictly, post_trig_samp_tgt := G_SAMP_BUFF_DEPTH - trig_tgt - 1
+      -- but G_SAMP_BUFF_DEPTH = 2**k
+      v_post_trig_samp_tgt := not trig_tgt;
+
       if (i_rst_sync = '1') then
         -- Reseting the trigger positions
-        trig_idx             <= (others => '0');
-        post_trig_sample_cnt <= (others => '0');
-        en_wr                <= '0';
+        trig_idx           <= (others => '0');
+        post_trig_samp_cnt <= (others => '0');
+        en_wr              <= '0';
 
         ila_state <= IDLE;
 
@@ -411,34 +419,39 @@ begin
             en_wr <= '0';
 
             -- Reseting the trigger positions
-            trig_idx             <= (others => '0');
-            post_trig_sample_cnt <= (others => '0');
+            trig_idx           <= (others => '0');
+            post_trig_samp_cnt <= (others => '0');
 
             if (arm_samp = '1') then
               ila_state <= ILA_ARMED;
+              en_wr     <= '1';
             end if;
 
           when ILA_ARMED =>
 
-            en_wr <= '1';
-
             if ((trig = '1') or (arm_samp = '1')) then
-              trig_idx             <= r_wr_idx;
-              ila_state            <= ILA_TRIGD;
-              post_trig_sample_tgt <= G_SAMP_BUFF_DEPTH - trig_tgt - 1;
+              trig_idx           <= r_wr_idx;
+              post_trig_samp_tgt <= v_post_trig_samp_tgt;
+
+              if (v_post_trig_samp_tgt = (v_post_trig_samp_tgt'range => '0')) then
+                ila_state <= ILA_DONE;
+                en_wr     <= '0';
+              else
+                ila_state <= ILA_TRIGD;
+              end if;
             else
-              trig_idx             <= (others => '0');
-              post_trig_sample_cnt <= (others => '0');
+              trig_idx           <= (others => '0');
+              post_trig_samp_cnt <= (others => '0');
             end if;
 
           when ILA_TRIGD =>
 
-            if (post_trig_sample_cnt = post_trig_sample_tgt) then
+            if (post_trig_samp_cnt = post_trig_samp_tgt - 1) then
               ila_state <= ILA_DONE;
               en_wr     <= '0';
             else
-              post_trig_sample_cnt <= post_trig_sample_cnt + 1;
-              en_wr                <= '1';
+              post_trig_samp_cnt <= post_trig_samp_cnt + 1;
+              en_wr              <= '1';
             end if;
 
           when ILA_DONE =>
@@ -529,7 +542,9 @@ begin
                axil_awaddr(ADDR_LSB + OPT_MEM_ADDR_BITS downto ADDR_LSB);
 
   -- Implement Write state machine
-  -- Outstanding write transactions are not supported by the slave i.e., master should assert bready to receive response on or before it starts sending the new transaction
+  -- Outstanding write transactions are not supported by the slave i.e., master
+  -- should assert bready to receive response on or before it starts sending
+  -- the new transaction
   p_wsm : process (s_axil_aclk) is
   begin
 
@@ -565,7 +580,9 @@ begin
 
           when WADDR =>
 
-            -- At this state, slave is ready to receive address along with corresponding control signals and first data packet. Response valid is also handled at this state
+            -- At this state, slave is ready to receive address along with
+            -- corresponding control signals and first data packet. Response
+            -- valid is also handled at this state
             if (s_axil_awvalid = '1' and axil_awready = '1') then
               axil_awaddr <= s_axil_awaddr;
               if (s_axil_wvalid = '1') then
@@ -588,7 +605,8 @@ begin
 
           when WDATA =>
 
-            -- At this state, slave is ready to receive the data packets until the number of transfers is equal to burst length
+            -- At this state, slave is ready to receive the data packets
+            -- until the number of transfers is equal to burst length
             if (s_axil_wvalid = '1') then
               state_write  <= WADDR;
               axil_bvalid  <= '1';
@@ -693,7 +711,8 @@ begin
 
           when RDATA =>
 
-            -- At this state, slave is ready to send the data packets until the number of transfers is equal to burst length
+            -- At this state, slave is ready to send the data packets until
+            -- the number of transfers is equal to burst length
             if (axil_rvalid = '1' and s_axil_rready = '1') then
               axil_rvalid  <= '0';
               axil_arready <= '1';
