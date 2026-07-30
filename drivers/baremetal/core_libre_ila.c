@@ -191,9 +191,18 @@ cmd_status_t LIBRE_ILA_configure_trigger
         return CMD_STATUS_BAD_PARAM; // Nothing to write from
     }
 
-    if ((mode != LIBRE_ILA_TRIG_MODE_AND) && (mode != LIBRE_ILA_TRIG_MODE_OR))
+    if ((((uint32_t)mode) & ~LIBRE_ILA_TRIG_MODE_VALID_BITS) != 0u)
     {
-        return CMD_STATUS_BAD_PARAM; // Only the ANDOR bit exists in TRIG_CFG
+        return CMD_STATUS_BAD_PARAM; // TRIG_CFG defines bits 2 downto 0 and nothing else
+    }
+
+    /* Rising versus falling only means anything once the edge bit is set, the
+     * core does not look at bit 2 in level mode. Asking for a falling level
+     * trigger is a caller mistake worth reporting rather than ignoring. */
+    if (((((uint32_t)mode) & (uint32_t)LIBRE_ILA_TRIG_FALLING) != 0u) &&
+        ((((uint32_t)mode) & (uint32_t)LIBRE_ILA_TRIG_EDGE) == 0u))
+    {
+        return CMD_STATUS_BAD_PARAM;
     }
 
     /* Whole vector at once, the caller owns every bit of it including the
@@ -207,7 +216,11 @@ cmd_status_t LIBRE_ILA_configure_trigger
                          trigger_mask[word_idx]);
     }
 
-    HAL_set_32bit_reg_field(this_libre_ila->base_addr, CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_ANDOR_FIELD, (uint32_t)mode);
+    /* The mode is the whole register. Writing it in one go rather than three
+     * read-modify-writes of the ANDOR/EDGE/FALLING fields is safe because
+     * everything above bit 2 is reserved, and it means a mode value always
+     * lands whole instead of the trigger passing through a mixed state. */
+    HW_set_32bit_reg(this_libre_ila->base_addr + CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET, (uint32_t)mode);
 
     return CMD_STATUS_SUCCESS; // Trigger configuration successful
 }

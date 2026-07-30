@@ -21,6 +21,9 @@ GHDL simulations of the core and the UART wrapper. The numbering is the order th
 | `03_sim_axil_cdc`        | Clock domain crossing on arm and status |
 | `04_sim_axil_force_trig` | Force trigger |
 | `06_sim_libre_ila_uart`  | End to end dataflow through the UART wrapper |
+| `07_sim_edge_test`       | Level versus rising versus falling trigger, `trig_cfg` bits 1 and 2 |
+
+`07_sim_edge_test` runs its testbench three times over, once per trigger mode: `level`, `rising` and `falling`. All three share one stimulus in which the trigger condition is already true when the ILA is armed, then falls and rises again, because that is the case the three modes disagree about. The level run triggers on the first sample, the two edge runs wait for their transition, and each run checks the probe counter carried by the sample the DUT names in `trig_idx`. `make sim-rising` or `make wave-falling` picks one out. Since the condition holds across the arm, this is also what pins the seeding of `trig_lvl_prev`: cleared instead of seeded, the rising run would fire on the first sample and its check would fail.
 
 `00_sim_ext_trig` runs its testbench three times over, once per trigger position: `0` (the first slot of the sample buffer), `C_DEPTH` (one past its last slot) and `3` (inside it). Each run gets its own work directory under `work/` holding its own copy of `tb.vhdl` with `C_TRIG_IDX` patched into it, so the three builds and waveforms survive each other. `make sim` runs all three, `make sim-trig_0` or `make wave-trig_3` picks one out, and the variant list lives at the top of that test's Makefile. Every report line carries its `C_TRIG_IDX`, so one log covering three runs still reads.
 

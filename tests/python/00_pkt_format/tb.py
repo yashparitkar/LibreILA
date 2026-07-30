@@ -561,14 +561,30 @@ class TestControl(unittest.TestCase):
         full   = [0] * ila.stride_width
 
         # a short vector would leave the top of the trigger holding whatever
-        # was there before
+        # was there before. mode 8 is a bit above the three TRIG_CFG defines,
+        # and mode 4 is FALLING without EDGE, which the core would silently
+        # read as a plain level trigger.
         for cond, mask, mode in ((full[:-1], full, 0),
                                  (full, full[:-1], 0),
-                                 (full, full, 2),
+                                 (full, full, 8),
+                                 (full, full, 4),
                                  (full, full, -1)):
             with self.subTest(mode=mode, n_cond=len(cond), n_mask=len(mask)):
                 with self.assertRaises(ValueError):
                     ila.configure_trigger(cond, mask, mode)
+
+    def test_configure_trigger_accepts_the_edge_modes(self):
+        """
+        The edge flags OR onto the reduction, so every combination of the three
+        TRIG_CFG bits that means something has to reach the register intact.
+        """
+        full = [0] * 4
+
+        for mode in (0, 1, 2, 3, 6, 7):
+            with self.subTest(mode=mode):
+                wrapper, ila = self._ila(0)
+                ila.configure_trigger(full, full, mode)
+                self.assertEqual(wrapper.mem[ila.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET], mode)
 
 class TestReadout(unittest.TestCase):
     """

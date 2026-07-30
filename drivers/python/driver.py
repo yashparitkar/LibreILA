@@ -31,10 +31,21 @@ _libre_ila_status_mask = {
     "LIBRE_ILA_REGS_STATUS_REG_DONE_FIELD_MASK"  : 0x4
 }
 
+# TRIG_CFG bit0 reduces the enabled bits of the trigger vector, bits 1 and 2
+# decide what counts as a trigger on the reduced condition. They OR together,
+# so LIBRE_ILA_TRIG_MODE_AND | LIBRE_ILA_TRIG_EDGE is "every enabled bit
+# matches, and trigger when that becomes true" rather than "while it is true".
 _libre_ila_trig_mode = {
     "LIBRE_ILA_TRIG_MODE_AND": 0,
-    "LIBRE_ILA_TRIG_MODE_OR" : 1
+    "LIBRE_ILA_TRIG_MODE_OR" : 1,
+    "LIBRE_ILA_TRIG_EDGE"    : 2,
+    "LIBRE_ILA_TRIG_FALLING" : 4
 }
+
+# Every bit TRIG_CFG defines. The core ignores anything above them, so a stray
+# bit would leave the trigger in whatever mode the rest of the word asks for
+# instead of failing, which is worth catching on the host.
+_libre_ila_trig_mode_mask = 0x7
 
 _libre_ila_magic_key = 0xb01dface
 
@@ -320,6 +331,11 @@ class LibreILA_Driver:
         trigger_cond (vector of uint32) : The trigger condition to set, stride_width words.
         trigger_mask (vector of uint32) : The trigger mask to set, stride_width words.
         trigger_mode (uint32): The trigger mode to set, see _libre_ila_trig_mode.
+            The reduction (AND or OR) OR-ed with the optional
+            LIBRE_ILA_TRIG_EDGE and LIBRE_ILA_TRIG_FALLING flags. Without
+            LIBRE_ILA_TRIG_EDGE the trigger is level sensitive, which fires on
+            the first sample if the condition already holds when the ILA is
+            armed. LIBRE_ILA_TRIG_FALLING is only meaningful alongside it.
 
         returns: None
         """
@@ -337,11 +353,18 @@ class LibreILA_Driver:
             raise ValueError(f"trigger mask is {len(trigger_mask)} words, "
                              f"the stride is {self.stride_width}")
 
-        # Only the ANDOR bit exists in TRIG_CFG
-        if trigger_mode not in _libre_ila_trig_mode.values():
-            raise ValueError(f"trigger mode {trigger_mode} is neither AND "
-                             f"({_libre_ila_trig_mode['LIBRE_ILA_TRIG_MODE_AND']}) nor OR "
-                             f"({_libre_ila_trig_mode['LIBRE_ILA_TRIG_MODE_OR']})")
+        # TRIG_CFG defines bits 2 downto 0 and nothing else
+        if trigger_mode < 0 or (trigger_mode & ~_libre_ila_trig_mode_mask) != 0:
+            raise ValueError(f"trigger mode {trigger_mode} sets bits outside "
+                             f"TRIG_CFG, only 0x{_libre_ila_trig_mode_mask:x} is defined")
+
+        # Rising versus falling only means anything once the edge bit is set,
+        # the core does not look at bit 2 in level mode. Asking for a falling
+        # level trigger is a caller mistake worth naming rather than ignoring.
+        if (trigger_mode & _libre_ila_trig_mode["LIBRE_ILA_TRIG_FALLING"]) and \
+           not (trigger_mode & _libre_ila_trig_mode["LIBRE_ILA_TRIG_EDGE"]):
+            raise ValueError("LIBRE_ILA_TRIG_FALLING needs LIBRE_ILA_TRIG_EDGE, "
+                             "a level trigger has no direction")
 
         self.write_regs(self.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET, trigger_cond)
         self.write_regs(self.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET, trigger_mask)

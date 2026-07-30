@@ -109,13 +109,29 @@ typedef enum __libre_ila_status_t
     LIBRE_ILA_STATUS_DONE          =  3    /**< ILA acquisition complete */
 } libre_ila_status_t;
 
-/*-------------------------------------------------------------------------*//** Enum for the reduction applied to the enabled bits of the trigger vector,
- * written to the ANDOR field of the TRIG_CFG register. */
+/*-------------------------------------------------------------------------*//** Enum for the contents of the TRIG_CFG register: the reduction applied to the
+ * enabled bits of the trigger vector, plus what counts as a trigger on the
+ * reduced condition.
+ *
+ * The reduction and the edge flags OR together, so
+ * LIBRE_ILA_TRIG_MODE_AND | LIBRE_ILA_TRIG_EDGE asks for "every enabled bit
+ * matches, and trigger when that becomes true" rather than "while it is true".
+ *
+ * Level is the default. It fires on the first sample if the condition already
+ * holds when the ILA is armed, which is rarely what a "trigger when TVALID is
+ * high" style request means. */
 typedef enum __libre_ila_trig_mode_t
 {
     LIBRE_ILA_TRIG_MODE_AND = 0,   /**< Trigger when every enabled bit matches its condition. */
-    LIBRE_ILA_TRIG_MODE_OR  = 1    /**< Trigger when any enabled bit matches its condition. */
+    LIBRE_ILA_TRIG_MODE_OR  = 1,   /**< Trigger when any enabled bit matches its condition. */
+    LIBRE_ILA_TRIG_EDGE     = 2,   /**< OR in: trigger on a transition of the reduced condition, not its level. */
+    LIBRE_ILA_TRIG_FALLING  = 4    /**< OR in alongside LIBRE_ILA_TRIG_EDGE: transition to false instead of to true. */
 } libre_ila_trig_mode_t;
+
+/*-------------------------------------------------------------------------*//** Every bit TRIG_CFG defines. The core ignores anything above them, so a stray
+ * bit would leave the trigger in whatever mode the rest of the word asks for
+ * instead of failing, which is worth catching on the host. */
+#define LIBRE_ILA_TRIG_MODE_VALID_BITS  (0x7u)
 
 /*-------------------------------------------------------------------------*//** Structure instance holding all data regarding the CoreLibreILA
  */
@@ -191,7 +207,7 @@ cmd_status_t LIBRE_ILA_set_trigger_position
 );
 
 /*-------------------------------------------------------------------------*//**
-The LIBRE_ILA_configure_trigger() function writes the whole trigger vector, condition and mask, and selects how the enabled bits are reduced. This is done by writing the TRIG_COND and TRIG_MASK banks and the ANDOR field of the TRIG_CFG register.
+The LIBRE_ILA_configure_trigger() function writes the whole trigger vector, condition and mask, selects how the enabled bits are reduced and picks whether the trigger follows the level of that reduction or one of its edges. This is done by writing the TRIG_COND and TRIG_MASK banks and the whole TRIG_CFG register, whose ANDOR, EDGE and FALLING fields the mode argument carries.
 
 Both arrays describe the probe word bit for bit, word n holding probe bits [32n+31:32n]. Use LIBRE_ILA_BIT_WORD() and LIBRE_ILA_BIT_MASK() to place a given probe bit. Words above the probe width are padding, keep them zero.
 
@@ -205,9 +221,11 @@ Both arrays describe the probe word bit for bit, word n holding probe bits [32n+
     Pointer to an array of CORE_LIBRE_ILA_STRIDE_WIDTH words written to the TRIG_MASK bank. Bit i set to 1 lets probe bit i take part in the trigger, 0 makes it a don't care.
 
   @param mode
-    LIBRE_ILA_TRIG_MODE_OR to trigger as soon as any enabled bit matches its condition, LIBRE_ILA_TRIG_MODE_AND to require all of them to match at the same time.
+    LIBRE_ILA_TRIG_MODE_OR to trigger as soon as any enabled bit matches its condition, LIBRE_ILA_TRIG_MODE_AND to require all of them to match at the same time. Either may be OR-ed with LIBRE_ILA_TRIG_EDGE to trigger on the reduced condition becoming true rather than being true, and with LIBRE_ILA_TRIG_FALLING alongside it to trigger on it becoming false instead. LIBRE_ILA_TRIG_FALLING on its own is rejected, a level trigger has no direction.
 
   @note In AND mode an all zero trigger mask matches vacuously, the ILA then fires on the first sample after it is armed.
+
+  @note Without LIBRE_ILA_TRIG_EDGE the trigger is level sensitive, so a condition that already holds when the ILA is armed fires on the first sample and captures nothing of interest. "Trigger when TVALID is high" on a mostly idle stream is the usual way to meet this.
 
   @return
     cmd_status_t, see enum __cmd_status_t for details of the return values.

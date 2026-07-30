@@ -28,7 +28,9 @@
  *                                          inside the captured window
  *   0x04                        ARM_FT     any write arms the ILA, or forces a
  *                                          trigger when it is already armed
- *   0x08                        TRIG_CFG   bit0 = ANDOR, 0 -> AND, 1 -> OR
+ *   0x08                        TRIG_CFG   bit0 = ANDOR,   0 -> AND,   1 -> OR
+ *                                          bit1 = EDGE,    0 -> level, 1 -> edge
+ *                                          bit2 = FALLING, 0 -> rising
  *   0x0C                        RSVD       reserved
  *   0x10 + 4*n, n = 0..a-1      TRIG_COND  trigger vector condition
  *   0x10 + 4*(a+n), n = 0..a-1  TRIG_MASK  trigger vector mask
@@ -65,6 +67,18 @@
  *
  *   ANDOR = 1 (OR)   trigger when any enabled bit matches
  *   ANDOR = 0 (AND)  trigger when every enabled bit matches
+ *
+ * TRIG_CFG.EDGE and TRIG_CFG.FALLING then decide what counts as a trigger on
+ * that single reduced condition:
+ *
+ *   EDGE = 0                trigger while the condition is true
+ *   EDGE = 1, FALLING = 0   trigger when it becomes true
+ *   EDGE = 1, FALLING = 1   trigger when it becomes false
+ *
+ * Edge detection is applied to the reduced condition, not to each probe bit, so
+ * "bit 5 rises and bit 9 falls in the same sample" is not expressible. In level
+ * mode a condition that already holds when the ILA is armed triggers on the
+ * first sample, which is what the edge modes exist to avoid.
  *
  * @note An all zero TRIG_MASK in AND mode matches vacuously, so the ILA fires
  *       on the first sample after it is armed. Use OR mode with an all zero
@@ -190,15 +204,16 @@
  * Register: TRIG_CFG_REG
  *
  * Description: Selects how the enabled bits of the trigger vector are reduced
- * into the single trigger strobe.
+ * into the single trigger strobe, and whether that strobe follows the level of
+ * the reduced condition or one of its two edges.
  */
 #define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET       0x08U
 #define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_LENGTH       0x04U
-#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_RW_MASK      0x00000001U
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_RW_MASK      0x00000007U
 #define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_RO_MASK      0x00000000U
 #define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_WO_MASK      0x00000000U
-#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_READ_MASK    0x00000001U
-#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_WRITE_MASK   0x00000001U
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_READ_MASK    0x00000007U
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_WRITE_MASK   0x00000007U
 
 /**
  * Field Name: ANDOR
@@ -215,6 +230,39 @@
 #define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_ANDOR_FIELD_MASK \
       (CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_ANDOR_FIELD_NS_MASK << \
          CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_ANDOR_FIELD_SHIFT)
+
+/**
+ * Field Name: EDGE
+ *
+ * Field Desc: What the trigger follows on the reduced condition. 0 selects the
+ * level, the ILA triggers for as long as the condition holds, so a condition
+ * that already holds at the arm fires on the first sample. 1 selects a
+ * transition, direction picked by FALLING.
+ */
+
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_EDGE_FIELD_OFFSET      \
+                (CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET)
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_EDGE_FIELD_SHIFT       (1U)
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_EDGE_FIELD_NS_MASK     ((uint32_t)(0x00000001UL))
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_EDGE_FIELD_MASK \
+      (CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_EDGE_FIELD_NS_MASK << \
+         CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_EDGE_FIELD_SHIFT)
+
+/**
+ * Field Name: FALLING
+ *
+ * Field Desc: Which transition triggers when EDGE is set. 0 selects the rising
+ * edge, the condition becoming true, 1 selects the falling edge, the condition
+ * becoming false. The core does not look at this field when EDGE is clear.
+ */
+
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_FALLING_FIELD_OFFSET   \
+                (CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET)
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_FALLING_FIELD_SHIFT    (2U)
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_FALLING_FIELD_NS_MASK  ((uint32_t)(0x00000001UL))
+#define CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_FALLING_FIELD_MASK \
+      (CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_FALLING_FIELD_NS_MASK << \
+         CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_FALLING_FIELD_SHIFT)
 
 /*******************************************************************************
  * Register: RSVD_IN_REG

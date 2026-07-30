@@ -26,6 +26,7 @@ This project is licensed under CERN Open Hardware Licence Version 2 - Permissive
     * Trigger can be set with AXI4Lite interface
     * Once setting the triggers condition, the ILA can be armed
     * Number of samples before and after trigger can be adjusted
+    * The trigger condition can be taken on its level, its rising edge or its falling edge
     * Can also use an external trigger
 * CDC on the ARM and status bits
 * A serial wrapper is also provided to easily use the ILA with the PC
@@ -92,7 +93,7 @@ them, while `probe_master_axis_*` is the AXI4S master facing downstream.
 |--------|----|-------------------------|-----------------------------|
 |   0    | RW | Trigger position        | Number of pre-trig samples  |
 |   1    |  W | Arm_FT                  | Any write to this register arms the ILA or forces trigger if already armed |
-|   2    | RW | Trigger configuration   | bit0: 0 = AND, 1 = OR. See trigger vector section |
+|   2    | RW | Trigger configuration   | bit0: 0 = AND, 1 = OR; bit1: 0 = level, 1 = edge; bit2: 0 = rising, 1 = falling. See trigger vector section |
 |   3    | RW | Reserved                | Reserved                    |
 | 4      | RW | Trigger vector cond (LSB) | See trigger vector section |
 | 4+a-1  | RW | Trigger vector cond (MSB) |                            |
@@ -157,6 +158,23 @@ The trigger configuration register (index 2, bit0) selects how the enabled bits 
 * `1` (OR): the ILA triggers as soon as **any** enabled bit is matching.
 
 Since the whole probe word participates in the same per-bit vector, data bits can be combined with the signalling bits in either AND or OR mode -- there is no separate, single-bit "whole word matches" path for the data.
+
+### Level and edge modes
+The AND/OR reduction above produces a single condition bit. Bits 1 and 2 of the trigger configuration register decide what counts as a trigger on that bit:
+
+| bit1 | bit2 | Mode    | Triggers when the reduced condition                |
+|------|------|---------|----------------------------------------------------|
+|  0   |  x   | Level   | **is** true                                        |
+|  1   |  0   | Rising  | **becomes** true, having been false the sample before |
+|  1   |  1   | Falling | **becomes** false, having been true the sample before |
+
+Level is the default and the mode the register map has always had, so `0x0` keeps the pre-existing behaviour.
+
+The distinction matters at arming time. In level mode, a condition that is already true when the ILA is armed triggers on the very first sample: "trigger when `tvalid` is high" on a mostly-idle stream fires immediately and captures nothing interesting. The edge modes wait for a transition instead. `trig_lvl_prev` is seeded with the live condition when the ILA is armed rather than cleared, so an already-true condition is not mistaken for a `0 -> 1` transition on the first sample.
+
+Edge detection is applied to the reduced condition, not per probe bit -- it costs one flip-flop, since the whole probe word has already been reduced to one bit by then. There is no way to ask for "bit 5 rises **and** bit 9 falls in the same sample"; that would need a registered copy of the whole probe word and a second cond/mask vector. The reduced-condition edge is also what SUMP2 provides with its `AND Rising`/`OR Rising` trigger types.
+
+The external trigger path (`G_EXTERNAL_TRIG = 1`) has always been rising-edge only and ignores all three bits.
 
 ## Trigger
 
@@ -317,6 +335,9 @@ Alongside the directives the script rewrites the default of every generic named 
 
 # Future improvements
 
+### Data compression
+This can be further optimised for the data storage compression although I don't prefer that as it will make the readout complex.
+
 ### Finishing the generator script
 The generator writes the probe port declarations, the shorting block, the `w_probe` concatenation and the default generics. One thing is still open:
 
@@ -329,7 +350,6 @@ The generator writes the probe port declarations, the shorting block, the `w_pro
 If needed, user can also modify the core to use masked data values for triggering.
 
 # Serving suggestions
-This can be further optimised for the data storage compression although I don't prefer that as it will make the readout complex.
 
 VHDL Style Guide can be used to make the generated code more readable.
 

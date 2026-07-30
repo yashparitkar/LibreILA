@@ -2,7 +2,7 @@
 -- File: libre_ila.vhdl
 -- Author: Y.U.P. (yashparitkar)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-07-30 Thu 11:37
+-- Last Modified: 2026-07-30 Thu 18:09
 --
 -- Description: A generic ILA, the probe is described by codegen/portmap.csv
 -- Usage:
@@ -213,10 +213,14 @@ architecture rtl of libre_ila is
   signal post_trig_samp_tgt : unsigned(C_ADDR_WIDTH - 1 downto 0);
 
   signal trig     : std_logic;
+  signal trig_lvl : std_logic; -- reduced condition, before any edge detection
   signal trig_or  : std_logic;
   signal trig_and : std_logic;
 
-  signal ext_trig      : std_logic;
+  -- trig_lvl delayed by one sample, so the edge modes cost one flop instead of
+  -- a registered copy of the whole probe word.
+  signal trig_lvl_prev : std_logic;
+
   signal ext_trig_prev : std_logic;
 
   -- Merged trigger vector -- one bit per probed bit, laid out identically to
@@ -321,8 +325,8 @@ begin
   o_trig_out <= trig;
 
   g_ext_trig_0 : if G_EXTERNAL_TRIG = 0 generate
-    trig <= trig_or when trig_cfg(0) = '1' else
-            trig_and;
+    trig_lvl <= trig_or when trig_cfg(0) = '1' else
+                trig_and;
 
     -- Same bit layout as w_wr_data, zero-extended up to the stride boundary
     trig_samp_word <= std_logic_vector(resize(unsigned(w_wr_data), C_TRIG_VECT_WIDTH));
@@ -336,6 +340,38 @@ begin
     -- AND: trigger only if every enabled (mask=1) bit matches its condition
     trig_and <= '1' when (trig_mask and not trig_vect) = (trig_vect'range => '0') else
                 '0';
+
+    -- One sample of history on the reduced condition.
+    --
+    -- arm_samp seeds it with the live condition rather than clearing it: a
+    -- condition that is already true when the ILA is armed must not look like a
+    -- 0 -> 1 transition, or the edge modes would fire on the first sample
+    -- exactly like the level mode does, which is the thing they exist to avoid.
+    --
+    -- The update is gated with en_wr so "previous" means the previous *stored*
+    -- sample. That keeps the edge aligned with the sample train if the write
+    -- enable is ever qualified with a handshake, see p_write below.
+    p_trig_edge : process (samp_aclk) is
+    begin
+
+      if rising_edge(samp_aclk) then
+        if (i_rst_sync = '1') then
+          trig_lvl_prev <= '0';
+        elsif (arm_samp = '1') then
+          trig_lvl_prev <= trig_lvl;
+        elsif (en_wr = '1') then
+          trig_lvl_prev <= trig_lvl;
+        end if;
+      end if;
+
+    end process p_trig_edge;
+
+    -- trig_cfg(1): 0 = level, 1 = edge
+    -- trig_cfg(2): 0 = rising, 1 = falling, only read when trig_cfg(1) = '1'
+    trig <= trig_lvl                           when trig_cfg(1) = '0' else
+            (trig_lvl and (not trig_lvl_prev)) when trig_cfg(2) = '0' else
+            ((not trig_lvl) and trig_lvl_prev);
+
   end generate g_ext_trig_0;
 
   g_ext_trig_1 : if G_EXTERNAL_TRIG = 1 generate
@@ -344,13 +380,7 @@ begin
     begin
 
       if rising_edge(samp_aclk) then
-        if (i_rst_sync = '1') then  -- Optional reset
-          --  ext_trig_prev <= '0';
-          ext_trig <= '0';
-        else
-          -- ext_trig      <= i_ext_trig;
-          ext_trig_prev <= i_ext_trig;
-        end if;
+        ext_trig_prev <= i_ext_trig;
       end if;
 
     end process p_edge_detect;
