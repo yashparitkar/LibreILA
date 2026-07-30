@@ -31,6 +31,11 @@ Host side tests for the drivers. No ghdl, no generated core, and pyserial is stu
 
 | Test | What it covers |
 |------|----------------|
-| `00_pkt_format` | The python driver's packet format against a model of the wrapper's parser |
+| `00_pkt_format` | The python driver's packet format, register map, control path and readout, against a model of the wrapper's parser |
 
 `00_pkt_format` exists because the UART packet format is the one thing the RTL and the python driver have to agree on, and nothing else checks that agreement: the wrapper is happy to answer a malformed request and the driver is happy to misparse a well-formed reply.
+
+The same `FakeWrapper` also serves the register map, so the tests cover the two other places the driver can silently disagree with the hardware:
+
+* **The register map derived from the probe width.** Everything scales with the stride, the lane count rounded up to a power of two with a minimum of four, so `TestRegisterMap` pins the offsets against the map in the top level README rather than against the driver's own arithmetic. This matters because the core truncates an address it cannot decode instead of rejecting it, so a wrong stride aliases onto real registers rather than failing.
+* **The control path and the readout.** `TestControl` covers the status decode and the ARM_FT guards, `TestReadout` covers unrolling the circular buffer from the oldest sample and rebasing the trigger index onto that ordering.
