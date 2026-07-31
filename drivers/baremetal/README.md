@@ -28,7 +28,7 @@ For the stock AXI4S build the probe is TDATA in the low bits, then TLAST, TVALID
 
 `LIBRE_ILA_init()` reads the probe width, buffer depth and sampling clock frequency out of the core and works the register map out from them, leaving the lot in the instance. Nothing in the driver is compiled against one synthesis, so re-synthesising with a different `G_PROBE_WIDTH` does not need a firmware rebuild, and **one binary can drive several cores of different probe widths at once** — each `libre_ila_instance_t` carries its own geometry.
 
-This works because the output block sits at the base address in every build: the registers that report the width are findable before the width is known. See the register map section of the [top level README](../../README.md).
+This works because the output block sits at the base address in every build: the registers that report the width are findable before the width is known. See the register summary section of the [datasheet](../../docs/datasheet.pdf).
 
 ## Definitions needed
 

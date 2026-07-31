@@ -370,7 +370,7 @@ class TestErrorHandling(unittest.TestCase):
 class TestRegisterMap(unittest.TestCase):
     """
     TestRegisterMap: The offsets the driver derives from the probe width,
-    against the map in the top level README and in
+    against the map in the register summary of docs/datasheet.pdf and in
     drivers/baremetal/core_libre_ila_regs.h. Everything scales with the stride,
     which is the lane count rounded up to a power of two with a minimum of
     four, so the lane count on its own is not it.

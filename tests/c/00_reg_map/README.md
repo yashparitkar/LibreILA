@@ -23,8 +23,8 @@ words and the sample buffer, go through `HW_*` with a computed address.
 
 ## What it covers
 
-Register indices are computed in `tb.c` from the map in the [top level
-README](../../../README.md), not taken from the driver, so a driver that derives
+Register indices are computed in `tb.c` from the map in the
+[datasheet](../../../docs/datasheet.pdf), not taken from the driver, so a driver that derives
 them wrong disagrees with this file instead of agreeing with itself. Same
 principle as `identity_regs()` in `tests/python/00_pkt_format`.
 

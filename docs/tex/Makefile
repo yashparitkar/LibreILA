@@ -6,7 +6,7 @@ BIBTEX := bibtex
 
 .PHONY: all svg2pdf datasheet manual copy clean
 
-all: all svg2pdf datasheet manual copy clean
+all: svg2pdf datasheet manual copy clean
 
 svg2pdf:
 	for f in $$(find ./images -name '*.svg'); do \

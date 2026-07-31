@@ -1,6 +1,6 @@
 % File: datasheet.tex
 % Author: Y.U.P. (yashparitkar)
-% Last Modified: 2026-07-28 Tue 12:47
+% Last Modified: 2026-07-31 Fri 22:14
 %
 % Description: LaTeX source file for the LibreILA datasheet. This covers the technical specifications and features of the LibreILA tool.
 
@@ -11,6 +11,7 @@
 \setlength{\columnsep}{0.8cm}   % gutter between the two columns
 % \usepackage{xurl}
 \usepackage{tabularx}
+\usepackage{multicol}   % two-column table of contents on an otherwise one-column page
 \usepackage[utf8x]{inputenc}
 \usepackage{amssymb}
 \usepackage{amsmath}
@@ -29,6 +30,29 @@
 % \usepackage{enumerate}
 \usepackage{listings}
 \usepackage[nohyperlinks,nolist]{acronym}
+\usepackage{enumitem}
+\usepackage{hhline}   % rules that survive a coloured cell, see the regdiag block
+
+% Hex literal. \ensuremath so the same macro works in prose and inside a
+% math expression like the sample buffer offset; \mathtt so the x stays
+% upright instead of being set as a maths variable.
+\newcommand{\hex}[1]{\ensuremath{\mathtt{0x#1}}}
+
+%% List spacing %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% The default list glue is elastic (\itemsep is 4pt plus 2pt minus 1pt,
+% \topsep and \parsep likewise), and article.cls turns on \flushbottom
+% for a twocolumn document and never turns it off again -- not even
+% under the \onecolumn used for the body. Every page therefore gets
+% padded out to the full column height, and since a list is usually the
+% only stretchable glue on the page, the whole shortfall lands between
+% the items. That is why the same itemize looks tight on one page and
+% loose on the next.
+%
+% Fix both halves: rigid spacing so a list cannot be stretched, and
+% \raggedbottom so LaTeX stops trying to. Pages now end where their
+% content ends.
+\setlist{topsep=4pt, itemsep=2pt, parsep=0pt, partopsep=0pt}
+\raggedbottom
 
 
 \lstset{ %
@@ -66,14 +90,96 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
 
 
 \newcommand{\todo}[1]{\textbf{\color{red}TODO: #1}}
-\newcommand{\arya}{\color{blue}} 
+\newcommand{\arya}{\color{blue}}
 \newcommand{\degr}{\ensuremath{^\circ}}
+
+%% Register bit-field diagrams %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% One `regdiag` is one row of eight bits in the style of the Microchip
+% core user guides: a row of bit numbers, a boxed row of fields, then
+% the access and reset of each bit. Four of them make a 32-bit register.
+%
+%   \begin{regdiag}
+%     \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+%     \fldrow{\rsvdb{5}\fld{3}{FOO[2:0]}}
+%     \bitacc{}{}{}{}{}{R}{R}{R}
+%     \bitrst{}{}{}{}{}{0}{0}{0}
+%   \end{regdiag}
+%
+% The column spec carries no rules at all. The verticals come from the
+% \multicolumn in the field row and the horizontals from \bitrule, so
+% only that row is boxed and the other three stay clean. \fldb starts a
+% field row because it is the one that has to draw the left edge, \fld
+% continues it; \rsvdb/\rsvdc are their greyed reserved counterparts.
+%
+% \bitrule is \hhline rather than the obvious \cline{2-9}. colortbl's
+% coloured panel is painted after the rules and overhangs the row by one
+% \arrayrulewidth at the top, so a \cline above a greyed cell is drawn
+% and then covered up -- which is why the reserved rows came out with no
+% top edge. \hhline puts its rule just clear of the panel instead, and
+% spans exactly the same width, so only the greyed rows change.
+% Nine equal columns filling \textwidth: the Bit/Access/Reset label gets
+% the same width as one bit, so 1 + 8 spans margin to margin. \tabcolsep
+% is 2pt and the outer pair is killed by @{}, leaving eight inter-column
+% gaps of 2*\tabcolsep = 32pt to take off the total. The extra 1pt is
+% slack for the field row's outer vertical rules, which add
+% 2*\arrayrulewidth on top of the column widths and would otherwise tip
+% the row over the right margin.
+% \regcolw is worked out inside the environment rather than here, so it
+% picks up whatever \textwidth geometry has settled on.
+\newlength{\regcolw}
+
+\newcolumntype{Y}{>{\centering\arraybackslash}p{\regcolw}}
+% The label column is as wide as a bit column but keeps its text against
+% the diagram, as in the reference guides.
+\newcolumntype{L}{>{\raggedleft\arraybackslash}p{\regcolw}}
+
+\newenvironment{regdiag}{%
+  \par\nobreak\vspace{0.5em}%
+  \footnotesize
+  \renewcommand{\arraystretch}{1.25}%
+  \setlength{\tabcolsep}{2pt}%
+  \setlength{\regcolw}{\dimexpr(\textwidth - 33pt)/9\relax}%
+  \noindent\begin{tabular}{@{}L*{8}{Y}@{}}%
+}{%
+  \end{tabular}\par\vspace{0.4em}%
+}
+
+\newcommand{\bitrule}{\hhline{~*{8}{-}}}
+\newcommand{\bitnums}[8]{Bit & #1 & #2 & #3 & #4 & #5 & #6 & #7 & #8 \\ \bitrule}
+\newcommand{\fldrow}[1]{ & #1 \\ \bitrule}
+\newcommand{\bitacc}[8]{Access & #1 & #2 & #3 & #4 & #5 & #6 & #7 & #8 \\}
+\newcommand{\bitrst}[8]{Reset & #1 & #2 & #3 & #4 & #5 & #6 & #7 & #8 \\}
+
+% The continuation forms carry the & themselves, so a field row reads as
+% one run of fields with no separators to get wrong.
+\newcommand{\fldb}[2]{\multicolumn{#1}{|c|}{#2}}          % first field of a row
+\newcommand{\fld}[2]{& \multicolumn{#1}{c|}{#2}}          % any later field
+\newcommand{\rsvdb}[1]{\multicolumn{#1}{|c|}{\cellcolor{gray!25}}}
+\newcommand{\rsvdc}[1]{& \multicolumn{#1}{c|}{\cellcolor{gray!25}}}
+\newcommand{\rsvdrow}{\fldrow{\rsvdb{8}}}                 % a wholly reserved byte
+\newcommand{\emptyrow}{\bitacc{}{}{}{}{}{}{}{}\bitrst{}{}{}{}{}{}{}{}}
+
+% The property block that heads every register subsection
+\newcommand{\regprop}[5]{%
+  \begin{tabular}{ll}
+    \textbf{Name:}         & #1 \\
+    \textbf{Register Set:} & #2 \\
+    \textbf{Offset:}       & #3 \\
+    \textbf{Reset:}        & #4 \\
+    \textbf{Property:}     & #5 \\
+  \end{tabular}\par\vspace{0.6em}%
+}
 
 \title{LibreILA Datasheet}
 \author{Yash Paritkar (github/yashparitkar)}
 \date{July 2026}
 
 \begin{document}
+%% Acronym definitions. These have to come before the first \acs, and the
+%% `nolist' option means the environment itself prints nothing, so it can
+%% sit here at the very top of the body.
+\input{acronym}
+
 %% Front matter: full page width, no columns %%%%%%%%%%%%%%%%%%%%%%%%
 \onecolumn
 
@@ -81,44 +187,82 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
 \thispagestyle{plain}
 \twocolumn
 \begin{table*}
+    % Tightened from the default 6pt: at 6pt the title row is a few points
+    % wider than \textwidth and the row overfulls.
+    \setlength{\tabcolsep}{3pt}
     \begin{tabular}{cc}
-        % \raisebox shifts the image down by half its height so that its vertical
-        % centre (not its baseline) sits on the row baseline, matching the [c]
-        % alignment of the nested tabular in the next cell.
         {
-            \raisebox{-0.5\height}{\includegraphics[width = 4cm]{./images/libre_ila_logo_converted.pdf}}
+            \raisebox{-0.5\height}{\includegraphics[width = 3cm]{./images/libre_ila_logo_converted.pdf}}
         } &
         {
             \begin{tabular}[c]{l}
-                \textbf{\Large LibreILA Datasheet} \\
+                \textbf{\Large LibreILA (Integrated Logic Analyzer) Datasheet} \\
                 \textbf{Version: 0.0} \\
                 \textbf{Date: July 2026} \\
                 \textbf{Author: Yash Paritkar (github/yashparitkar)} \\
+                \textbf{License: CERN \acs{OHL} v2 -- Permissive} \\
             \end{tabular}
         }
     \end{tabular}
 \end{table*}
 
 \section{Features}
-\lipsum[1]
+\begin{itemize}
+    \item Open-source and free to use: \\ \url{github.com/yashparitkar/libreila}
+    \item Generic and modifiable probe
+    \item Uses fabric RAM for data storage and can be read back with AXI4Lite interface
+    \item Uses series probes for ease with block diagram
+    \item Customizable trigger:
+    \begin{itemize}
+        \item Trigger can be configured with AXI4Lite
+        \item ARM can be configured with AXI4Lite
+        \item Adjustable trigger point
+        \item Level and edge based trigger
+        \item External trigger can be possible
+        \item Trigger can be chained across multiple instances
+    \end{itemize}
+    \item CDC on the ARM and status bits
+    \item A serial wrapper is also provided to easily use the \acs{ILA} with PC
+    \item A python driver is provided to configure the \acs{ILA} over the serial
+          wrapper and dump the capture as a \acs{VCD} for any waveform viewer.
+          A \acs{GUI} on top of it is planned
+    \item A default example is provided to use the \acs{ILA} with a simple 64-bit AXI4Stream interface
+\end{itemize}
 
 \section{Application}
 \begin{itemize}
     \item RTL debugging
     \item FPGA prototyping
-    \item Generic logic analyzer
+    \item Generic logic analyser
 \end{itemize}
 
 \section{Description}
-\lipsum[2-5]
+LibreILA is an in-system \acf{ILA} written in plain VHDL. It is spliced
+into a link inside the \acs{FPGA} fabric and samples that link into a
+circular buffer held in fabric RAM, so nets that never reach a pad are
+as visible as the ones that do. It exists because the Microchip
+toolchain has no equivalent of the Xilinx \acs{ILA} and SmartDebug's
+live probes are not a substitute for a triggered, time-correlated
+capture.
+
+The core is deliberately ignorant of what it observes: one flat probe
+word of \verb|G_PROBE_WIDTH| bits, whose bit order the trigger, the
+sample buffer and both drivers all inherit. A build is therefore
+described entirely by two CSV files. Two deliverables are provided:
+\verb|libre_ila|, the bare core with an AXI4Lite slave port and a
+baremetal C driver, and \verb|libre_ila_uart|, a serial wrapper driven
+from a PC by the python driver. The baremetal path is the
+differentiator: capture and readout need no host on the wire at all.
 
 \newpage
+\onecolumn
+\begin{multicols}{2}
 \tableofcontents
+\end{multicols}
 
 \section{Revision History}
 
 \renewcommand{\arraystretch}{1.5}
-% ignore the warning about overfull hbox. The next column is gonna be always empty
 \begin{table}[H]
     \centering
     \begin{tabularx}{\textwidth}{|l|c|X|}
@@ -130,61 +274,1155 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
         \end{tabularx}
     \label{tab:hisotry}
 \end{table}
-
-
-\input{acronym}
+\renewcommand{\arraystretch}{1.0}
 
 %% Body: back to one column %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\onecolumn
-\section{Functional description}
-\lipsum[1-3]
+\newpage
+\section{Detailed description}
+The summary on page 1 says what the core is. This section says how it
+works: what the blocks are, how a capture proceeds from arming to
+readout, and where the two clock domains meet. The register-level
+detail that a driver needs is in Section~\ref{sec:regsummary}.
 
-\section{Core parameters and interface signals}
-\lipsum[4-6]
+\subsection{Overview}
+Everything in the core is arranged around one shared definition of the
+probe word, \verb|w_probe|. Three blocks sit on top of it:
 
-\section{Register summary}
-\subsection{TRIG\_IDX}
-\lipsum[7]
+\begin{itemize}
+    \item \textbf{The probe splice.} A pair of mirrored ports shorted
+          combinationally, so the probed link passes straight through
+          and the core reads it in parallel.
+    \item \textbf{The trigger comparator.} One condition bit and one
+          mask bit per probed bit, reduced to a single condition and
+          then qualified by the level or edge mode.
+    \item \textbf{The sample buffer and the AXI4Lite slave.} A circular
+          buffer in fabric RAM, written every sampling clock while
+          armed and read back as a flat register map.
+\end{itemize}
 
-\subsection{ARM\_FT}
-\lipsum[8]
+A capture runs in one direction. The host writes the trigger condition,
+the mask, the mode and the trigger position, then writes ARM\_FT. The
+core starts sampling into the buffer immediately, overwriting the
+oldest sample once it wraps, so that at any moment the buffer holds the
+most recent \verb|DEPTH| samples. When the trigger condition is met the
+core latches where it happened, keeps sampling for the configured
+number of post-trigger samples, and stops. DONE then goes high and the
+buffer holds a window of history either side of the trigger, which the
+host reads back at its leisure -- the capture is over, so readout races
+nothing.
 
-\section{Additional references}
-\lipsum[9-10]
+The core straddles two clock domains and is deliberate about which side
+each part lives on. Sampling, triggering and the buffer write port run
+on \verb|samp_aclk|, the clock of the probed link. The register map and
+the buffer read port run on \verb|s_axil_aclk|. Only the arm pulse and
+the three status bits actually cross, through two-flop synchronisers;
+the sample data never crosses a synchroniser at all, because the buffer
+is a dual-port RAM whose read port is simply clocked from the other
+domain.
 
-\section{Device utilization and performance}
-\lipsum[11-12]
+\verb|libre_ila_uart| wraps all of the above with a \acs{UART} and a
+packet parser, putting the same register map at the end of a serial
+link instead of on an AXI bus. Nothing inside the core changes.
 
-
-% ---------------------------------------------------------------
-% EXAMPLE 1: figure confined to ONE column (the default).
-% `figure` + \linewidth => the image never exceeds the column width.
-% Placement: [t]/[b]/[h] work as usual; [H] (float package) also works.
-% ---------------------------------------------------------------
-\begin{figure}[t]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=\linewidth]{./images/libre_ila_logo_converted.pdf}
-    \caption{Column-wide figure: sits inside a single column.}
-    \label{fig:logo-column}
+    % \includegraphics[width=\linewidth]{./images/block_diagram.pdf}
+    \todo{Add the block diagram here.}
+    \caption{LibreILA core block diagram}
+    \label{fig:blockdiag}
 \end{figure}
 
-% ---------------------------------------------------------------
-% EXAMPLE 2: figure spanning BOTH columns (full page width).
-% Starred float `figure*` + \textwidth.
-% Caveats: starred floats may only go to the top of a page ([t]) --
-% [h] and [H] are silently ignored -- and they can only appear on the
-% *next* page, never the current one. The stfloats package loaded in
-% the preamble additionally enables [b].
-% ---------------------------------------------------------------
-\begin{figure*}[t]
-    \centering
-    \includegraphics[width=0.6\textwidth, height = 5cm]{./images/libre_ila_logo_converted.pdf}
-    \caption{Page-wide figure: spans across both columns.}
-    \label{fig:logo-full}
-\end{figure*}
+\subsection{The probe}
+The core samples one vector, \verb|w_probe|, of \verb|G_PROBE_WIDTH|
+bits. Signals are packed LSB first in the order they are listed in
+\verb|portmap.csv|, and that concatenation is the single definition of
+the probe bit order: the sample buffer, the trigger vector and both
+drivers inherit it. For the stock 64-bit AXI4Stream build the probe is
+67 bits wide, laid out as in Table~\ref{tab:stockprobe}.
 
-% The same rule applies to tables: `table` stays in one column,
-% `table*` spans both. Note that \begin{table*} does not work with
-% [H]; use [t] or [b].
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|l|}
+        \hline
+        \rowcolor{gray!40} \textbf{Bit range} & \textbf{Signal} \\
+        \hline
+        63 downto 0 & TDATA \\
+        \hline
+        64 & TLAST \\
+        \hline
+        65 & TVALID \\
+        \hline
+        66 & TREADY \\
+        \hline
+    \end{tabular}
+    \caption{Probe word of the stock AXI4Stream build}
+    \label{tab:stockprobe}
+\end{table}
+
+The core is spliced into the link it probes, so the probe appears as a
+pair of mirrored ports named after the role the core plays on each
+side, not after the direction the data happens to flow:
+
+\begin{itemize}
+    \item \verb|probe_slave_*| faces the \emph{master} of the probed
+          link, so the core is the slave there, and these ports carry
+          the directions listed in \verb|portmap.csv|.
+    \item \verb|probe_master_*| faces the \emph{slave} of the probed
+          link, so the core is the master there, and every direction is
+          the mirror of its \verb|probe_slave_| twin.
+\end{itemize}
+
+The two sides are shorted combinationally, so the splice is purely pass
+through and introduces no delay into the probed link. A signal that
+cannot be spliced in series is tapped in parallel instead, with the
+\verb|mon| type, which the core reads and never drives.
+
+\subsection{Capture}
+While the \acs{ILA} is armed it stores one sample of the probe word per
+rising edge of \verb|samp_aclk| into a circular buffer
+\verb|G_SAMP_BUFF_DEPTH| samples deep. Once the trigger fires the core
+keeps capturing for \verb|DEPTH - TRIG_POS - 1| further samples and
+then stops, so the captured window holds \verb|TRIG_POS| samples of
+history ahead of the trigger and the rest behind it.
+
+Because the buffer is circular, the oldest sample is not at index zero
+and the window is almost always split across the wrap point. The core
+reports where the window starts and where the trigger landed in
+SAMP\_BUFF\_FRST\_IDX and SAMP\_BUFF\_TRIG\_IDX, and the host unrolls
+the buffer from there. Figure~\ref{fig:sampbuff} shows the two views:
+the capture as it happened, and the same samples as they sit in the
+buffer.
+
+\begin{figure}[H]
+    \centering
+    % \includegraphics[width=\linewidth]{./images/samp_buff_positions.pdf}
+    \todo{Add the sample buffer position diagram here. The two views to
+    draw are in the comment block above \texttt{trig\_idx} in
+    \texttt{hdl/libre\_ila.vhdl}: the sample train split into
+    \texttt{TRIG\_POS} pre-trigger samples and the post-trigger
+    remainder, and the same window inside the circular buffer, where
+    wrapping puts a post-trigger run of $a$ samples before
+    \texttt{FRST\_IDX} and another of $b$ after \texttt{TRIG\_IDX}.}
+    \caption{Sample buffer positions}
+    \label{fig:sampbuff}
+\end{figure}
+
+That split is also what the post-trigger counter inside the core counts
+out: it targets $a + b$ samples, not the distance to the end of the
+buffer.
+
+\subsection{Trigger}
+The trigger is one condition bit per probed bit, held in two registers
+of identical layout. TRIG\_COND carries the value each probe bit has to
+take to match, TRIG\_MASK decides whether that bit takes part at all.
+The enabled bits are then reduced to a single condition, by AND or by
+OR, and that single condition is what the level and edge modes act on
+(Table~\ref{tab:trigmodes}).
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|c|c|l|l|}
+        \hline
+        \rowcolor{gray!40} \textbf{EDGE} & \textbf{FALLING} & \textbf{Mode} & \textbf{Triggers when the condition} \\
+        \hline
+        0 & x & Level   & \emph{is} true \\
+        \hline
+        1 & 0 & Rising  & \emph{becomes} true \\
+        \hline
+        1 & 1 & Falling & \emph{becomes} false \\
+        \hline
+    \end{tabular}
+    \caption{Trigger modes, \texttt{TRIG\_CFG} bits 2 and 1}
+    \label{tab:trigmodes}
+\end{table}
+
+The distinction matters at arming time. In level mode a condition that
+already holds when the \acs{ILA} is armed fires on the very first
+sample and captures nothing of interest, which is exactly what happens
+to ``trigger when TVALID is high'' on a mostly idle stream. The edge
+modes wait for a transition instead. The previous-condition flop is
+seeded with the live condition at arm rather than cleared, so an
+already-true condition is not mistaken for a rising edge.
+
+Edge detection is applied to the reduced condition, not per probe bit,
+because by that point the whole probe word has already been reduced to
+one bit and the mode costs a single flip-flop. Asking for ``bit 5 rises
+\emph{and} bit 9 falls in the same sample'' is therefore not
+expressible.
+
+Note that an all-zero TRIG\_MASK in AND mode matches vacuously and
+fires on the first sample after arming. Use OR mode with an all-zero
+mask if the intent is never to trigger on the probe.
+
+\subsection{External trigger and chaining}
+Setting \verb|G_EXTERNAL_TRIG| to 1 replaces the trigger comparator
+with the \verb|i_ext_trig| pin: in that build the \acs{ILA} triggers
+only on the rising edge of that pin, synchronised into the sampling
+clock domain, and the three TRIG\_CFG mode bits are ignored. The
+resulting trigger is driven out on \verb|o_trig_out| in every build, so
+several instances can be chained to capture one event across different
+parts of a design.
+
+\subsection{Clock domains}
+The capture side runs entirely in the sampling clock domain, driven by
+\verb|samp_aclk|, which should be fed the clock the probed link runs
+on. The AXI4Lite port is a separate domain on \verb|s_axil_aclk|. The
+arm pulse and the ARMED, TRIGD and DONE status bits cross between them
+through two-flop synchronisers and so lag by a couple of cycles; the
+internal STATE field of the status register is not synchronised and is
+there for debugging only.
+
+Readout needs no synchroniser at all. The sample buffer is a dual-port
+\acs{LSRAM} whose read port is clocked by the AXI4Lite clock, which is
+what the PolarFire \acs{LSRAM} independent clock port exists for.
+
+\subsection{Readout}
+Samples are stored one 32-bit lane per slice of the probe word, so lane
+$n$ carries probe bits $32n+31$ downto $32n$ and the last lane is zero
+padded in its upper bits. On readout the lanes are padded further, up
+to \verb|C_AXIL_STRIDE| registers per sample, so that a sample index
+maps onto an address with a shift instead of a multiply. The trigger
+vector uses that same padded layout, which is what makes a captured
+sample and a trigger condition directly comparable word for word.
+
+\newpage
+\section{Core parameters and interface signals}
+Everything in this section applies to both \verb|libre_ila| and
+\verb|libre_ila_uart|; the wrapper adds the generics and ports marked
+as such.
+
+Three quantities are derived from the generics and are referred to
+throughout the rest of this document:
+
+\begin{itemize}
+    \item \verb|C_N_LANES| $= \lceil$\verb|G_PROBE_WIDTH|$/32\rceil$,
+          the number of 32-bit lanes one sample occupies in the RAM.
+    \item \verb|C_AXIL_STRIDE| ($a$), \verb|C_N_LANES| rounded up to
+          the next power of two with a minimum of 4. This is the number
+          of registers one sample, and one trigger vector, occupies on
+          the bus.
+    \item \verb|C_ADDR_WIDTH| $= \log_2($\verb|G_SAMP_BUFF_DEPTH|$)$,
+          the width of a sample index.
+\end{itemize}
+
+For the stock 64-bit AXI4Stream build \verb|G_PROBE_WIDTH| is 67, so
+\verb|C_N_LANES| is 3, $a$ is 4 and \verb|C_ADDR_WIDTH| is 11.
+
+\subsection{Configuration parameters}
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Generic} & \textbf{Default} & \textbf{Description} \\
+        \hline
+        \verb|G_SAMP_CLK_FREQ| & 100\,000\,000 & Sampling clock frequency in Hz. Reported over AXI4Lite so the host can build the time axis; it configures no logic. \\
+        \hline
+        \verb|G_AXIL_CLK_FREQ| & 100\,000\,000 & AXI4Lite clock frequency in Hz. Sets the wrapper's watchdog period and the \acs{UART} divider. \\
+        \hline
+        \verb|G_EXTERNAL_TRIG| & 0 & 1 uses the \verb|i_ext_trig| pin instead of the trigger vector. \\
+        \hline
+        \verb|G_PROBE_WIDTH| & 67 & Total probed bits. Keep it a multiple of 32 for best results. Must be greater than zero, checked at elaboration. \\
+        \hline
+        \verb|G_SAMP_BUFF_DEPTH| & 2048 & Number of samples stored. Must be a power of two greater than one, checked at elaboration. \\
+        \hline
+        \verb|G_UART_RX_FIFO_DEPTH| & 1024 & Wrapper only. Depth of the \acs{UART} receive FIFO in bytes. \\
+        \hline
+        \verb|G_UART_TX_FIFO_DEPTH| & 1024 & Wrapper only. Depth of the \acs{UART} transmit FIFO in bytes. \\
+        \hline
+        \verb|G_BAUD_RATE| & 115\,200 & Wrapper only. \acs{UART} baud rate. \\
+        \hline
+        \verb|C_S_AXIL_DATA_WIDTH| & 32 & AXI4Lite data width. Do not change. \\
+        \hline
+        \verb|C_S_AXIL_ADDR_WIDTH| & 32 & AXI4Lite address width. Do not change. \\
+        \hline
+    \end{tabularx}
+    \caption{Configuration generics}
+    \label{tab:generics}
+\end{table}
+
+\subsection{Portmap}
+The probe ports are not fixed. They are written by the generator from
+\verb|portmap.csv|, one line per probed signal as
+\verb|signal,width,type|, listed LSB first. The same file gives the
+python driver the names it puts in the \acs{VCD}, so one file describes
+the probe for the hardware and for the host at once.
+
+\verb|type| is the direction the signal has on the \verb|probe_slave_|
+side, that is the direction the probed link's slave would give it
+(Table~\ref{tab:porttypes}). There is no \verb|inout|: a signal
+assignment cannot pass a bidirectional line through, and an \acs{ILA}
+belongs on the fabric side of the IO buffer where the bus is not
+bidirectional yet. Where a link genuinely cannot be spliced, tap it
+with \verb|mon| instead.
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|l|l|l|}
+        \hline
+        \rowcolor{gray!40} \textbf{Type} & \textbf{Slave side} & \textbf{Master side} & \textbf{Pass through} \\
+        \hline
+        \verb|in|  & input  & output & yes, slave to master \\
+        \hline
+        \verb|out| & output & input  & yes, master to slave \\
+        \hline
+        \verb|mon| & input  & none   & no, parallel tap only \\
+        \hline
+    \end{tabular}
+    \caption{Probe signal types in \texttt{portmap.csv}}
+    \label{tab:porttypes}
+\end{table}
+
+The remaining ports are fixed and are listed in
+Table~\ref{tab:ports}. The AXI4Lite slave port carries the standard AW,
+W, B, AR and R channel signals with the \verb|s_axil_| prefix and is
+not enumerated here.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Port} & \textbf{Dir} & \textbf{Width} & \textbf{Description} \\
+        \hline
+        \verb|i_rst_sync|     & in  & 1 & Synchronous reset, active high \\
+        \hline
+        \verb|samp_aclk|      & in  & 1 & Sampling clock, the clock of the probed domain \\
+        \hline
+        \verb|i_ext_trig|     & in  & 1 & External trigger input, rising edge sensitive, used when \verb|G_EXTERNAL_TRIG| is 1 \\
+        \hline
+        \verb|o_trig_out|     & out & 1 & Trigger output, for chaining to further \acs{ILA} instances \\
+        \hline
+        \verb|s_axil_aclk|    & in  & 1 & AXI4Lite clock \\
+        \hline
+        \verb|s_axil_aresetn| & in  & 1 & Core only. AXI4Lite reset, active low; the wrapper drives it internally \\
+        \hline
+        \verb|s_axil_*|       & --- & --- & Core only. AXI4Lite slave channels, \verb|C_S_AXIL_DATA_WIDTH| wide \\
+        \hline
+        \verb|uart_rx|        & in  & 1 & Wrapper only. Serial receive \\
+        \hline
+        \verb|uart_tx|        & out & 1 & Wrapper only. Serial transmit \\
+        \hline
+        \verb|probe_slave_*|  & --- & --- & Probe port facing the master of the probed link \\
+        \hline
+        \verb|probe_master_*| & --- & --- & Probe port facing the slave of the probed link, every direction mirrored \\
+        \hline
+    \end{tabularx}
+    \caption{Fixed interface signals}
+    \label{tab:ports}
+\end{table}
+
+\subsection{Core generation}
+A build is described entirely by two CSV files in \verb|codegen/|:
+\verb|portmap.csv| for the probe, and \verb|configuration.csv| for the
+generic values, one line per generic as \verb|generic,type,value|.
+Running the generator emits a complete set of VHDL sources for that
+configuration:
+
+\begin{lstlisting}[language=bash]
+python3 codegen/code_generator.py \
+        --portmap codegen/portmap.csv \
+        --config  codegen/configuration.csv
+\end{lstlisting}
+
+Left at their shipped defaults, the two files describe the stock 64-bit
+AXI4Stream build. \verb|GEN_TYPE| in the configuration selects what
+comes out: 0 emits the bare AXI4Lite core alone, 1 emits it together
+with the \acs{UART} wrapper and the FIFO and \acs{UART} blocks it
+instantiates. Add the emitted files to the project, instantiate the
+core or the wrapper, and splice the probe ports into the link to be
+observed. The full procedure is in the user manual; this section is a
+quick glance.
+
+\todo{Add screenshots of the generator run and of the core instantiated
+in SmartDesign once the core is released.}
+
+\newpage
+\section{Register summary}
+\label{sec:regsummary}
+The core presents a flat map of 32-bit registers on its AXI4Lite slave
+port; a register's byte address is its index times four. The map is
+laid out in three blocks: the \textbf{output block} first, then the
+\textbf{input block}, then the \textbf{sample buffer}.
+
+That order is deliberate. The output block is eight registers whatever
+the core was synthesised with, so it can sit at a fixed place. The two
+blocks above it move with the probe width, and the output block is what
+reports the probe width in the first place: putting it last would mean
+a host had to know the probe width in order to find the register that
+tells it the probe width. Both supplied drivers rely on this, reading
+the geometry out of the core at start-up and deriving the rest of the
+map from it, so re-synthesising with a different probe width needs no
+driver rebuild.
+
+Three kinds of register appear in the map:
+
+\begin{itemize}
+    \item \textbf{Output, read only.} Status, and the synthesis-time
+          geometry of the core.
+    \item \textbf{Input, read/write.} The trigger configuration, plus
+          the write-only arm register.
+    \item \textbf{Sample buffer, read only.} The capture itself, $a$
+          registers per sample.
+\end{itemize}
+
+Table~\ref{tab:regsummary} lists the whole map. Offsets in the input
+block and above are given symbolically in $a$, with the value for the
+stock build ($a = 4$) in parentheses.
+
+% Not a table*: the body is \onecolumn, where the two-column float machinery
+% is off and a starred float ends up typeset twice.
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|c|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Offset} & \textbf{Name} & \textbf{Access} & \textbf{Reset} & \textbf{Description} \\
+        \hline
+        \multicolumn{5}{|l|}{\cellcolor{gray!15}\textbf{Output block}} \\
+        \hline
+        \hex{00} & STATUS             & R  & \hex{00000000} & \acs{ILA} status and state \\
+        \hline
+        \hex{04} & MGCKEY             & R  & \hex{B01DFACE} & Magic key, identifies the core \\
+        \hline
+        \hex{08} & SAMP\_CLK\_FREQ    & R  & \verb|G_SAMP_CLK_FREQ| & Sampling clock frequency in Hz \\
+        \hline
+        \hex{0C} & WIDTH              & R  & \verb|G_PROBE_WIDTH| & Total probed bits \\
+        \hline
+        \hex{10} & DEPTH              & R  & \verb|G_SAMP_BUFF_DEPTH| & Sample buffer depth in samples \\
+        \hline
+        \hex{14} & ---                & R  & \hex{00000000} & Reserved \\
+        \hline
+        \hex{18} & SAMP\_BUFF\_TRIG\_IDX & R & \hex{00000000} & Buffer index of the trigger sample \\
+        \hline
+        \hex{1C} & SAMP\_BUFF\_FRST\_IDX & R & \hex{00000000} & Buffer index of the oldest sample \\
+        \hline
+        \multicolumn{5}{|l|}{\cellcolor{gray!15}\textbf{Input block}} \\
+        \hline
+        \hex{20} & TRIG\_POS          & R/W & \hex{00000000} & Number of pre-trigger samples \\
+        \hline
+        \hex{24} & ARM\_FT            & W   & \hex{00000000} & Any write arms the \acs{ILA}, or forces the trigger if it is already armed \\
+        \hline
+        \hex{28} & TRIG\_CFG          & R/W & \hex{00000000} & Trigger mode: AND/OR, level/edge, rising/falling \\
+        \hline
+        \hex{2C} & ---                & R/W & \hex{00000000} & Reserved \\
+        \hline
+        $\hex{30} + 4n$ & TRIG\_COND(n) & R/W & \hex{00000000} & Trigger condition, word $n$, $n = 0 \ldots a-1$ (\hex{30}--\hex{3C}) \\
+        \hline
+        $\hex{30} + 4n + 4a$ & TRIG\_MASK(n) & R/W & \hex{00000000} & Trigger mask, word $n$, $n = 0 \ldots a-1$ (\hex{40}--\hex{4C}) \\
+        \hline
+        \multicolumn{5}{|l|}{\cellcolor{gray!15}\textbf{Sample buffer}} \\
+        \hline
+        $\hex{30} + 8a + 4(ak + l)$ & SAMP\_BUFF(k,l) & R & --- & Sample $k$, lane $l$, for $k = 0 \ldots$ \verb|DEPTH|$-1$ and $l = 0 \ldots a-1$ (base \hex{50}) \\
+        \hline
+    \end{tabularx}
+    \caption{Register map. Offsets are from the AXI4Lite base address.}
+    \label{tab:regsummary}
+\end{table}
+
+The map therefore holds $8 + 4 + 2a$ control registers followed by
+$a \times$\verb|G_SAMP_BUFF_DEPTH| buffer registers. For the stock
+build that is 20 control registers and 8192 buffer registers, ending at
+byte offset \hex{8050}.
+
+The AXI4Lite decoder \emph{truncates} an address it cannot decode
+rather than rejecting it, so a misaligned or out of range access
+silently aliases onto a real register. Both supplied drivers check
+alignment on the host side and the \acs{UART} wrapper checks it in
+hardware, because the second register of the input block is ARM\_FT and
+a stray write there would arm the core.
+
+\subsection{STATUS}
+\regprop{STATUS}{Output block}{\hex{00}}{\hex{00000000}}{Read-only}
+
+Status register. It reports the current state of the \acs{ILA} core.
+The ARMED, TRIGD and DONE bits are synchronised into the AXI4Lite
+domain with two flops and so lag the capture domain slightly. STATE is
+the raw internal state, is not synchronised, and is provided for
+debugging.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\rsvdb{3}\fld{2}{STATE[1:0]}\fld{1}{DONE}\fld{1}{TRIGD}\fld{1}{ARMED}}
+    \bitacc{}{}{}{R}{R}{R}{R}{R}
+    \bitrst{}{}{}{0}{0}{0}{0}{0}
+\end{regdiag}
+
+\noindent\textbf{Bits 4:3 -- STATE[1:0]} Internal state of the capture
+state machine, not synchronised to the AXI4Lite domain.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Value} & \textbf{Description} \\
+        \hline
+        2b00 & IDLE, waiting to be armed \\
+        \hline
+        2b01 & ARMED, capturing, trigger not yet seen \\
+        \hline
+        2b10 & TRIGD, trigger seen, capturing post-trigger samples \\
+        \hline
+        2b11 & DONE, capture complete, buffer readable \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\noindent\textbf{Bit 2 -- DONE} Set when the capture has completed and
+the sample buffer holds a full window.
+
+\noindent\textbf{Bit 1 -- TRIGD} Set when the trigger has fired and the
+core is capturing its post-trigger samples.
+
+\noindent\textbf{Bit 0 -- ARMED} Set while the core is armed and
+capturing.
+
+\subsection{MGCKEY}
+\regprop{MGCKEY}{Output block}{\hex{04}}{\hex{B01DFACE}}{Read-only}
+
+Magic key register. It reads back a fixed constant, and is the cheapest
+way for a host to confirm that it is talking to a LibreILA core at the
+base address it was given, before it trusts anything else in the map.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \fldrow{\fldb{8}{MGCKEY[31:24]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{1}{0}{1}{1}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \fldrow{\fldb{8}{MGCKEY[23:16]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{0}{0}{0}{1}{1}{1}{0}{1}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\fldb{8}{MGCKEY[15:8]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{1}{1}{1}{1}{1}{0}{1}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{MGCKEY[7:0]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{1}{1}{0}{0}{1}{1}{1}{0}
+\end{regdiag}
+
+\noindent\textbf{Bits 31:0 -- MGCKEY[31:0]} Constant \hex{B01DFACE}.
+
+\subsection{SAMP\_CLK\_FREQ}
+\regprop{SAMP\_CLK\_FREQ}{Output block}{\hex{08}}{\texttt{G\_SAMP\_CLK\_FREQ}}{Read-only}
+
+Sampling clock frequency in Hz, as given by \verb|G_SAMP_CLK_FREQ| at
+synthesis. Nothing inside the core uses it; it is here so that a host
+can turn a sample index into a time and label the waveform axis without
+being told the clock rate separately.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \fldrow{\fldb{8}{SAMP\_CLK\_FREQ[31:24]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \fldrow{\fldb{8}{SAMP\_CLK\_FREQ[23:16]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\fldb{8}{SAMP\_CLK\_FREQ[15:8]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{SAMP\_CLK\_FREQ[7:0]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+
+\noindent\textbf{Bits 31:0 -- SAMP\_CLK\_FREQ[31:0]} Frequency of
+\verb|samp_aclk| in Hz. Here and below, a reset of \texttt{x} means the
+bit is fixed at synthesis by the corresponding generic.
+
+\subsection{WIDTH}
+\regprop{WIDTH}{Output block}{\hex{0C}}{\texttt{G\_PROBE\_WIDTH}}{Read-only}
+
+Total number of probed bits. Together with DEPTH this is everything a
+host needs in order to derive the rest of the register map, since the
+lane count and the stride $a$ both follow from it.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \fldrow{\fldb{8}{WIDTH[31:24]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \fldrow{\fldb{8}{WIDTH[23:16]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\fldb{8}{WIDTH[15:8]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{WIDTH[7:0]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+
+\noindent\textbf{Bits 31:0 -- WIDTH[31:0]} \verb|G_PROBE_WIDTH|, the
+width of the probe word in bits.
+
+\subsection{DEPTH}
+\regprop{DEPTH}{Output block}{\hex{10}}{\texttt{G\_SAMP\_BUFF\_DEPTH}}{Read-only}
+
+Depth of the sample buffer in samples. Always a power of two, so a host
+can take its logarithm to get the width of a sample index.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \fldrow{\fldb{8}{DEPTH[31:24]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \fldrow{\fldb{8}{DEPTH[23:16]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\fldb{8}{DEPTH[15:8]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{DEPTH[7:0]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+
+\noindent\textbf{Bits 31:0 -- DEPTH[31:0]} \verb|G_SAMP_BUFF_DEPTH|,
+the number of samples the buffer holds.
+
+\subsection{SAMP\_BUFF\_TRIG\_IDX}
+\regprop{SAMP\_BUFF\_TRIG\_IDX}{Output block}{\hex{18}}{\hex{00000000}}{Read-only}
+
+Index, within the circular sample buffer, of the sample on which the
+trigger fired. Read it once DONE is set. Note that this is where the
+trigger \emph{landed} in the buffer, which is not the same thing as
+TRIG\_POS: TRIG\_POS is the number of pre-trigger samples the host
+asked for, this is the raw buffer index needed to go and find them.
+
+The field is \verb|C_ADDR_WIDTH| bits wide, and the diagram below shows
+the stock 2048-deep build where that is 11 bits. Bits above
+\verb|C_ADDR_WIDTH| always read zero.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\rsvdb{5}\fld{3}{TRIG\_IDX[10:8]}}
+    \bitacc{}{}{}{}{}{R}{R}{R}
+    \bitrst{}{}{}{}{}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{TRIG\_IDX[7:0]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+
+\noindent\textbf{Bits 10:0 -- TRIG\_IDX} Buffer index of the trigger
+sample, valid once DONE is set.
+
+\subsection{SAMP\_BUFF\_FRST\_IDX}
+\regprop{SAMP\_BUFF\_FRST\_IDX}{Output block}{\hex{1C}}{\hex{00000000}}{Read-only}
+
+Index, within the circular sample buffer, of the oldest sample of the
+captured window. Because the buffer wraps, this is where a host has to
+start reading in order to get the capture in time order: sample $i$ of
+the unrolled window lives at buffer index
+$(\mathrm{FRST\_IDX} + i) \bmod \mathrm{DEPTH}$.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\rsvdb{5}\fld{3}{FRST\_IDX[10:8]}}
+    \bitacc{}{}{}{}{}{R}{R}{R}
+    \bitrst{}{}{}{}{}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{FRST\_IDX[7:0]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+
+\noindent\textbf{Bits 10:0 -- FRST\_IDX} Buffer index of the oldest
+sample, valid once DONE is set.
+
+\subsection{TRIG\_POS}
+\regprop{TRIG\_POS}{Input block}{\hex{20}}{\hex{00000000}}{Read/Write}
+
+Trigger position, in samples. It is the number of samples of history
+kept ahead of the trigger, so the core captures for
+\verb|DEPTH - TRIG_POS - 1| samples after the trigger fires before
+going to DONE. Zero puts the trigger at the very start of the window,
+\verb|DEPTH|$-1$ puts it at the end.
+
+Write this before arming. The field is \verb|C_ADDR_WIDTH| bits wide;
+the diagram shows the stock 2048-deep build.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\rsvdb{5}\fld{3}{TRIG\_POS[10:8]}}
+    \bitacc{}{}{}{}{}{R/W}{R/W}{R/W}
+    \bitrst{}{}{}{}{}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{TRIG\_POS[7:0]}}
+    \bitacc{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+
+\noindent\textbf{Bits 10:0 -- TRIG\_POS} Number of pre-trigger samples.
+
+\subsection{ARM\_FT}
+\regprop{ARM\_FT}{Input block}{\hex{24}}{\hex{00000000}}{Write-only}
+
+Arm and force-trigger register. \textbf{Any} write to this register
+acts; the value written is ignored entirely. A write while the core is
+IDLE or DONE arms it and starts the capture, and a write while it is
+already armed forces the trigger immediately, which is how a capture is
+recovered when the configured condition never occurs.
+
+Configure TRIG\_POS, TRIG\_CFG, TRIG\_COND and TRIG\_MASK before
+writing here.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \fldrow{\fldb{8}{ARM\_FT[31:24]}}
+    \bitacc{W}{W}{W}{W}{W}{W}{W}{W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \fldrow{\fldb{8}{ARM\_FT[23:16]}}
+    \bitacc{W}{W}{W}{W}{W}{W}{W}{W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\fldb{8}{ARM\_FT[15:8]}}
+    \bitacc{W}{W}{W}{W}{W}{W}{W}{W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{ARM\_FT[7:0]}}
+    \bitacc{W}{W}{W}{W}{W}{W}{W}{W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+
+\noindent\textbf{Bits 31:0 -- ARM\_FT[31:0]} The write itself is the
+command, the data is a don't care.
+
+\subsection{TRIG\_CFG}
+\regprop{TRIG\_CFG}{Input block}{\hex{28}}{\hex{00000000}}{Read/Write}
+
+Trigger configuration. ANDOR chooses how the mask-enabled bits are
+reduced to a single condition, and EDGE and FALLING then decide what
+counts as a trigger on that condition. The reset value of zero gives an
+AND reduction in level mode.
+
+These bits are ignored when the core is built with
+\verb|G_EXTERNAL_TRIG| set to 1, where the trigger is always the rising
+edge of \verb|i_ext_trig|.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \rsvdrow
+    \emptyrow
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\rsvdb{5}\fld{1}{FALLING}\fld{1}{EDGE}\fld{1}{ANDOR}}
+    \bitacc{}{}{}{}{}{R/W}{R/W}{R/W}
+    \bitrst{}{}{}{}{}{0}{0}{0}
+\end{regdiag}
+
+\noindent\textbf{Bit 2 -- FALLING} Edge polarity. Only read when EDGE
+is 1.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Value} & \textbf{Description} \\
+        \hline
+        0b0 & Trigger on the rising edge of the condition \\
+        \hline
+        0b1 & Trigger on the falling edge of the condition \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\noindent\textbf{Bit 1 -- EDGE} Level or edge sensitivity.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Value} & \textbf{Description} \\
+        \hline
+        0b0 & Trigger while the condition is true \\
+        \hline
+        0b1 & Trigger on a transition of the condition \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\noindent\textbf{Bit 0 -- ANDOR} Reduction of the mask-enabled bits.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Value} & \textbf{Description} \\
+        \hline
+        0b0 & AND, the condition holds once every enabled bit matches \\
+        \hline
+        0b1 & OR, the condition holds as soon as any enabled bit matches \\
+        \hline
+    \end{tabularx}
+\end{table}
+
+\subsection{TRIG\_COND(n) and TRIG\_MASK(n)}
+\regprop{TRIG\_COND(n) / TRIG\_MASK(n)}{Input block}{$\hex{30} + 4n$ / $\hex{30} + 4a + 4n$}{\hex{00000000}}{Read/Write}
+
+The trigger vector, one bit per probed bit, spread over $a$ registers
+each. Word $n$ carries probe bits $32n+31$ downto $32n$, which is
+exactly the layout one sample of the buffer uses, so a captured sample
+can be written straight back as a condition.
+
+For probe bit $i$, the TRIG\_COND bit is the value that bit has to take
+in order to match, and the TRIG\_MASK bit decides whether it takes part
+at all, 1 enabling it and 0 making it a don't care. Bits above
+\verb|G_PROBE_WIDTH| up to the stride boundary are padding; leave their
+mask bits at 0.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \fldrow{\fldb{8}{TRIG\_COND(n)[31:24] / TRIG\_MASK(n)[31:24]}}
+    \bitacc{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \fldrow{\fldb{8}{TRIG\_COND(n)[23:16] / TRIG\_MASK(n)[23:16]}}
+    \bitacc{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\fldb{8}{TRIG\_COND(n)[15:8] / TRIG\_MASK(n)[15:8]}}
+    \bitacc{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{TRIG\_COND(n)[7:0] / TRIG\_MASK(n)[7:0]}}
+    \bitacc{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+
+\noindent\textbf{Bits 31:0} Trigger condition and mask for probe bits
+$32n+31$ downto $32n$.
+
+\subsection{SAMP\_BUFF(k,l)}
+\regprop{SAMP\_BUFF(k,l)}{Sample buffer}{$\hex{30} + 8a + 4(ak + l)$}{---}{Read-only}
+
+The capture itself. Sample $k$ occupies $a$ consecutive registers, of
+which the first \verb|C_N_LANES| carry the probe word, lane $l$ holding
+probe bits $32l+31$ downto $32l$. The last lane is zero padded in its
+upper bits, and the registers between \verb|C_N_LANES| and the stride
+boundary are padding that reads back as zero.
+
+That padding is what keeps addressing cheap: with $a$ a power of two, a
+sample index becomes an address with a shift instead of a multiply. It
+costs bus address space and not RAM, since the buffer itself is only
+\verb|C_N_LANES| lanes wide.
+
+Read the buffer only once DONE is set, and start from
+SAMP\_BUFF\_FRST\_IDX to get the window in time order.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \fldrow{\fldb{8}{SAMP\_BUFF(k,l)[31:24]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \fldrow{\fldb{8}{SAMP\_BUFF(k,l)[23:16]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\fldb{8}{SAMP\_BUFF(k,l)[15:8]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{SAMP\_BUFF(k,l)[7:0]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+
+\noindent\textbf{Bits 31:0} Probe bits $32l+31$ downto $32l$ of sample
+$k$. The contents are undefined until a capture has completed.
+
+\newpage
+\section{AXI4Lite UART interface}
+\verb|libre_ila_uart| wraps the core with a \acs{UART} and a small
+packet parser, so that a design with no processor, or with no spare AXI
+master, can still be debugged from a PC over a two-wire serial link.
+The wrapper instantiates the core and carries all of its generics,
+adding the FIFO depths and the baud rate. The register map seen from
+the PC is exactly the map of Table~\ref{tab:regsummary}, reached by
+address rather than through any command protocol.
+
+The supplied python driver speaks the packet format, splits long
+transfers, unrolls the circular buffer and writes a \acs{VCD} with the
+signals named from \verb|portmap.csv|, which any waveform viewer will
+open.
+
+\todo{Add the GUI subsection here once the GUI is released, with
+screenshots of a capture being configured and read back.}
+
+\subsection{Watchdog and error handling}
+Two safety nets keep a bad link from wedging the wrapper.
+
+A \textbf{watchdog} counts while the wrapper is in any non-idle state
+and is cleared whenever a byte makes progress. After
+\verb|G_AXIL_CLK_FREQ| counts, that is one second without progress, the
+wrapper resets to idle and abandons whatever it had parsed. A timeout
+therefore loses the whole transaction rather than half applying it, and
+the host recovers by restarting from its sync byte; since the idle
+state discards every byte that is not a sync byte, the link
+resynchronises on its own.
+
+Each request is also \textbf{sanity checked} once its base address is
+in. The address must be four byte aligned, because the core's decoder
+truncates rather than rejects and a misaligned write could land on
+ARM\_FT. The receive FIFO is checked for overflow, since the \acs{UART}
+writes into it unconditionally. A request that fails either check is
+answered but never put on the AXI bus: a read returns the promised
+number of zero words, and a write still has its payload drained, so the
+link stays in step.
+
+\subsection{UART Packet Format}
+The PC is the master of the link. Every transaction is one request
+packet from the PC and one response packet from the wrapper, both
+beginning with a sync byte and a six byte header.
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|l|l|}
+        \hline
+        \rowcolor{gray!40} \textbf{Field} & \textbf{Size} & \textbf{PC to wrapper} \\
+        \hline
+        SYNC          & 1 byte  & \hex{55} \\
+        \hline
+        R/W           & 1 bit   & 1 write, 0 read \\
+        \hline
+        \#words       & 7 bits  & word count, 1 to 127 \\
+        \hline
+        Base address  & 4 bytes & byte address, 4 byte aligned \\
+        \hline
+        Write data    & 4 bytes each & \#words words, write only \\
+        \hline
+    \end{tabular}
+    \caption{Request packet}
+    \label{tab:reqpkt}
+\end{table}
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{|l|l|l|}
+        \hline
+        \rowcolor{gray!40} \textbf{Field} & \textbf{Size} & \textbf{Wrapper to PC} \\
+        \hline
+        SYNC          & 1 byte  & \hex{AA} \\
+        \hline
+        valid         & 1 bit   & 1 accepted, 0 refused \\
+        \hline
+        \#words       & 7 bits  & echoed word count \\
+        \hline
+        Base address  & 4 bytes & echoed base address \\
+        \hline
+        Read data     & 4 bytes each & \#words words, read only \\
+        \hline
+    \end{tabular}
+    \caption{Response packet}
+    \label{tab:rsppkt}
+\end{table}
+
+Points worth knowing about the framing:
+
+\begin{itemize}
+    \item Every field wider than a byte goes \textbf{MSB first}, both
+          the base address and the data words. The header is six bytes,
+          the payload $4 \times$ \#words bytes.
+    \item The R/W bit and the word count \textbf{share one byte}: bit 7
+          is R/W, bits 6 downto 0 are the count. The response byte is
+          the same shape, with \emph{valid} in bit 7.
+    \item \textbf{One packet moves at most 127 words.} Longer transfers
+          are split across packets with the base address advancing by
+          four per word. This is routine and not an edge case: reading
+          the stock 2048-sample buffer at stride 4 is 8192 words, that
+          is 65 packets.
+    \item \textbf{A write is acknowledged too.} The response header
+          goes out as soon as the address has been parsed, before the
+          write data has even arrived, so a host that does not drain
+          the six byte acknowledgement will desynchronise the next
+          transaction. Only a read is followed by data words.
+    \item Because the write header precedes the write payload, an
+          overflow during that payload is reported on the \emph{next}
+          packet's header. Overflow detection is best effort: valid = 0
+          means bytes were dropped, valid = 1 does not promise that
+          none were.
+\end{itemize}
+
+\newpage
+\section{Additional references}
+\begin{itemize}
+    \item \textbf{Repository and full documentation} ---
+          \url{github.com/yashparitkar/libreila}. The top level README
+          is the authoritative description of the register map, the
+          trigger vector and the packet format.
+    \item \textbf{LibreILA User Manual} --- the full instantiation,
+          generation and debug procedure, of which this datasheet is a
+          summary.
+    \item \textbf{License} --- CERN \acf{OHL} Version 2, Permissive.
+          See the \verb|LICENSE| file in the repository.
+    \item \textbf{Microchip G238606} --- PolarFire family fabric user
+          guide, for the \acs{LSRAM} block and its independent read
+          clock, which the readout path relies on.
+    \item \textbf{ARM IHI 0022} --- AMBA \acs{AXI} and ACE protocol
+          specification, for the AXI4Lite slave port.
+    \item \textbf{VHDL Style Guide (VSG)} --- recommended for
+          reformatting the generated sources before they are committed
+          to a project.
+\end{itemize}
+
+\newpage
+\section{Device utilization and performance}
+Resource usage scales with the two generics that describe the capture,
+and with nothing else. The storage requirement is exactly
+
+\[
+    \mathrm{bits} = \mathtt{G\_SAMP\_BUFF\_DEPTH} \times
+                    \mathtt{C\_N\_LANES} \times 32
+\]
+
+that is, the probe word rounded up to a whole number of 32-bit lanes.
+Note that the stride padding used on the bus costs address space only
+and is not stored, so a 67-bit probe occupies three lanes in RAM and
+not four. For the stock build that is $2048 \times 3 \times 32 =
+196{,}608$ bits, which maps onto PolarFire \acs{LSRAM} blocks.
+
+Logic usage is dominated by the trigger comparator, which is
+combinational and carries two bits of configuration per probed bit,
+plus the sample counter and the small AXI4Lite slave state machine. The
+\acs{UART} wrapper adds its two FIFOs, sized by
+\verb|G_UART_RX_FIFO_DEPTH| and \verb|G_UART_TX_FIFO_DEPTH|, the
+\acs{UART} itself and the packet parser.
+
+\todo{Instantiate the core on the PolarFire SoC at several probe widths
+and buffer depths, and fill in the measured LUT, DFF and \acs{LSRAM}
+counts along with the achieved fmax for both clock domains.}
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|X|X|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Probe width} & \textbf{Depth} & \textbf{LUTs} & \textbf{DFFs} & \textbf{LSRAM} & \textbf{fmax} \\
+        \hline
+        67   & 2048 & --- & --- & --- & --- \\
+        \hline
+        32   & 1024 & --- & --- & --- & --- \\
+        \hline
+        128  & 4096 & --- & --- & --- & --- \\
+        \hline
+    \end{tabularx}
+    \caption{Device utilization, PolarFire SoC. To be measured.}
+    \label{tab:utilization}
+\end{table}
 
 \end{document}

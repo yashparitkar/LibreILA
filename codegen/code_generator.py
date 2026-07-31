@@ -313,7 +313,7 @@ for probe in probes:
 
 # Code generation ###################################################
 # Every generated block is inserted at a ^^XX directive. See the code
-# generation section of the top level README for the directive table.
+# generation section of codegen/README.md for the directive table.
 
 def side_probes(mirrored):
     """The probes that get a port on the requested side.

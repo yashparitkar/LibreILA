@@ -1,0 +1,26 @@
+> Register map of the LibreILA core. Mirrors the register summary of docs/datasheet.pdf.
+> a = C_AXIL_STRIDE, the next power of two of ceil(G_PROBE_WIDTH/32), minimum 4.
+> Offsets are byte offsets from the AXI4Lite base address. Every register is 32 bits.
+block,offset,name,access,reset,bits,field,description
+output,0x00,STATUS,R,0x00000000,0,ARMED,High while the ILA is armed
+output,0x00,STATUS,R,0x00000000,1,TRIGD,High once the trigger has fired
+output,0x00,STATUS,R,0x00000000,2,DONE,High when the capture has completed
+output,0x00,STATUS,R,0x00000000,4:3,STATE,Capture state machine: 0 IDLE 1 ARMED 2 TRIGD 3 DONE. Not CDCed
+output,0x00,STATUS,R,0x00000000,31:5,-,Reserved
+output,0x04,MGCKEY,R,0xB01DFACE,31:0,MGCKEY,Magic key identifying the core
+output,0x08,SAMP_CLK_FREQ,R,G_SAMP_CLK_FREQ,31:0,SAMP_CLK_FREQ,Sampling clock frequency in Hz
+output,0x0C,WIDTH,R,G_PROBE_WIDTH,31:0,WIDTH,Total probed bits
+output,0x10,DEPTH,R,G_SAMP_BUFF_DEPTH,31:0,DEPTH,Sample buffer depth in samples
+output,0x14,-,R,0x00000000,31:0,-,Reserved
+output,0x18,SAMP_BUFF_TRIG_IDX,R,0x00000000,31:0,SAMP_BUFF_TRIG_IDX,Buffer index of the trigger sample
+output,0x1C,SAMP_BUFF_FRST_IDX,R,0x00000000,31:0,SAMP_BUFF_FRST_IDX,Buffer index of the oldest sample
+input,0x20,TRIG_POS,R/W,0x00000000,31:0,TRIG_POS,Number of pre-trigger samples
+input,0x24,ARM_FT,W,0x00000000,31:0,ARM_FT,Any write arms the ILA or forces the trigger if already armed
+input,0x28,TRIG_CFG,R/W,0x00000000,0,ANDOR,0 AND all enabled bits match; 1 OR any enabled bit matches
+input,0x28,TRIG_CFG,R/W,0x00000000,1,EDGE,0 level sensitive; 1 edge sensitive
+input,0x28,TRIG_CFG,R/W,0x00000000,2,FALLING,0 rising edge; 1 falling edge. Read only when EDGE is 1
+input,0x28,TRIG_CFG,R/W,0x00000000,31:3,-,Reserved
+input,0x2C,-,R/W,0x00000000,31:0,-,Reserved
+input,0x30 + 4n,TRIG_COND(n),R/W,0x00000000,31:0,TRIG_COND,Trigger condition word n for n = 0..a-1. Value probe bit must take to match
+input,0x30 + 4n + 4a,TRIG_MASK(n),R/W,0x00000000,31:0,TRIG_MASK,Trigger mask word n for n = 0..a-1. 1 lets the bit take part 0 is don't care
+buffer,0x30 + 8a + 4(ak + l),"SAMP_BUFF(k,l)",R,-,31:0,SAMP_BUFF,Sample k lane l for k = 0..DEPTH-1 and l = 0..a-1. Lane l holds probe bits 32l+31 downto 32l. Lanes above ceil(WIDTH/32) are zero padding

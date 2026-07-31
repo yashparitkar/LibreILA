@@ -14,7 +14,7 @@ The signals are written LSB aligned, i.e., if the stride of the AXI registers is
 
 * signal: the name of the signal to be displayed in the .vcd
 * width: width of the signal in bits
-* type: `in`, `out` or `mon`. `mon` is a parallel tap, present on the slave side only. `inout` is not accepted, see the code generation section of the top level README for why and what to use instead.
+* type: `in`, `out` or `mon`. `mon` is a parallel tap, present on the slave side only. `inout` is not accepted, see the code generation section of [codegen/README.md](../../codegen/README.md) for why and what to use instead.
 
 For example, the portmap.csv file for the AXI4S will be as follows:
 ```portmap.csv

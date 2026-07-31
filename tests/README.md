@@ -70,5 +70,5 @@ See [c/00_reg_map/README.md](c/00_reg_map/README.md) for the case list and for t
 
 The same `FakeWrapper` also serves the register map, so the tests cover the two other places the driver can silently disagree with the hardware:
 
-* **The register map derived from the probe width.** Everything scales with the stride, the lane count rounded up to a power of two with a minimum of four, so `TestRegisterMap` pins the offsets against the map in the top level README rather than against the driver's own arithmetic. This matters because the core truncates an address it cannot decode instead of rejecting it, so a wrong stride aliases onto real registers rather than failing.
+* **The register map derived from the probe width.** Everything scales with the stride, the lane count rounded up to a power of two with a minimum of four, so `TestRegisterMap` pins the offsets against the map in the [datasheet](../docs/datasheet.pdf) rather than against the driver's own arithmetic. This matters because the core truncates an address it cannot decode instead of rejecting it, so a wrong stride aliases onto real registers rather than failing.
 * **The control path and the readout.** `TestControl` covers the status decode and the ARM_FT guards, `TestReadout` covers unrolling the circular buffer from the oldest sample and rebasing the trigger index onto that ordering.
