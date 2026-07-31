@@ -87,26 +87,9 @@ them, while `probe_master_axis_*` is the AXI4S master facing downstream.
 
 32-bit registers; byte address = `Index * 4`. Sizing auto-scales with probe width and depth.
 
-### Input (RW)
+The map is laid out in three blocks: **output, then input, then the sample buffer.** The output block is a fixed eight registers whatever the core was synthesised with, so it goes first. Everything above it moves with the probe width, and the output block is what reports the probe width in the first place -- putting it last would mean a host had to know the probe width in order to find the register that tells it the probe width.
 
-| Index  | RW | Register Name          | Description                 |
-|--------|----|-------------------------|-----------------------------|
-|   0    | RW | Trigger position        | Number of pre-trig samples  |
-|   1    |  W | Arm_FT                  | Any write to this register arms the ILA or forces trigger if already armed |
-|   2    | RW | Trigger configuration   | bit0: 0 = AND, 1 = OR; bit1: 0 = level, 1 = edge; bit2: 0 = rising, 1 = falling. See trigger vector section |
-|   3    | RW | Reserved                | Reserved                    |
-| 4      | RW | Trigger vector cond (LSB) | See trigger vector section |
-| 4+a-1  | RW | Trigger vector cond (MSB) |                            |
-| 4+a    | RW | Trigger vector mask (LSB) |                            |
-| 4+2a-1 | RW | Trigger vector mask (MSB) |                            |
-
-Here, `a` is `C_AXIL_STRIDE`: the same stride constant used to lay out the output sample buffer (see below), i.e. the next power-of-two count of probe lanes (`C_N_LANES = ceil(G_PROBE_WIDTH/32)`), with a minimum of 4. This makes the trigger vector cond/mask registers share the exact same per-sample bit layout as the output sample buffer.
-
-Further input registers are auto added depending on the probe width.
-
-Total input registers: 4 + C_AXIL_STRIDE * 2
-
-### Output (RO, index relative to the end of the input block)
+### Output (RO, index from the base address)
 
 | Index | RW | Register Name       | Description                           |
 |-------|----|---------------------|---------------------------------------|
@@ -119,6 +102,29 @@ Total input registers: 4 + C_AXIL_STRIDE * 2
 |   6   | RO | samp_buff_trig_idx  | Index of the trigger sample           |
 |   7   | RO | samp_buff_frst_idx  | Index of the first sample             |
 
+Total output control registers: 8, always.
+
+### Input (RW, index relative to the end of the output block, i.e. from index 8)
+
+| Index  | RW | Register Name          | Description                 |
+|--------|----|-------------------------|-----------------------------|
+|   0    | RW | Trigger position        | Number of pre-trig samples  |
+|   1    |  W | Arm_FT                  | Any write to this register arms the ILA or forces trigger if already armed |
+|   2    | RW | Trigger configuration   | bit0: 0 = AND, 1 = OR; bit1: 0 = level, 1 = edge; bit2: 0 = rising, 1 = falling. See trigger vector section |
+|   3    | RW | Reserved                | Reserved                    |
+| 4      | RW | Trigger vector cond (LSB) | See trigger vector section |
+| 4+a-1  | RW | Trigger vector cond (MSB) |                            |
+| 4+a    | RW | Trigger vector mask (LSB) |                            |
+| 4+2a-1 | RW | Trigger vector mask (MSB) |                            |
+
+Here, `a` is `C_AXIL_STRIDE`: the same stride constant used to lay out the sample buffer (see below), i.e. the next power-of-two count of probe lanes (`C_N_LANES = ceil(G_PROBE_WIDTH/32)`), with a minimum of 4. This makes the trigger vector cond/mask registers share the exact same per-sample bit layout as the sample buffer.
+
+Further input registers are auto added depending on the probe width. This block is the one that grows, which is why it sits between the two fixed-position blocks and not below them.
+
+Total input registers: 4 + C_AXIL_STRIDE * 2
+
+### Sample buffer (RO)
+
 After this, sampling buffer is mapped with strides to ease the resource usage on the fabric. Each samp_buff is written as a bunch with number of registers used for each samp_buff as power of two to ease computation. For example, in the stock AXI4S build the bus is 64 bits wide and three signalling bits are probed alongside it, so the probe is 67 bits wide, needing 3 lanes, and the stride is rounded up to 4. Inside each stride, the data each stored in following format:
 
 | Offset                | RW | Register Name                                     | Description                        |
@@ -130,9 +136,11 @@ After this, sampling buffer is mapped with strides to ease the resource usage on
 
 The probe word here is the same vector the trigger uses, so lane `n` holds probe bits `32n+31 downto 32n`. See the probe and trigger vector sections for the bit layout.
 
-Total output registers: 8 + C_AXIL_STRIDE * G_SAMP_BUFF_DEPTH
+Total read only registers: 8 + C_AXIL_STRIDE * G_SAMP_BUFF_DEPTH
 
 Total number of registers: 12 + C_AXIL_STRIDE * 2 + C_AXIL_STRIDE * G_SAMP_BUFF_DEPTH
+
+The sample buffer base is the one address that still moves with the probe width, at `(8 + 4 + 2a) * 4` bytes. That is fine: by the time a host needs it, it has already read `Width` and `Buffer Depth` out of the fixed output block and can work `a` out for itself.
 
 #### Status
 This is the status register of the ILA. The ARMED, TRIGD and DONE signal bits are CDCed with 2FF to the AXI4Lite domain and hence suffer a slight delay. The internal status register does not have CDC and used for debugging.
@@ -230,7 +238,7 @@ The tables above show the fields, not the framing. What actually goes on the wir
 ## Request sanity checks
 The wrapper judges each request once the base address is in, latches the verdict for the whole packet and reports it in the `valid` bit of the response header. Two things are checked:
 
-* **Address alignment.** The base address must have its low two bits clear. This matters because the core's decoder truncates rather than rejects: a misaligned write would land on a real register, and register 1 is Arm_FT, so a stray write could arm the ILA or clobber the trigger configuration. A 2 bit compare is enough, since the transfer advances the address by 4 per word and cannot change those bits mid-packet.
+* **Address alignment.** The base address must have its low two bits clear. This matters because the core's decoder truncates rather than rejects: a misaligned write would land on a real register, and the second register of the input block is Arm_FT, so a stray write could arm the ILA or clobber the trigger configuration. A 2 bit compare is enough, since the transfer advances the address by 4 per word and cannot change those bits mid-packet.
 * **RX FIFO overflow.** The uart writes into the RX FIFO unconditionally, so a byte handed over while the FIFO is full is gone and the packet is short from there on. The wrapper latches that instead of leaving it to surface as a bare watchdog timeout.
 
 **A request that fails is answered but never put on the AXI bus.** The reply keeps the shape its header promised: a read returns the right number of zero words, and a write still has its payload drained from the FIFO. Draining matters, leaving those bytes behind would let the next `IUW_IDLE` mistake a data byte for a sync byte and act on the garbage packet behind it.
@@ -325,9 +333,10 @@ Alongside the directives the script rewrites the default of every generic named 
 [tests/](tests/) is split by what a test needs to run rather than by what it covers:
 
 * [tests/hdl/](tests/hdl/): GHDL simulations of the core and the wrapper, numbered in the order they build up in. These need ghdl and the generated core. `make sim-hdl`
-* [tests/python/](tests/python/): host side tests for the drivers, no ghdl and no generated core, pyserial stubbed so nothing opens a port. `make sim-python`
+* [tests/python/](tests/python/): host side tests for the python driver, no ghdl and no generated core, pyserial stubbed so nothing opens a port. `make sim-python`
+* [tests/c/](tests/c/): the baremetal driver compiled and run on the host against a stubbed HAL, so it needs a C compiler and nothing from the PolarFire toolchain. `make sim-c`
 
-`make sim` runs both, host side first because those take milliseconds. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on. See [tests/README.md](tests/README.md) for what each one covers.
+`make sim` runs all three, host side first because those take milliseconds. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on. See [tests/README.md](tests/README.md) for what each one covers.
 
 # Drivers
 * [drivers/baremetal/](drivers/baremetal/): C driver for the bare core over AXI4Lite. The probe is opaque to it, the whole register map is derived from the probe width, buffer depth and sampling clock frequency read back from the core.

@@ -8,12 +8,14 @@
 
 # tests/ is split by what a test needs to run, not by what it covers. The GHDL
 # simulations under tests/hdl/ need ghdl and the generated core, the host side
-# tests under tests/python/ need neither, so the two can be run separately. A
-# directory counts as a test if it carries its own Makefile, which keeps the
-# numbering a convention rather than something the build depends on.
+# tests under tests/python/ and tests/c/ need neither, so the three can be run
+# separately. A directory counts as a test if it carries its own Makefile,
+# which keeps the numbering a convention rather than something the build
+# depends on.
 HDL_TEST_DIRS := $(dir $(wildcard tests/hdl/*/Makefile))
 PY_TEST_DIRS  := $(dir $(wildcard tests/python/*/Makefile))
-TEST_DIRS     := $(HDL_TEST_DIRS) $(PY_TEST_DIRS)
+C_TEST_DIRS   := $(dir $(wildcard tests/c/*/Makefile))
+TEST_DIRS     := $(HDL_TEST_DIRS) $(PY_TEST_DIRS) $(C_TEST_DIRS)
 DOC_DIRS  := docs/tex
 CODEGEN   := codegen/code_generator.py
 GEN_AXIS  := codegen/gen_axis
@@ -26,7 +28,7 @@ GEN_STAMP := $(GEN_AXIS)/.stamp
 # directly stays just as up to date as going through this file.
 GEN_DEPS  := $(CODEGEN) $(wildcard hdl/*.vhdl) $(wildcard codegen/templates/*.csv)
 
-.PHONY: all configure sim sim-hdl sim-python clean $(TEST_DIRS) $(DOC_DIRS)
+.PHONY: all configure sim sim-hdl sim-python sim-c clean $(TEST_DIRS) $(DOC_DIRS)
 
 all: sim
 
@@ -41,9 +43,9 @@ $(GEN_STAMP): $(GEN_DEPS)
 	@touch $@
 
 # sim: runs every test in tests/ and generates waveforms. The host side tests
-# go first, they take milliseconds, so a broken packet format fails here
-# instead of after the simulations have run.
-sim: sim-python sim-hdl
+# go first, they take milliseconds, so a broken packet format or register map
+# fails here instead of after the simulations have run.
+sim: sim-python sim-c sim-hdl
 
 # sim-hdl: the GHDL simulations, these need ghdl and the generated core
 sim-hdl: configure
@@ -55,6 +57,12 @@ sim-hdl: configure
 sim-python:
 	@echo "Running the host side tests..."
 	@for d in $(PY_TEST_DIRS); do $(MAKE) -C $$d sim || exit 1; done
+
+# sim-c: the baremetal driver compiled and run on the host against a stubbed
+# HAL, so it needs a C compiler and nothing from the PolarFire toolchain
+sim-c:
+	@echo "Running the baremetal driver tests..."
+	@for d in $(C_TEST_DIRS); do $(MAKE) -C $$d sim || exit 1; done
 
 # clean: cleans up all the generated files in the project, recursing into
 # every test/doc directory that has its own Makefile with a clean target

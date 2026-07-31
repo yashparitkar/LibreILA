@@ -54,15 +54,20 @@ architecture sim of tb is
   -- -- same constant the DUT uses to size both the trigger vector block and
   -- the output sample stride.
   constant C_STRIDE : natural := maximum(4, 2 ** integer(ceil(log2(real(C_N_LANES)))));
-  -- The DUT maps output registers after the input-register block.
-  constant C_INPUT_REG_COUNT : natural := 4 + 2 * C_STRIDE;
-  constant C_OUTPUT_REG_BASE : natural := C_INPUT_REG_COUNT * C_AXIL_WORD_BYTES;
-  constant C_SAMPLE_RAM_BASE : natural := (C_INPUT_REG_COUNT + 8) * C_AXIL_WORD_BYTES;
+  -- The DUT maps the fixed size output block at the base address and the
+  -- input block, which grows with C_STRIDE, above it. That is what lets a
+  -- reader find STATUS and the magic key without knowing the probe width.
+  constant C_OUTPUT_REG_COUNT : natural := 8;
+  constant C_INPUT_REG_COUNT  : natural := 4 + 2 * C_STRIDE;
+  constant C_OUTPUT_REG_BASE  : natural := 0;
+  constant C_INPUT_REG_BASE   : natural := C_OUTPUT_REG_COUNT * C_AXIL_WORD_BYTES;
+  constant C_SAMPLE_RAM_BASE  : natural := (C_OUTPUT_REG_COUNT + C_INPUT_REG_COUNT) * C_AXIL_WORD_BYTES;
   constant C_SAMPLE_STRIDE   : natural := C_STRIDE;
 
-  -- New input register map: 0=trig pos, 1=ARM_FT, 2=trig cfg (AND/OR), 3=reserved
-  constant C_TRIG_POS_ADDR : std_logic_vector(31 downto 0) := x"00000000";
-  constant C_ARM_FT_ADDR   : std_logic_vector(31 downto 0) := x"00000004";
+  -- Input block, indices relative to C_INPUT_REG_BASE: 0=trig pos, 1=ARM_FT,
+  -- 2=trig cfg (AND/OR), 3=reserved
+  constant C_TRIG_POS_ADDR : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_INPUT_REG_BASE + 0 * C_AXIL_WORD_BYTES, 32));
+  constant C_ARM_FT_ADDR   : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_INPUT_REG_BASE + 1 * C_AXIL_WORD_BYTES, 32));
 
   constant C_SAMPLE_PRINT_COUNT : natural                       := C_SAMP_BUFF_DEPTH;
   constant C_STATUS_ADDR        : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 0 * C_AXIL_WORD_BYTES, 32));

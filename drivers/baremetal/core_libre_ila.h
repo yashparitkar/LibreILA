@@ -24,13 +24,20 @@
   to CORE_LIBRE_ILA_PROBE_WIDTH-1. What each bit means is a property of the
   design the ILA was wired into, so name the bits in your own project header.
 
-  The trigger is one bit per probed bit and lives in two register banks of
-  CORE_LIBRE_ILA_STRIDE_WIDTH words each. TRIG_COND holds the value each probe
-  bit has to take, TRIG_MASK selects which bits take part, and the mode
-  argument reduces the enabled bits, OR fires on the first bit that matches,
-  AND needs all of them to match at once. Both banks use the same bit layout as
-  a sample, probe bit i sitting in word i/32 at shift i%32, which is what the
-  LIBRE_ILA_BIT_WORD() and LIBRE_ILA_BIT_MASK() macros compute.
+  The trigger is one bit per probed bit and lives in two register banks of one
+  stride each. TRIG_COND holds the value each probe bit has to take, TRIG_MASK
+  selects which bits take part, and the mode argument reduces the enabled bits,
+  OR fires on the first bit that matches, AND needs all of them to match at
+  once. Both banks use the same bit layout as a sample, probe bit i sitting in
+  word i/32 at shift i%32, which is what the LIBRE_ILA_BIT_WORD() and
+  LIBRE_ILA_BIT_MASK() macros compute.
+
+  LIBRE_ILA_init() takes the probe width, the buffer depth and the sampling
+  clock frequency off the core and leaves them in the instance, so the driver
+  is not built against any one synthesis. The arrays you hand it are the
+  exception, since they are storage in your own scope: size them at build time
+  and pass the length, and the driver rejects the call rather than writing past
+  the end if the core turns out to want a different shape.
 
   A typical acquisition looks like this:
 
@@ -54,14 +61,33 @@
     cond[LIBRE_ILA_BIT_WORD(MY_PROBE_ERR_BIT)] |= LIBRE_ILA_BIT_MASK(MY_PROBE_ERR_BIT);
     mask[LIBRE_ILA_BIT_WORD(MY_PROBE_ERR_BIT)] |= LIBRE_ILA_BIT_MASK(MY_PROBE_ERR_BIT);
 
-    LIBRE_ILA_configure_trigger(&ila, cond, mask, LIBRE_ILA_TRIG_MODE_AND);
+    LIBRE_ILA_configure_trigger(&ila, cond, mask,
+                                CORE_LIBRE_ILA_STRIDE_WIDTH,
+                                LIBRE_ILA_TRIG_MODE_AND);
 
     LIBRE_ILA_arm(&ila);
     LIBRE_ILA_wait_done(&ila, 1000u);
-    LIBRE_ILA_read_data(&ila, samples, &trig_pos);
+    LIBRE_ILA_read_data(&ila, samples,
+                        sizeof(samples) / sizeof(samples[0]), &trig_pos);
 
     // probe bit 3 of the sample that triggered the ILA
     LIBRE_ILA_SAMPLE_BIT(samples, trig_pos, MY_PROBE_ERR_BIT);
+  @endcode
+
+  A second core of a different probe width cannot use the globals above, since
+  they only describe one of them. Size its arrays from its own width and index
+  them with the lane count out of its instance:
+
+  @code
+    #define MY_WIDE_PROBE_WIDTH  (512u)
+
+    uint32_t wide_cond[LIBRE_ILA_TRIG_WORDS(MY_WIDE_PROBE_WIDTH)]   = {0};
+    uint32_t wide[LIBRE_ILA_SAMPLE_WORDS(MY_WIDE_PROBE_WIDTH, 1024u)];
+
+    LIBRE_ILA_read_data(&wide_ila, wide,
+                        sizeof(wide) / sizeof(wide[0]), &trig_pos);
+
+    LIBRE_ILA_SAMPLE_BIT_N(wide, wide_ila.n_lanes, trig_pos, MY_PROBE_ERR_BIT);
   @endcode
 
   Watch out for one corner, an all zero mask in AND mode matches vacuously and
@@ -91,8 +117,8 @@ typedef enum __cmd_status_t
     CMD_STATUS_SUCCESS = 0,   /**< Command completed successfully. */
     CMD_STATUS_BAD_LIBRE_ILA = -1,   /**< Command failed due to a bad LIBRE_ILA instance. */
     CMD_STATUS_BAD_MAGIC_KEY = -2,   /**< Command failed due to a bad MAGIC_KEY read from the CoreLibreILA hardware instance. */
-    CMD_STATUS_BAD_CONFIG = -3,   /**< Command failed due to defined  configuration no matching hardware. eg, invalid buffer depth or probe width */
-    CMD_STATUS_BAD_CLK_FREQ = -4,   /**< Command failed due defined clock frequency does not match hardware */
+    CMD_STATUS_BAD_CONFIG = -3,   /**< The hardware reported a geometry it could not have been elaborated with, eg a probe width of zero or a buffer depth below two. */
+    CMD_STATUS_BAD_CLK_FREQ = -4,   /**< No longer returned. The sampling clock frequency is reported by the core into samp_clk_freq_hz and nothing is derived from it, so there is nothing left to disagree about. Kept so the enum values do not shift under code that switches on them. */
     CMD_STATUS_BAD_PARAM = -5,   /**< Command failed due to an out of range or NULL argument. */
     CMD_STATUS_TIMEOUT = 1,   /**< Command timed out before completion. */
     CMD_STATUS_ERROR   = 2    /**< Command completed with an error. */
@@ -133,11 +159,34 @@ typedef enum __libre_ila_trig_mode_t
  * instead of failing, which is worth catching on the host. */
 #define LIBRE_ILA_TRIG_MODE_VALID_BITS  (0x7u)
 
-/*-------------------------------------------------------------------------*//** Structure instance holding all data regarding the CoreLibreILA
+/*-------------------------------------------------------------------------*//** Structure instance holding all data regarding the CoreLibreILA.
+ *
+ * Everything past base_addr is filled in by LIBRE_ILA_init() from what the core
+ * itself reports, so nothing has to be told what the hardware was synthesised
+ * with and two instances of different probe widths can be driven from one
+ * binary. Treat the whole thing as read only once init() has returned.
+ *
+ * The four bases are one per block of the register map. Offsets in
+ * core_libre_ila_regs.h are relative to their block, which is what lets the
+ * HAL_*_reg() macros keep working: they paste the offset in at preprocess time,
+ * so the part that moves with the probe width has to sit in the base.
  */
 typedef struct __libre_ila_instance_t
 {
-    addr_t              base_addr; // base addr of LIBRE_ILA AXI4L
+    addr_t   base_addr;   /**< base addr of LIBRE_ILA AXI4L */
+
+    addr_t   op_base;     /**< read only block, == base_addr */
+    addr_t   ip_base;     /**< read/write block, eight registers above it */
+    addr_t   mask_base;   /**< trigger vector mask, word n at mask_base + 4*n */
+    addr_t   buff_base;   /**< sample buffer, stride_width registers per sample */
+
+    uint32_t probe_width;      /**< G_PROBE_WIDTH, total probed bits */
+    uint32_t samp_buff_depth;  /**< G_SAMP_BUFF_DEPTH, samples held */
+    uint32_t samp_clk_freq_hz; /**< G_SAMP_CLK_FREQ, sampling clock */
+
+    uint32_t n_lanes;      /**< 32 bit words a probe word takes, ceil(width/32) */
+    uint32_t stride_width; /**< registers a sample takes, n_lanes rounded up to
+                                a power of two with a minimum of four */
 } libre_ila_instance_t;
 
 /*
@@ -151,7 +200,7 @@ The LIBRE_ILA_init() function initializes the CoreLibreILA driver instance with 
 
 The init function checks the connection to the hardware by reading the MAGIC_KEY register, if the read value does not match the expected MAGIC_KEY value, the function returns failure status.
 
-It also checks the synthesis time parameters reported by the hardware against the CORE_LIBRE_ILA_* values this driver was built with, since the whole register map is derived from them. The hardware reports one probe width, so there is a single width to agree on.
+It then reads the probe width, the buffer depth and the sampling clock frequency the hardware reports, and works the block base addresses out from them. Nothing is checked against a CORE_LIBRE_ILA_* build time value any more, the map comes from the core. A width or depth the HDL could not have been elaborated with is rejected as CMD_STATUS_BAD_CONFIG.
 
   @param this_libre_ila
     Pointer to the libre_ila_instance_t data structure instance holding all data
@@ -195,7 +244,7 @@ The LIBRE_ILA_set_trigger_position() function sets where the trigger sample sits
     Pointer to the libre_ila_instance_t to operate on.
 
   @param trig_pos
-    Index of the trigger sample within the captured window, in samples. Has to be smaller than CORE_LIBRE_ILA_SAMP_BUFF_DEPTH.
+    Index of the trigger sample within the captured window, in samples. Has to be smaller than the buffer depth the core reports, which the instance carries as samp_buff_depth.
 
   @return
     cmd_status_t, see enum __cmd_status_t for details of the return values.
@@ -215,10 +264,13 @@ Both arrays describe the probe word bit for bit, word n holding probe bits [32n+
     Pointer to the libre_ila_instance_t to operate on.
 
   @param trigger_cond
-    Pointer to an array of CORE_LIBRE_ILA_STRIDE_WIDTH words written to the TRIG_COND bank. Bit i is the value probe bit i has to take to match.
+    Pointer to an array of n_words words written to the TRIG_COND bank. Bit i is the value probe bit i has to take to match.
 
   @param trigger_mask
-    Pointer to an array of CORE_LIBRE_ILA_STRIDE_WIDTH words written to the TRIG_MASK bank. Bit i set to 1 lets probe bit i take part in the trigger, 0 makes it a don't care.
+    Pointer to an array of n_words words written to the TRIG_MASK bank. Bit i set to 1 lets probe bit i take part in the trigger, 0 makes it a don't care.
+
+  @param n_words
+    Length of both arrays. Has to equal the stride the core reports, which the instance carries as stride_width and which LIBRE_ILA_TRIG_WORDS() computes for a width known at build time. A mismatch is CMD_STATUS_BAD_PARAM and nothing is written, since a short array would leave the top of the trigger holding whatever was there before.
 
   @param mode
     LIBRE_ILA_TRIG_MODE_OR to trigger as soon as any enabled bit matches its condition, LIBRE_ILA_TRIG_MODE_AND to require all of them to match at the same time. Either may be OR-ed with LIBRE_ILA_TRIG_EDGE to trigger on the reduced condition becoming true rather than being true, and with LIBRE_ILA_TRIG_FALLING alongside it to trigger on it becoming false instead. LIBRE_ILA_TRIG_FALLING on its own is rejected, a level trigger has no direction.
@@ -235,6 +287,7 @@ cmd_status_t LIBRE_ILA_configure_trigger
     libre_ila_instance_t * this_libre_ila,
     const uint32_t * trigger_cond,
     const uint32_t * trigger_mask,
+    uint32_t n_words,
     libre_ila_trig_mode_t mode
 );
 
@@ -313,13 +366,16 @@ cmd_status_t LIBRE_ILA_read_idx
 /*-------------------------------------------------------------------------*//**
 The LIBRE_ILA_read_data() function reads the whole sample buffer into the provided buffer. This is done with increasing time index, starting from the first sample index, and wrapping around the sample buffer if necessary till all the samples are read. The function uses the SAMP_BUFF_TRIG_IDX and SAMP_BUFF_FRST_IDX registers of the CoreLibreILA hardware instance to determine the indices of the samples to read.
 
-Samples are stored packed, CORE_LIBRE_ILA_N_LANES words each, the padding words the hardware inserts up to the register stride are dropped. Word w of sample n is samp_buffer[n * CORE_LIBRE_ILA_N_LANES + w], or LIBRE_ILA_SAMPLE_WORD(samp_buffer, n, w), and probe bit b of sample n is LIBRE_ILA_SAMPLE_BIT(samp_buffer, n, b).
+Samples are stored packed, this_libre_ila->n_lanes words each, the padding words the hardware inserts up to the register stride are dropped. Word w of sample n is samp_buffer[n * n_lanes + w], or LIBRE_ILA_SAMPLE_WORD(samp_buffer, n, w) when the core matches the global CORE_LIBRE_ILA_PROBE_WIDTH, and probe bit b of sample n is LIBRE_ILA_SAMPLE_BIT(samp_buffer, n, b). For a core of a different width use LIBRE_ILA_SAMPLE_WORD_N()/LIBRE_ILA_SAMPLE_BIT_N() and pass this_libre_ila->n_lanes.
 
   @param this_libre_ila
     Pointer to the libre_ila_instance_t to operate on.
 
   @param samp_buffer
-    Pointer to a uint32_t array where the captured probe words will be stored. The array has to hold at least (CORE_LIBRE_ILA_SAMP_BUFF_DEPTH * CORE_LIBRE_ILA_N_LANES) words.
+    Pointer to a uint32_t array where the captured probe words will be stored.
+
+  @param buffer_words
+    Length of samp_buffer. Has to equal (samp_buff_depth * n_lanes) as the core reports them, which LIBRE_ILA_SAMPLE_WORDS() computes for a width and depth known at build time. The match is exact rather than "at least" on purpose: LIBRE_ILA_SAMPLE_WORD() indexes rows at the lane count it was compiled with, so a buffer sized for a wider probe than the core actually has would be filled at one row length and read back at another. A mismatch is CMD_STATUS_BAD_PARAM and nothing is written.
 
   @param samp_buff_trig_idx
     Pointer to a uint32_t variable where the position of the trigger sample within samp_buffer will be stored. It is already rebased on the first sample, so sample number *samp_buff_trig_idx is the one that triggered the ILA.
@@ -331,6 +387,7 @@ cmd_status_t LIBRE_ILA_read_data
 (
     libre_ila_instance_t * this_libre_ila,
     uint32_t * samp_buffer,
+    uint32_t buffer_words,
     uint32_t * samp_buff_trig_idx
 );
 

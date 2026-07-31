@@ -2,7 +2,7 @@
 # File: tb.py
 # Author: Y.U.P. (yashparitkar)
 # Created: 2026-07-29 Wed 20:35
-# Last Modified: 2026-07-29 Wed 20:35
+# Last Modified: 2026-07-31 Fri 11:19
 #
 # Description: Packet format test for the python driver
 #   Checks drivers/python/driver.py against a model of the wrapper's
@@ -134,28 +134,20 @@ def identity_regs(probe_width=_PROBE_WIDTH, depth=_DEPTH, freq=_FREQ_HZ):
     wrong fails to construct instead of agreeing with itself.
     """
 
-    n_lanes = (probe_width + 31) // 32
-    stride  = 1
-
-    while stride < n_lanes:
-        stride *= 2
-
-    stride  = max(stride, 4)         # the control registers need four
-    op_base = (4 + 2 * stride) * 4   # past TRIG_POS/ARM_FT/TRIG_CFG/RSVD and the trigger vector
-
+    # The output block sits at the base address and is eight registers wide
+    # whatever the probe width is, so none of these move.
     return {
-        op_base + 4  : 0xb01dface,  # MGCKEY
-        op_base + 8  : freq,        # SAMP_CLK_FREQ
-        op_base + 12 : probe_width, # WIDTH
-        op_base + 16 : depth        # DEPTH
+        0x04 : 0xb01dface,  # MGCKEY
+        0x08 : freq,        # SAMP_CLK_FREQ
+        0x0c : probe_width, # WIDTH
+        0x10 : depth        # DEPTH
     }
 
-def raw_driver(wrapper, probe_width=_PROBE_WIDTH):
+def raw_driver(wrapper):
     """
     raw_driver: Construct a driver against a wrapper exactly as it was staged.
 
     wrapper: The FakeWrapper to answer the driver's traffic.
-    probe_width: The probe width to build the register map from.
 
     returns: The LibreILA_Driver instance.
 
@@ -166,7 +158,7 @@ def raw_driver(wrapper, probe_width=_PROBE_WIDTH):
 
     _pending_port = wrapper
 
-    return driver.LibreILA_Driver("/dev/null", probe_width)
+    return driver.LibreILA_Driver("/dev/null")
 
 def make_driver(wrapper, probe_width=_PROBE_WIDTH, depth=_DEPTH):
     """
@@ -179,11 +171,11 @@ def make_driver(wrapper, probe_width=_PROBE_WIDTH, depth=_DEPTH):
     returns: The LibreILA_Driver instance.
     """
 
-    # The driver reads its identity registers while constructing and refuses to
-    # come up unless they match, so they win over anything the test staged
+    # The driver builds its whole register map out of the identity registers
+    # while constructing, so they win over anything the test staged
     wrapper.mem.update(identity_regs(probe_width, depth))
 
-    ila = raw_driver(wrapper, probe_width)
+    ila = raw_driver(wrapper)
 
     # Hide the construction traffic, the tests below count their own packets
     wrapper.packets.clear()
@@ -310,12 +302,14 @@ class TestErrorHandling(unittest.TestCase):
     """
 
     def test_stale_bytes_are_flushed(self):
-        wrapper = FakeWrapper({0x10: 0xcafebabe})
+        # 0x100 is scratch, anywhere past the identity block at 0x00..0x1c
+        # would do, that block gets seeded over whatever is staged here.
+        wrapper = FakeWrapper({0x100: 0xcafebabe})
         ila     = make_driver(wrapper)
 
         wrapper.tx += b"\x00\x01\x02" # leftovers from an aborted transfer
 
-        self.assertEqual(ila.read_regs(0x10, 1), [0xcafebabe])
+        self.assertEqual(ila.read_regs(0x100, 1), [0xcafebabe])
 
     def test_negative_word_is_masked(self):
         wrapper = FakeWrapper()
@@ -389,13 +383,14 @@ class TestRegisterMap(unittest.TestCase):
         self.assertEqual(ila.n_lanes, 3)
         self.assertEqual(ila.stride_width, 4)
 
-        self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_POS_REG_OFFSET, 0x00)
-        self.assertEqual(ila.LIBRE_ILA_REGS_ARM_FT_REG_OFFSET, 0x04)
-        self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET, 0x08)
-        # 0x0C is the reserved input register, not the trigger vector
-        self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET, 0x10)
-        self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET, 0x20)
-        self.assertEqual(ila.LIBRE_ILA_REGS_STATUS_REG_OFFSET, 0x30)
+        # The output block is first and fixed, the input block starts above it
+        self.assertEqual(ila.LIBRE_ILA_REGS_STATUS_REG_OFFSET, 0x00)
+        self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_POS_REG_OFFSET, 0x20)
+        self.assertEqual(ila.LIBRE_ILA_REGS_ARM_FT_REG_OFFSET, 0x24)
+        self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET, 0x28)
+        # 0x2C is the reserved input register, not the trigger vector
+        self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET, 0x30)
+        self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET, 0x40)
         self.assertEqual(ila.LIBRE_ILA_REGS_SAMP_BUFF_BASE_REG_OFFSET, 0x50)
 
     def test_stride_rounds_up_to_a_power_of_two(self):
@@ -406,17 +401,20 @@ class TestRegisterMap(unittest.TestCase):
 
                 self.assertEqual((ila.n_lanes, ila.stride_width), (n_lanes, stride))
 
-                # the map keeps its shape whatever the stride turns out to be
-                self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET, 0x10)
-                self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET, 0x10 + stride * 4)
-                self.assertEqual(ila.LIBRE_ILA_REGS_STATUS_REG_OFFSET, (4 + 2 * stride) * 4)
+                # The output block never moves, whatever the stride turns out
+                # to be. Only what sits above it does.
+                self.assertEqual(ila.LIBRE_ILA_REGS_STATUS_REG_OFFSET, 0x00)
+                self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_POS_REG_OFFSET, 0x20)
+                self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET, 0x30)
+                self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET, 0x30 + stride * 4)
                 self.assertEqual(ila.LIBRE_ILA_REGS_SAMP_BUFF_BASE_REG_OFFSET,
-                                 ila.LIBRE_ILA_REGS_STATUS_REG_OFFSET + 32)
+                                 (8 + 4 + 2 * stride) * 4)
 
     def test_output_registers_are_in_order(self):
         ila  = make_driver(FakeWrapper())
         base = ila.LIBRE_ILA_REGS_STATUS_REG_OFFSET
 
+        self.assertEqual(base, 0x00)
         self.assertEqual(ila.LIBRE_ILA_REGS_MGCKEY_REG_OFFSET, base + 4)
         self.assertEqual(ila.LIBRE_ILA_REGS_SAMP_CLK_FREQ_REG_OFFSET, base + 8)
         self.assertEqual(ila.LIBRE_ILA_REGS_WIDTH_REG_OFFSET, base + 12)
@@ -433,10 +431,10 @@ class TestRegisterMap(unittest.TestCase):
 
 class TestIdentityChecks(unittest.TestCase):
     """
-    TestIdentityChecks: The whole register map is derived from probe_width, and
-    the core truncates an address it cannot decode rather than rejecting it, so
-    a driver pointed at the wrong build has to fail at construction instead of
-    quietly aliasing onto real registers.
+    TestIdentityChecks: The register map is built out of what the identity
+    block says, and the core truncates an address it cannot decode rather than
+    rejecting it, so a driver pointed at something that is not a LibreILA gets
+    answers instead of errors. Construction is the only place that can catch it.
     """
 
     def test_magic_key_is_checked(self):
@@ -446,14 +444,22 @@ class TestIdentityChecks(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             raw_driver(FakeWrapper({**staged, mgckey: 0xdeadbeef}))
 
-    def test_probe_width_is_checked(self):
-        # the core reports 67 bits, the driver was built for 128, a different
-        # stride and hence a different map
-        with self.assertRaises(RuntimeError):
-            raw_driver(FakeWrapper(identity_regs(67)), 128)
+    def test_nonsense_geometry_is_rejected(self):
+        # Both are asserted at elaboration in the HDL, so a core reporting
+        # either of these is not one, and the map derived from it would put the
+        # sample buffer at an address that means nothing.
+        for label, staged in (("probe width 0", identity_regs(0)),
+                              ("depth 1", identity_regs(depth=1))):
+            with self.subTest(label), self.assertRaises(RuntimeError):
+                raw_driver(FakeWrapper(staged))
 
     def test_matching_build_comes_up(self):
-        self.assertIsNotNone(raw_driver(FakeWrapper(identity_regs(67)), 67))
+        ila = raw_driver(FakeWrapper(identity_regs(67)))
+
+        # everything the driver needs comes off the wire, nothing is passed in
+        self.assertEqual(ila.probe_width, 67)
+        self.assertEqual(ila.samp_buff_depth, _DEPTH)
+        self.assertEqual(ila.samp_freq_hz, _FREQ_HZ)
 
 class TestControl(unittest.TestCase):
     """
@@ -554,7 +560,7 @@ class TestControl(unittest.TestCase):
 
         self.assertEqual(wrapper.mem[ila.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET], 1)
         # the reserved input register sits between TRIG_CFG and the vector
-        self.assertNotIn(0x0c, wrapper.mem)
+        self.assertNotIn(ila.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET + 4, wrapper.mem)
 
     def test_configure_trigger_checks_its_arguments(self):
         _, ila = self._ila(0)

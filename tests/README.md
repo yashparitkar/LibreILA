@@ -7,8 +7,9 @@ The split is by what a test **needs to run**, not by what it covers:
 |-----------|-------|----------|
 | `hdl/`    | ghdl, plus the generated core in `codegen/gen_axis/` | `make sim-hdl` |
 | `python/` | python3 and nothing else | `make sim-python` |
+| `c/`      | a C compiler and nothing else | `make sim-c` |
 
-`make sim` from the project root runs both, host side tests first because they take milliseconds and a broken packet format should not wait for the simulations to finish. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on.
+`make sim` from the project root runs all three, host side tests first because they take milliseconds and a broken packet format or register map should not wait for the simulations to finish. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on.
 
 ## hdl/
 GHDL simulations of the core and the UART wrapper. The numbering is the order they build up in, each one leaning on what the last established.
@@ -22,6 +23,24 @@ GHDL simulations of the core and the UART wrapper. The numbering is the order th
 | `04_sim_axil_force_trig` | Force trigger |
 | `06_sim_libre_ila_uart`  | End to end dataflow through the UART wrapper |
 | `07_sim_edge_test`       | Level versus rising versus falling trigger, `trig_cfg` bits 1 and 2 |
+| `08_sim_addr_bound_check`| Address decoding at and past the end of the register map |
+
+`08_sim_addr_bound_check` covers the three regions the other tests never
+address. Registers below `C_N_REGS` are real; the ones between there and the top
+of the decoded address slice are decodable but have nothing behind them, and
+must read zero and swallow writes; anything above the slice has its high bits
+dropped and aliases back onto the map. The unmapped region is the one worth
+having a test for, because the range checks in `p_wlg`/`p_rlg` are all that
+stands between it and an out of range array index — declare the decoded index
+over the register count instead of over the slice and every access there becomes
+a GHDL bound check failure rather than a zero, with the range check never
+getting to run. The test also pins the output block being read only, which falls
+out of the map order rather than out of any explicit write protection: the block
+sits below the input one and `p_wlg` rebases the write index onto the input
+block, so a write under `C_AXIL_N_CTRL_REGS_OUT` is out of range by
+construction. Depth and probe width are picked so the register count is not a
+power of two, since otherwise the map fills the slice exactly and there is no
+unmapped region left to test; an elaboration assert catches that.
 
 `07_sim_edge_test` runs its testbench three times over, once per trigger mode: `level`, `rising` and `falling`. All three share one stimulus in which the trigger condition is already true when the ILA is armed, then falls and rises again, because that is the case the three modes disagree about. The level run triggers on the first sample, the two edge runs wait for their transition, and each run checks the probe counter carried by the sample the DUT names in `trig_idx`. `make sim-rising` or `make wave-falling` picks one out. Since the condition holds across the arm, this is also what pins the seeding of `trig_lvl_prev`: cleared instead of seeded, the rising run would fire on the first sample and its check would fail.
 
@@ -37,6 +56,17 @@ Host side tests for the drivers. No ghdl, no generated core, and pyserial is stu
 | `00_pkt_format` | The python driver's packet format, register map, control path and readout, against a model of the wrapper's parser |
 
 `00_pkt_format` exists because the UART packet format is the one thing the RTL and the python driver have to agree on, and nothing else checks that agreement: the wrapper is happy to answer a malformed request and the driver is happy to misparse a well-formed reply.
+
+## c/
+The baremetal driver, compiled and run on the host. No cross toolchain: it reaches the hardware only through the four `HW_*_reg()` accessors, so `stub/` backs those with a flat array and supplies the `HAL_*_reg()` macros, `addr_t` and `readmtime()` that the PolarFire SoC toolchain would otherwise provide.
+
+| Test | What it covers |
+|------|----------------|
+| `00_reg_map` | The register map the driver derives at runtime, its argument checks, the readout, and two cores of different probe widths driven from one binary |
+
+The stubbed `HAL_*_reg()` macros are reimplemented rather than copied, partly to keep vendor code out of the tree and partly because the contract they impose is itself what the map ordering answers: they paste `REG_NAME##_REG_OFFSET` at preprocess time, so an offset worked out at runtime cannot go through them. That is why offsets in `core_libre_ila_regs.h` are relative to their block and the part that moves with the probe width sits in the block's base address instead.
+
+See [c/00_reg_map/README.md](c/00_reg_map/README.md) for the case list and for the three injected regressions the suite was checked against — a test that cannot fail is not covering anything.
 
 The same `FakeWrapper` also serves the register map, so the tests cover the two other places the driver can silently disagree with the hardware:
 

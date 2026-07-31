@@ -2,7 +2,7 @@
 # File: driver.py
 # Author: Y.U.P. (yashparitkar)
 # Created: 2026-07-24 Fri 19:48
-# Last Modified: 2026-07-30 Thu 17:01
+# Last Modified: 2026-07-31 Fri 11:11
 #
 # Description: ILA Driver file
 #   This file provides the core functions and structure for the ILA driver
@@ -12,10 +12,12 @@
 import time
 import serial
 
-# The python driver does not take the synthesis time parameters on trust the
-# way the baremetal one does, it only needs the probe width and reads the rest
-# back. That width still decides the whole register map, so it is checked
-# against the core before anything else is touched.
+# Nothing here is fixed at synthesis time. The baremetal driver has a reason to
+# bake the probe width and buffer depth in, it sizes static buffers with them,
+# but a host tool gains nothing from it and pays for it by having to be told
+# what it is talking to. So the driver reads the lot back instead: the output
+# block sits at the base address whatever the core was built with, and the part
+# of the map that does move with the probe width follows from what it says.
 
 _libre_ila_status = {
     "LIBRE_ILA_STATUS_ERROR"    : -1,
@@ -108,55 +110,61 @@ def _get_stride(n_lanes):
     return max(stride, 4)
 
 class LibreILA_Driver:
-    def __init__(self, serial_port, probe_width, baudrate=115200):
+    def __init__(self, serial_port, baudrate=115200):
         self.serial_port = serial_port
         self.serial_connection = serial.Serial(serial_port, baudrate, timeout=1)
 
-        self.probe_width = probe_width
-
-        # The lanes carry the probe word, the stride is what one sample takes
-        # in the register map, padding included. They are not the same number:
-        # the stock 67 bit probe needs 3 lanes but sits on a stride of 4.
-        self.n_lanes      = (probe_width + 31) // 32
-        self.stride_width = _get_stride(self.n_lanes)
-
-        self.axil_n_ip_registers = 4 + 2 * self.stride_width
-
-        self.LIBRE_ILA_REGS_TRIG_POS_REG_OFFSET = 0
-        self.LIBRE_ILA_REGS_ARM_FT_REG_OFFSET   = 4
-        self.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET = 8
-        # Register 3 is reserved, the trigger vector starts above it
-        self.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET = 16
-        self.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET = 16 + self.stride_width * 4
-
-        self.LIBRE_ILA_OUTPUT_REG_OFFSET = self.axil_n_ip_registers * 4
-
-        self.LIBRE_ILA_REGS_STATUS_REG_OFFSET             = self.LIBRE_ILA_OUTPUT_REG_OFFSET
-        self.LIBRE_ILA_REGS_MGCKEY_REG_OFFSET             = self.LIBRE_ILA_OUTPUT_REG_OFFSET + 4
-        self.LIBRE_ILA_REGS_SAMP_CLK_FREQ_REG_OFFSET      = self.LIBRE_ILA_OUTPUT_REG_OFFSET + 8
-        self.LIBRE_ILA_REGS_WIDTH_REG_OFFSET              = self.LIBRE_ILA_OUTPUT_REG_OFFSET + 12
-        self.LIBRE_ILA_REGS_DEPTH_REG_OFFSET              = self.LIBRE_ILA_OUTPUT_REG_OFFSET + 16
+        self.LIBRE_ILA_REGS_STATUS_REG_OFFSET             = 0
+        self.LIBRE_ILA_REGS_MGCKEY_REG_OFFSET             = 4
+        self.LIBRE_ILA_REGS_SAMP_CLK_FREQ_REG_OFFSET      = 8
+        self.LIBRE_ILA_REGS_WIDTH_REG_OFFSET              = 12
+        self.LIBRE_ILA_REGS_DEPTH_REG_OFFSET              = 16
         # Output register 5 is reserved
-        self.LIBRE_ILA_REGS_SAMP_BUFF_TRIG_IDX_REG_OFFSET = self.LIBRE_ILA_OUTPUT_REG_OFFSET + 24
-        self.LIBRE_ILA_REGS_SAMP_BUFF_FRST_IDX_REG_OFFSET = self.LIBRE_ILA_OUTPUT_REG_OFFSET + 28
-        self.LIBRE_ILA_REGS_SAMP_BUFF_BASE_REG_OFFSET     = self.LIBRE_ILA_OUTPUT_REG_OFFSET + 32
+        self.LIBRE_ILA_REGS_SAMP_BUFF_TRIG_IDX_REG_OFFSET = 24
+        self.LIBRE_ILA_REGS_SAMP_BUFF_FRST_IDX_REG_OFFSET = 28
 
         # MGCKEY, SAMP_CLK_FREQ, WIDTH and DEPTH are four registers in a row,
         # so one packet covers the lot.
-        mgckey, self.samp_freq_hz, width, self.samp_buff_depth = \
+        mgckey, self.samp_freq_hz, self.probe_width, self.samp_buff_depth = \
                 self.read_regs(self.LIBRE_ILA_REGS_MGCKEY_REG_OFFSET, 4)
 
-        # Check the magic key to ensure that the wrapper is present and compatible
+        # Check the magic key to ensure that the wrapper is present and
         if mgckey != _libre_ila_magic_key:
             raise RuntimeError(f"{self.serial_port}: magic key mismatch, expected "
                                f"0x{_libre_ila_magic_key:08x}, got 0x{mgckey:08x}")
 
-        # Every offset above is derived from probe_width, and the core truncates
-        # rather than rejects an address it cannot decode, so a wrong width would
-        # otherwise go unnoticed as reads quietly aliasing onto real registers.
-        if width != probe_width:
-            raise RuntimeError(f"{self.serial_port}: the core reports a probe width of {width} "
-                               f"bits, the driver was built for {probe_width}")
+        # Simple error checks
+        if self.probe_width < 1:
+            raise RuntimeError(f"{self.serial_port}: the core reports a probe width of "
+                               f"{self.probe_width} bits")
+
+        if self.samp_buff_depth < 2:
+            raise RuntimeError(f"{self.serial_port}: the core reports a sample buffer "
+                               f"{self.samp_buff_depth} samples deep")
+
+        # The lanes carry the probe word, the stride is what one sample takes
+        # in the register map, padding included. They are not the same number:
+        # the stock 67 bit probe needs 3 lanes but sits on a stride of 4.
+        self.n_lanes      = (self.probe_width + 31) // 32
+        self.stride_width = _get_stride(self.n_lanes)
+
+        self.axil_n_op_registers = 8
+        self.axil_n_ip_registers = 4 + 2 * self.stride_width
+
+        # Everything from here on moves with the probe width, which is exactly
+        # why it could not be worked out before the block above was read.
+        self.LIBRE_ILA_INPUT_REG_OFFSET = self.axil_n_op_registers * 4
+
+        self.LIBRE_ILA_REGS_TRIG_POS_REG_OFFSET = self.LIBRE_ILA_INPUT_REG_OFFSET
+        self.LIBRE_ILA_REGS_ARM_FT_REG_OFFSET   = self.LIBRE_ILA_INPUT_REG_OFFSET + 4
+        self.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET = self.LIBRE_ILA_INPUT_REG_OFFSET + 8
+        # Register 3 is reserved, the trigger vector starts above it
+        self.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET = self.LIBRE_ILA_INPUT_REG_OFFSET + 16
+        self.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET = self.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET \
+                                                 + self.stride_width * 4
+
+        self.LIBRE_ILA_REGS_SAMP_BUFF_BASE_REG_OFFSET = \
+                (self.axil_n_op_registers + self.axil_n_ip_registers) * 4
 
     def _recv(self, count):
         """

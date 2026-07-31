@@ -75,16 +75,20 @@ architecture sim of tb is
   -- Matches the DUT's C_AXIL_STRIDE: next power-of-two lane count, minimum 4
   constant C_STRIDE : natural := maximum(4, 2 ** integer(ceil(log2(real(C_N_LANES)))));
 
-  constant C_INPUT_REG_COUNT : natural := 4 + 2 * C_STRIDE;
-  constant C_OUTPUT_REG_BASE : natural := C_INPUT_REG_COUNT * C_AXIL_WORD_BYTES;
-  constant C_SAMPLE_RAM_BASE : natural := (C_INPUT_REG_COUNT + 8) * C_AXIL_WORD_BYTES;
+  -- The DUT maps the fixed size output block at the base address and the
+  -- input block, which grows with C_STRIDE, above it
+  constant C_OUTPUT_REG_COUNT : natural := 8;
+  constant C_INPUT_REG_COUNT  : natural := 4 + 2 * C_STRIDE;
+  constant C_OUTPUT_REG_BASE  : natural := 0;
+  constant C_INPUT_REG_BASE   : natural := C_OUTPUT_REG_COUNT * C_AXIL_WORD_BYTES;
+  constant C_SAMPLE_RAM_BASE  : natural := (C_OUTPUT_REG_COUNT + C_INPUT_REG_COUNT) * C_AXIL_WORD_BYTES;
   constant C_SAMPLE_STRIDE   : natural := C_STRIDE;
 
-  constant C_TRIG_POS_ADDR  : std_logic_vector(31 downto 0) := x"00000000";
-  constant C_ARM_FT_ADDR    : std_logic_vector(31 downto 0) := x"00000004";
-  constant C_TRIG_CFG_ADDR  : std_logic_vector(31 downto 0) := x"00000008";
-  constant C_TRIG_COND_BASE : natural                       := 4 * C_AXIL_WORD_BYTES;
-  constant C_TRIG_MASK_BASE : natural                       := (4 + C_STRIDE) * C_AXIL_WORD_BYTES;
+  constant C_TRIG_POS_ADDR  : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_INPUT_REG_BASE + 0 * C_AXIL_WORD_BYTES, 32));
+  constant C_ARM_FT_ADDR    : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_INPUT_REG_BASE + 1 * C_AXIL_WORD_BYTES, 32));
+  constant C_TRIG_CFG_ADDR  : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_INPUT_REG_BASE + 2 * C_AXIL_WORD_BYTES, 32));
+  constant C_TRIG_COND_BASE : natural                       := C_INPUT_REG_BASE + 4 * C_AXIL_WORD_BYTES;
+  constant C_TRIG_MASK_BASE : natural                       := C_INPUT_REG_BASE + (4 + C_STRIDE) * C_AXIL_WORD_BYTES;
   -- TLAST/TVALID/TREADY live in the word right above the TDATA words
   constant C_CTRL_WORD_IDX  : natural                       := C_DATA_WIDTH / 32;
   constant C_CTRL_COND_ADDR : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_TRIG_COND_BASE + C_CTRL_WORD_IDX * C_AXIL_WORD_BYTES, 32));

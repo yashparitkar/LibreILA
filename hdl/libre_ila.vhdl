@@ -159,13 +159,21 @@ architecture rtl of libre_ila is
   -------------------------------------------------------------------
 
   -- Calculating required number of the AXILite regs ----------------
+  -- The map is laid out output block, then input block, then the sample
+  -- buffer. The output block is a fixed eight registers whatever the generics
+  -- are, so MGCKEY, WIDTH and DEPTH always sit at the same addresses and a
+  -- host can read the dimensions of the map out of the core before it knows
+  -- any of them. The input block is the one that grows with C_AXIL_STRIDE, so
+  -- it cannot come first without making the discovery registers unfindable
+  -- until the probe width is already known.
+  --
   -- Note that, the additional ( C_AXIL_STRIDE * G_SAMP_BUFF_DEPTH ) registers are coming from the
   -- buffer itself
   -- The trigger vector cond/mask block reuses C_AXIL_STRIDE so it lines up
   -- with the output sample stride layout, see trig_cond/trig_mask below.
-  constant C_AXIL_N_CTRL_REGS_IN  : integer := 4 + 2 * C_AXIL_STRIDE;
   constant C_AXIL_N_CTRL_REGS_OUT : integer := 8;
-  constant C_AXIL_N_CTRL_REGS     : integer := C_AXIL_N_CTRL_REGS_IN + C_AXIL_N_CTRL_REGS_OUT;
+  constant C_AXIL_N_CTRL_REGS_IN  : integer := 4 + 2 * C_AXIL_STRIDE;
+  constant C_AXIL_N_CTRL_REGS     : integer := C_AXIL_N_CTRL_REGS_OUT + C_AXIL_N_CTRL_REGS_IN;
 
   -- Total AXI4Lite regs
   constant C_AXIL_N_REGS : integer := C_AXIL_N_CTRL_REGS + (C_AXIL_STRIDE  * G_SAMP_BUFF_DEPTH);
@@ -243,13 +251,13 @@ architecture rtl of libre_ila is
 
   -- From the axiliteslave template ---------------------------------
 
+  type reg_array_out is array (0 to C_AXIL_N_CTRL_REGS_OUT - 1) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+
   type reg_array_in is array (0 to C_AXIL_N_CTRL_REGS_IN - 1) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
 
-  type reg_array_out is array (0 to (C_AXIL_N_CTRL_REGS - C_AXIL_N_CTRL_REGS_IN - 1)) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
-
   -- Number of Slave Registers 68
-  signal slv_reg_in  : reg_array_in;
   signal slv_reg_out : reg_array_out;
+  signal slv_reg_in  : reg_array_in;
 
   -- AXI4LITE signals
   signal axil_awaddr  : std_logic_vector(C_S_AXIL_ADDR_WIDTH - 1 downto 0);
@@ -277,6 +285,13 @@ architecture rtl of libre_ila is
   -- Signals for user logic register space example
   --------------------------------------------------
   signal mem_logic : std_logic_vector(ADDR_LSB + OPT_MEM_ADDR_BITS downto ADDR_LSB);
+
+  -- Widest index the address slice can decode to. The slice is sized to the
+  -- whole map rounded up to a power of two, so it reaches past the last real
+  -- register, and the range checks in p_wlg/p_rlg are what reject that. Those
+  -- checks only get to run if the index can hold the value in the first
+  -- place, hence this rather than the register count.
+  constant C_MAX_DECODED_IDX : integer := 2 ** (OPT_MEM_ADDR_BITS + 1) - 1;
 
   -- State machine local parameters
   constant IDLE  : std_logic_vector(1 downto 0) := "00";
@@ -671,7 +686,8 @@ begin
   -- and the slave is ready to accept the write address and write data.
   p_wlg : process (s_axil_aclk) is
 
-    variable idx : integer range 0 to C_AXIL_N_CTRL_REGS - 1;
+    variable idx    : integer range 0 to C_MAX_DECODED_IDX;
+    variable in_idx : integer range 0 to C_AXIL_N_CTRL_REGS_IN - 1;
 
   begin
 
@@ -690,11 +706,15 @@ begin
         if (s_axil_wvalid = '1') then
           -- compute index from address slice and write bytes per WSTRB
           idx := to_integer(unsigned(mem_logic));
-          if (idx >= 0 and idx < C_AXIL_N_CTRL_REGS_IN) then
-            if (idx = 1) then
+          -- The output block sits below the input one and is read only, so a
+          -- write anywhere under C_AXIL_N_CTRL_REGS_OUT is dropped along with
+          -- one aimed at the sample buffer.
+          if (idx >= C_AXIL_N_CTRL_REGS_OUT and idx < C_AXIL_N_CTRL_REGS) then
+            in_idx := idx - C_AXIL_N_CTRL_REGS_OUT;
+            if (in_idx = 1) then
               arm_toggler_axilite <= not arm_toggler_axilite;
             end if;
-            slv_reg_in(idx) <= s_axil_wdata;
+            slv_reg_in(in_idx) <= s_axil_wdata;
           end if;
         end if;
       end if;
@@ -768,7 +788,7 @@ begin
   -- Bounds-check address to avoid out-of-range access on register arrays.
   p_rlg : process (axil_araddr, slv_reg_in, slv_reg_out, samp_buff) is
 
-    variable rd_idx           : integer range 0 to C_AXIL_N_REGS - 1;
+    variable rd_idx           : integer range 0 to C_MAX_DECODED_IDX;
     variable samp_rd_idx      : integer range 0 to ((G_SAMP_BUFF_DEPTH + 1) * C_AXIL_STRIDE);
     variable stride_idx       : integer range 0 to G_SAMP_BUFF_DEPTH - 1;
     variable intra_stride_idx : integer range 0 to C_AXIL_STRIDE - 1;
@@ -777,12 +797,12 @@ begin
 
     rd_idx := to_integer(unsigned(axil_araddr(ADDR_LSB + OPT_MEM_ADDR_BITS downto ADDR_LSB)));
 
-    if (rd_idx < C_AXIL_N_CTRL_REGS_IN) then
-      -- Mapping of the input regs
-      s_axil_rdata <= slv_reg_in(rd_idx);
-    elsif (rd_idx < C_AXIL_N_CTRL_REGS) then
+    if (rd_idx < C_AXIL_N_CTRL_REGS_OUT) then
       -- Mapping of the output regs
-      s_axil_rdata <= slv_reg_out(rd_idx - C_AXIL_N_CTRL_REGS_IN);
+      s_axil_rdata <= slv_reg_out(rd_idx);
+    elsif (rd_idx < C_AXIL_N_CTRL_REGS) then
+      -- Mapping of the input regs
+      s_axil_rdata <= slv_reg_in(rd_idx - C_AXIL_N_CTRL_REGS_OUT);
     elsif (rd_idx < (C_AXIL_N_CTRL_REGS + G_SAMP_BUFF_DEPTH  * C_AXIL_STRIDE)) then
       -- Mapping of the RAM regs
       samp_rd_idx      := rd_idx - C_AXIL_N_CTRL_REGS;
@@ -804,10 +824,11 @@ begin
 
   -------------------------------------------------------------------------------
   -- Example usage:
-  -- o_my_output <= slv_reg_in(0)(14 downto 0);
-  -- slv_reg_out( N -(C_AXI_N_REGS_IN) )(3 downto 0) <= i_my_input;
+  -- slv_reg_out(N)(3 downto 0) <= i_my_input;
+  -- o_my_output <= slv_reg_in( N -(C_AXIL_N_CTRL_REGS_OUT) )(14 downto 0);
   -- Note that, here N means Nth register among all the AXI4Lite registers
-  -- We need output offset of ( C_AXI_N_REGS_IN - 1 ) offset to properly map slv_reg_out
+  -- The output block comes first, so slv_reg_out is indexed directly and it is
+  -- slv_reg_in that needs the C_AXIL_N_CTRL_REGS_OUT offset taken off
   -- Add user connections here --------------------------------------------------
   trig_tgt <= unsigned(slv_reg_in(0)(trig_tgt'range));
   trig_cfg <= slv_reg_in(2);
