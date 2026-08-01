@@ -13,6 +13,9 @@
 --   * Expose the UART RX and TX to the outside world
 --   * Connect the RX and TX to PC with any serial USB adapter
 --   * Use the python interface to work with the ILA
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 -------------------------------------------------------------------------------
 
 library ieee;
@@ -26,6 +29,10 @@ entity libre_ila_uart is
     G_EXTERNAL_TRIG      : integer := 0;       -- 1 for external trigger pin
     G_PROBE_WIDTH        : natural := 67;      -- Keep it a multiple of 32 for best results
     G_SAMP_BUFF_DEPTH    : natural := 2048;    -- Keep it a power of two for best results
+
+    -- Identity of this instance, passed straight to the core. Zero means unset
+    G_UID                : natural := 0;
+
     G_UART_RX_FIFO_DEPTH : natural := 1024;    -- Depth of the FIFO for UART RX
     G_UART_TX_FIFO_DEPTH : natural := 1024;    -- Depth of the FIFO for UART TX
     G_BAUD_RATE          : integer := 115_200; -- Baud rate for UART communication
@@ -214,6 +221,7 @@ architecture rtl of libre_ila_uart is
       G_EXTERNAL_TRIG     : integer;
       G_PROBE_WIDTH       : natural;
       G_SAMP_BUFF_DEPTH   : natural;
+      G_UID               : natural;
       C_S_AXIL_DATA_WIDTH : integer;
       C_S_AXIL_ADDR_WIDTH : integer
     );
@@ -318,6 +326,7 @@ begin
       g_external_trig     => G_EXTERNAL_TRIG,
       g_probe_width       => G_PROBE_WIDTH,
       g_samp_buff_depth   => G_SAMP_BUFF_DEPTH,
+      g_uid               => G_UID,
       c_s_axil_data_width => C_S_AXIL_DATA_WIDTH,
       c_s_axil_addr_width => C_S_AXIL_ADDR_WIDTH
     )

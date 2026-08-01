@@ -7,11 +7,11 @@ output,0x00,STATUS,R,0x00000000,1,TRIGD,High once the trigger has fired
 output,0x00,STATUS,R,0x00000000,2,DONE,High when the capture has completed
 output,0x00,STATUS,R,0x00000000,4:3,STATE,Capture state machine: 0 IDLE 1 ARMED 2 TRIGD 3 DONE. Not CDCed
 output,0x00,STATUS,R,0x00000000,31:5,-,Reserved
-output,0x04,MGCKEY,R,0xB01DFACE,31:0,MGCKEY,Magic key identifying the core
+output,0x04,MGCKEY,R,0xB01DFACE,31:0,MGCKEY,Magic key identifying the core type. See UID for the instance
 output,0x08,SAMP_CLK_FREQ,R,G_SAMP_CLK_FREQ,31:0,SAMP_CLK_FREQ,Sampling clock frequency in Hz
 output,0x0C,WIDTH,R,G_PROBE_WIDTH,31:0,WIDTH,Total probed bits
 output,0x10,DEPTH,R,G_SAMP_BUFF_DEPTH,31:0,DEPTH,Sample buffer depth in samples
-output,0x14,-,R,0x00000000,31:0,-,Reserved
+output,0x14,UID,R,G_UID,31:0,UID,Identity of this instance. Zero means unset
 output,0x18,SAMP_BUFF_TRIG_IDX,R,0x00000000,31:0,SAMP_BUFF_TRIG_IDX,Buffer index of the trigger sample
 output,0x1C,SAMP_BUFF_FRST_IDX,R,0x00000000,31:0,SAMP_BUFF_FRST_IDX,Buffer index of the oldest sample
 input,0x20,TRIG_POS,R/W,0x00000000,31:0,TRIG_POS,Number of pre-trigger samples

@@ -30,6 +30,8 @@ For the stock AXI4S build the probe is TDATA in the low bits, then TLAST, TVALID
 
 This works because the output block sits at the base address in every build: the registers that report the width are findable before the width is known. See the register summary section of the [datasheet](../../docs/datasheet.pdf).
 
+`init()` also picks up `ila.uid`, the core's `G_UID`. It is carried rather than checked — every value is legal and zero just means the core was built without one — and it is what makes driving several cores from one binary practical: the magic key tells you each base address holds a LibreILA, the uid tells you *which* one, so the code does not have to hardcode which peripheral sits where.
+
 ## Definitions needed
 
 These size the arrays you declare, and nothing else. The driver does not read them.

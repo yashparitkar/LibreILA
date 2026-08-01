@@ -36,7 +36,7 @@
  *   0x08  SAMP_CLK_FREQ       synthesis time sampling clock frequency
  *   0x0C  WIDTH               total probed bits
  *   0x10  DEPTH               sample buffer depth
- *   0x14  RSVD                reserved
+ *   0x14  UID                 synthesis time identity of this instance
  *   0x18  SAMP_BUFF_TRIG_IDX  buffer index of the trigger sample
  *   0x1C  SAMP_BUFF_FRST_IDX  buffer index of the oldest sample
  *
@@ -92,6 +92,9 @@
  * @note An all zero TRIG_MASK in AND mode matches vacuously, so the ILA fires
  *       on the first sample after it is armed. Use OR mode with an all zero
  *       mask if the intent is "never trigger on the probe".
+ *
+ * Copyright 2026 Yash Paritkar
+ * SPDX-License-Identifier: CERN-OHL-P-2.0
  */
 
 #ifndef __CORE_LIBRE_ILA_REGISTERS_H
@@ -418,12 +421,31 @@
          CORE_LIBRE_ILA_REGS_DEPTH_REG_BUFF_DEPTH_FIELD_SHIFT)
 
 /*******************************************************************************
- * Register: RSVD_OUT_REG
+ * Register: UID_REG
  *
- * Description: Reserved output register, always reads back zero.
+ * Description: This register stores the synthesis time identity of this instance of the core, so that a system carrying several of them can tell one from another. MGCKEY says that a core is a LibreILA, this says which LibreILA it is.
  */
-#define CORE_LIBRE_ILA_REGS_RSVD_OUT_REG_OFFSET       0x14U
-#define CORE_LIBRE_ILA_REGS_RSVD_OUT_REG_LENGTH       0x04U
+#define CORE_LIBRE_ILA_REGS_UID_REG_OFFSET       0x14U
+#define CORE_LIBRE_ILA_REGS_UID_REG_LENGTH       0x04U
+#define CORE_LIBRE_ILA_REGS_UID_REG_RW_MASK      0x00000000U
+#define CORE_LIBRE_ILA_REGS_UID_REG_RO_MASK      0xFFFFFFFFU
+#define CORE_LIBRE_ILA_REGS_UID_REG_WO_MASK      0x00000000U
+#define CORE_LIBRE_ILA_REGS_UID_REG_READ_MASK    0xFFFFFFFFU
+#define CORE_LIBRE_ILA_REGS_UID_REG_WRITE_MASK   0x00000000U
+
+/**
+ * Field Name: UID
+ *
+ * Field Desc: Stores the synthesis time identity of this instance, G_UID in the HDL. This field is read-only. Every value is legal and zero means unset, so nothing is validated against it; it is a label for the host to match instances against, not a check that the core is a LibreILA.
+ */
+
+#define CORE_LIBRE_ILA_REGS_UID_REG_UID_FIELD_OFFSET     \
+                (CORE_LIBRE_ILA_REGS_UID_REG_OFFSET)
+#define CORE_LIBRE_ILA_REGS_UID_REG_UID_FIELD_SHIFT      (0U)
+#define CORE_LIBRE_ILA_REGS_UID_REG_UID_FIELD_NS_MASK    ((uint32_t)(0xFFFFFFFFUL))
+#define CORE_LIBRE_ILA_REGS_UID_REG_UID_FIELD_MASK \
+      (CORE_LIBRE_ILA_REGS_UID_REG_UID_FIELD_NS_MASK << \
+         CORE_LIBRE_ILA_REGS_UID_REG_UID_FIELD_SHIFT)
 
 /*******************************************************************************
  * Register: SAMP_BUFF_TRIG_IDX_REG

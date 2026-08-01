@@ -91,6 +91,8 @@ A directive listed for a file but never found in it aborts the run, so a silentl
 
 Alongside the directives the script rewrites the default of every generic named in `configuration.csv`, plus `G_PROBE_WIDTH` which it sums from the portmap. Only declarations that already carry a `:=` are touched, which confines this to the entity and leaves the wrapper's component declarations alone.
 
+`G_UID` is the one key that may be left out of `configuration.csv` entirely, since a build with a single ILA in it has no use for an instance identity; leaving it out is the same as setting it to zero. A `natural` value may be written in hex, so `G_UID,natural,0x0BADC0DE` is read as 195936478. The ceiling is `0x7FFFFFFF`, because a VHDL `natural` is a subtype of the signed 32 bit `integer` and cannot hold anything with the top bit set.
+
 ## Requirements:
 argparse, os, re, shutil, sys (all standard library)
 

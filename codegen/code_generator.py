@@ -6,6 +6,9 @@
 #
 # Description: This script generates code with the user portmap and
 #   configuration.
+#
+# Copyright 2026 Yash Paritkar
+# SPDX-License-Identifier: CERN-OHL-P-2.0
 #####################################################################
 
 import argparse
@@ -186,7 +189,13 @@ for line in config_lines:
         if type_str == "integer":
             value = int(value_str)
         elif type_str == "natural":
-            value = int(value_str)
+            # Base 0 first so a value can be written in hex, which an identity
+            # usually is, with a decimal fallback so that a leading zero stays
+            # a number rather than becoming a parse error
+            try:
+                value = int(value_str, 0)
+            except ValueError:
+                value = int(value_str, 10)
             if value < 0:
                 raise ValueError(f"Value for {key} must be a natural number.")
         elif type_str == "string":
@@ -200,6 +209,13 @@ for line in config_lines:
 for keyword in required_keywords:
     if keyword not in globals():
         raise ValueError(f"Missing required configuration keyword: {keyword}")
+
+# G_UID is the one generic that is optional. A build with a single ILA in it has
+# no use for an instance identity, and requiring it would break every existing
+# configuration.csv for a feature those builds never read back. Unset is zero,
+# which is what the register already returned before it had a name.
+if "G_UID" not in globals():
+    G_UID = 0
 
 
 # Checking the values ###############################################
@@ -225,6 +241,11 @@ if G_UART_TX_FIFO_DEPTH <= 1 or (G_UART_TX_FIFO_DEPTH & (G_UART_TX_FIFO_DEPTH - 
 if G_SAMP_BUFF_DEPTH <= 1 or (G_SAMP_BUFF_DEPTH & (G_SAMP_BUFF_DEPTH - 1)):
     raise ValueError("Sample buffer depth must be a power of 2 and greater than 1.")
 
+# A VHDL natural tops out at 2**31 - 1. Caught here because otherwise the only
+# complaint comes out of elaboration, about the literal rather than the config.
+if G_UID > 0x7FFFFFFF:
+    raise ValueError("G_UID must fit in a VHDL natural, i.e. be at most 0x7FFFFFFF.")
+
 # 0 < baud rate < samp_clk/32(Warning) < samp_clk/16(Error)
 if G_BAUD_RATE <= 0:
     raise ValueError("Baud rate must be a positive integer.")
@@ -240,6 +261,7 @@ for var_name, var_value in [
     ("G_AXIL_CLK_FREQ", G_AXIL_CLK_FREQ),
     ("G_EXTERNAL_TRIG", G_EXTERNAL_TRIG),
     ("G_SAMP_BUFF_DEPTH", G_SAMP_BUFF_DEPTH),
+    ("G_UID", G_UID),
     ("GEN_TYPE", GEN_TYPE),
     ("G_UART_RX_FIFO_DEPTH", G_UART_RX_FIFO_DEPTH),
     ("G_UART_TX_FIFO_DEPTH", G_UART_TX_FIFO_DEPTH),
@@ -471,6 +493,7 @@ GENERIC_VALUES = {
     "G_EXTERNAL_TRIG": G_EXTERNAL_TRIG,
     "G_PROBE_WIDTH": G_PROBE_WIDTH,
     "G_SAMP_BUFF_DEPTH": G_SAMP_BUFF_DEPTH,
+    "G_UID": G_UID,
     "G_UART_RX_FIFO_DEPTH": G_UART_RX_FIFO_DEPTH,
     "G_UART_TX_FIFO_DEPTH": G_UART_TX_FIFO_DEPTH,
     "G_BAUD_RATE": G_BAUD_RATE

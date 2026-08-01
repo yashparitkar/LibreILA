@@ -5,6 +5,9 @@
 -- Last Modified: 2026-07-31 Fri 11:18
 --
 -- Description: Test the ILA with a data mask
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 ---------------------------------------------------------------------
 
 library ieee;

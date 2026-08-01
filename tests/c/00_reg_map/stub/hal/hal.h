@@ -14,6 +14,9 @@
  *
  * The field variants paste three symbols, FIELD_NAME with _OFFSET, _SHIFT and
  * _MASK suffixes, where _MASK is already shifted into place.
+ *
+ * Copyright 2026 Yash Paritkar
+ * SPDX-License-Identifier: CERN-OHL-P-2.0
  */
 
 #ifndef HAL_H

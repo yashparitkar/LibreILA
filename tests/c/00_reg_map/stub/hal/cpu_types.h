@@ -7,6 +7,9 @@
  * host compiler. addr_t is what every HAL register accessor takes, and on the
  * target it is wide enough for the MSS memory map; here it only has to hold an
  * index into the fake register array in fake_regs.c.
+ *
+ * Copyright 2026 Yash Paritkar
+ * SPDX-License-Identifier: CERN-OHL-P-2.0
  */
 
 #ifndef CPU_TYPES_H

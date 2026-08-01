@@ -6,6 +6,9 @@
 --
 -- Description: Test the ILA Force Trigger functionality via Arm_FT (0x04)
 --   when armed prior to the condition-based trigger.
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 ---------------------------------------------------------------------
 
 library ieee;

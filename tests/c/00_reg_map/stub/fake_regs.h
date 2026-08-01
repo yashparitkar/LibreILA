@@ -1,6 +1,9 @@
 /*******************************************************************************
  * @file fake_regs.h
  * @brief The stand-in register file the host build of the driver talks to.
+ *
+ * Copyright 2026 Yash Paritkar
+ * SPDX-License-Identifier: CERN-OHL-P-2.0
  */
 
 #ifndef FAKE_REGS_H

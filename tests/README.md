@@ -54,8 +54,14 @@ Host side tests for the drivers. No ghdl, no generated core, and pyserial is stu
 | Test | What it covers |
 |------|----------------|
 | `00_pkt_format` | The python driver's packet format, register map, control path and readout, against a model of the wrapper's parser |
+| `01_vcd` | The portmap parsing and the VCD writing, against the generator's parse rules and a second reader of the format |
+| `02_cli` | Every verb of `libre_ila.py` end to end, against the same model of the wrapper |
 
 `00_pkt_format` exists because the UART packet format is the one thing the RTL and the python driver have to agree on, and nothing else checks that agreement: the wrapper is happy to answer a malformed request and the driver is happy to misparse a well-formed reply.
+
+`01_vcd` exists for the same reason one level up: `portmap.csv` is parsed once by the generator to build the hardware and once by the driver to name the bits coming back, and nothing links the two. A layout that disagrees does not raise, it produces a waveform with the boundaries in the wrong places.
+
+`02_cli` covers what sits between argparse and the driver and is reachable from neither: when a port gets opened, how a half-given trigger is merged into the one the core already holds, which files `--reset` is willing to delete, and what exit status a shell ends up seeing.
 
 ## c/
 The baremetal driver, compiled and run on the host. No cross toolchain: it reaches the hardware only through the four `HW_*_reg()` accessors, so `stub/` backs those with a flat array and supplies the `HAL_*_reg()` macros, `addr_t` and `readmtime()` that the PolarFire SoC toolchain would otherwise provide.

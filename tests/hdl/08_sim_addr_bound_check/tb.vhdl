@@ -25,6 +25,9 @@
 --   below the input one and p_wlg rebases the write index onto the input
 --   block, so a write under C_OUTPUT_REG_COUNT falls out of range by
 --   construction.
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 ---------------------------------------------------------------------
 
 library ieee;

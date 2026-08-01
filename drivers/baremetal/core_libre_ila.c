@@ -32,6 +32,9 @@
  *   cmd_status_t LIBRE_ILA_read_idx( libre_ila_instance_t * this_libre_ila, uint32_t * samp_buff_frst_idx, uint32_t * samp_buff_trig_idx);
  *   cmd_status_t LIBRE_ILA_read_data( libre_ila_instance_t * this_libre_ila, uint32_t * samp_buffer, uint32_t buffer_words, uint32_t * samp_buff_trig_idx);
  *
+ *
+ * Copyright 2026 Yash Paritkar
+ * SPDX-License-Identifier: CERN-OHL-P-2.0
  */
 #include "core_libre_ila_regs.h"
 #include "core_libre_ila.h"
@@ -81,6 +84,7 @@ cmd_status_t LIBRE_ILA_init
     // 2. Check if the MAGIC_KEY read from the hardware instance matches the expected value
     // 3. Read the geometry the hardware reports and derive the register map
     //    from it. The probe is one flat vector, so there is a single width.
+    // 4. Read the instance uid, which is carried but never checked.
 
     uint32_t mgckey_value;
 
@@ -107,6 +111,11 @@ cmd_status_t LIBRE_ILA_init
     this_libre_ila->samp_clk_freq_hz = HAL_get_32bit_reg(this_libre_ila->op_base, CORE_LIBRE_ILA_REGS_SAMP_CLK_FREQ);
     this_libre_ila->probe_width      = HAL_get_32bit_reg(this_libre_ila->op_base, CORE_LIBRE_ILA_REGS_WIDTH);
     this_libre_ila->samp_buff_depth  = HAL_get_32bit_reg(this_libre_ila->op_base, CORE_LIBRE_ILA_REGS_DEPTH);
+
+    /* Not checked against anything. Every value is legal, zero included, so
+     * there is no wrong uid to reject; it is carried for the caller to match
+     * instances against. The magic key above is what says this is a LibreILA. */
+    this_libre_ila->uid = HAL_get_32bit_reg(this_libre_ila->op_base, CORE_LIBRE_ILA_REGS_UID);
 
     /* Nothing is checked against a build time value any more, the map is built
      * out of these two, so a nonsense value has to be caught here rather than

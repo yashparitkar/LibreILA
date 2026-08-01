@@ -10,6 +10,9 @@
  *
  * Addresses are byte addresses from a base of zero, which is what the test
  * passes to LIBRE_ILA_init(), so register n is fake_reg[n].
+ *
+ * Copyright 2026 Yash Paritkar
+ * SPDX-License-Identifier: CERN-OHL-P-2.0
  */
 
 #include <string.h>

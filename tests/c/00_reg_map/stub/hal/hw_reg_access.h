@@ -7,6 +7,9 @@
  * that these take a plain address rather than a pasted register name, which is
  * why the two blocks whose address depends on the probe width go through these
  * and not through the HAL_* macros.
+ *
+ * Copyright 2026 Yash Paritkar
+ * SPDX-License-Identifier: CERN-OHL-P-2.0
  */
 
 #ifndef HW_REG_ACCESS_H

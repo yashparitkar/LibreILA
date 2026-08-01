@@ -1,10 +1,16 @@
 -------------------------------------------------------------------------------
 -- File: uart.vhdl
--- Author: pabennett/uart; modified a bit by yashparitkar
+-- Author: pabennett/uart; modified by Yash Paritkar
 -- Last Modified: 2026-07-28 Tue 11:06
 -------------------------------------------------------------------------------
 -- Original work: pabennett/uart
 -- Copyright 2015 Peter Bennett
+--
+-- This file has been modified from the original by Yash Paritkar, 2026:
+-- the baud rate handling was reworked so the core runs at higher baud rates.
+--
+-- SPDX-License-Identifier: Apache-2.0
+--
 -- Licensed under the Apache License, Version 2.0 (the "License");
 -- you may not use this file except in compliance with the License.
 -- You may obtain a copy of the License at

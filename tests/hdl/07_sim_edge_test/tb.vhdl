@@ -27,6 +27,9 @@
 -- captured by then, so the pre trigger slots of its readout print as X. That is
 -- unwritten RAM rather than a fault, and the checks below only look at the slot
 -- the DUT names in trig_idx.
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 ---------------------------------------------------------------------
 
 library ieee;

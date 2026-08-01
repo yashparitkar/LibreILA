@@ -2,11 +2,14 @@
 # File: driver.py
 # Author: Y.U.P. (yashparitkar)
 # Created: 2026-07-24 Fri 19:48
-# Last Modified: 2026-07-31 Fri 11:11
+# Last Modified: 2026-08-01 Sat 14:18
 #
 # Description: ILA Driver file
 #   This file provides the core functions and structure for the ILA driver
 #   This file does not provide any information for parsing the sample information
+#
+# Copyright 2026 Yash Paritkar
+# SPDX-License-Identifier: CERN-OHL-P-2.0
 #####################################################################
 
 import time
@@ -119,33 +122,39 @@ class LibreILA_Driver:
         self.LIBRE_ILA_REGS_SAMP_CLK_FREQ_REG_OFFSET      = 8
         self.LIBRE_ILA_REGS_WIDTH_REG_OFFSET              = 12
         self.LIBRE_ILA_REGS_DEPTH_REG_OFFSET              = 16
-        # Output register 5 is reserved
+        self.LIBRE_ILA_REGS_UID_REG_OFFSET                = 20
         self.LIBRE_ILA_REGS_SAMP_BUFF_TRIG_IDX_REG_OFFSET = 24
         self.LIBRE_ILA_REGS_SAMP_BUFF_FRST_IDX_REG_OFFSET = 28
 
-        # MGCKEY, SAMP_CLK_FREQ, WIDTH and DEPTH are four registers in a row,
-        # so one packet covers the lot.
-        mgckey, self.samp_freq_hz, self.probe_width, self.samp_buff_depth = \
-                self.read_regs(self.LIBRE_ILA_REGS_MGCKEY_REG_OFFSET, 4)
+        # MGCKEY, SAMP_CLK_FREQ, WIDTH, DEPTH and UID are five registers in a
+        # row, so one packet covers the lot.
+        MGCKEY, self.SAMP_FREQ_HZ, self.PROBE_WIDTH, self.SAMP_BUFF_DEPTH, self.UID = \
+                self.read_regs(self.LIBRE_ILA_REGS_MGCKEY_REG_OFFSET, 5)
 
         # Check the magic key to ensure that the wrapper is present and
-        if mgckey != _libre_ila_magic_key:
+        if MGCKEY != _libre_ila_magic_key:
             raise RuntimeError(f"{self.serial_port}: magic key mismatch, expected "
-                               f"0x{_libre_ila_magic_key:08x}, got 0x{mgckey:08x}")
+                               f"0x{_libre_ila_magic_key:08x}, got 0x{MGCKEY:08x}")
 
         # Simple error checks
-        if self.probe_width < 1:
+        if self.PROBE_WIDTH < 1:
             raise RuntimeError(f"{self.serial_port}: the core reports a probe width of "
-                               f"{self.probe_width} bits")
+                               f"{self.PROBE_WIDTH} bits")
 
-        if self.samp_buff_depth < 2:
+        if self.SAMP_BUFF_DEPTH < 2:
             raise RuntimeError(f"{self.serial_port}: the core reports a sample buffer "
-                               f"{self.samp_buff_depth} samples deep")
+                               f"{self.SAMP_BUFF_DEPTH} samples deep")
+
+        # self.UID deliberately gets no check of its own: every value is legal
+        # and zero means the core was built without one, so there is no wrong
+        # uid to reject. It tells one core from another once the magic key has
+        # established there is a core at all, which is why the two are separate
+        # registers rather than one.
 
         # The lanes carry the probe word, the stride is what one sample takes
         # in the register map, padding included. They are not the same number:
         # the stock 67 bit probe needs 3 lanes but sits on a stride of 4.
-        self.n_lanes      = (self.probe_width + 31) // 32
+        self.n_lanes      = (self.PROBE_WIDTH + 31) // 32
         self.stride_width = _get_stride(self.n_lanes)
 
         self.axil_n_op_registers = 8
@@ -326,9 +335,9 @@ class LibreILA_Driver:
         returns: None
         """
 
-        if position < 0 or position >= self.samp_buff_depth:
+        if position < 0 or position >= self.SAMP_BUFF_DEPTH:
             raise ValueError(f"trigger position {position} is outside the "
-                             f"{self.samp_buff_depth} sample window")
+                             f"{self.SAMP_BUFF_DEPTH} sample window")
 
         self.write_regs(self.LIBRE_ILA_REGS_TRIG_POS_REG_OFFSET, [position])
 
@@ -377,6 +386,36 @@ class LibreILA_Driver:
         self.write_regs(self.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET, trigger_cond)
         self.write_regs(self.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET, trigger_mask)
         self.write_regs(self.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET, [trigger_mode])
+
+    def get_trigger_configuration(self):
+        """
+        get_trigger_configuration: Read the trigger setup back out of the core.
+
+        parameters: None
+
+        returns: A dict with trigger_cond and trigger_mask (stride_width words
+        each, LSB word first), trigger_mode (the TRIG_CFG word) and
+        trigger_position.
+        """
+
+        # The input register block reads back, so the core is the record of
+        # what was written rather than the host having to remember it. That
+        # is what lets one invocation configure the trigger and a later one
+        # change a single field without disturbing the rest.
+        trigger_position = self.read_regs(self.LIBRE_ILA_REGS_TRIG_POS_REG_OFFSET, 1)[0]
+        trigger_mode     = self.read_regs(self.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET, 1)[0]
+
+        # TRIG_COND and TRIG_MASK are adjacent, stride_width words each, so
+        # one read covers both halves of the trigger vector.
+        trigger_vector = self.read_regs(self.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET,
+                                        2 * self.stride_width)
+
+        return {
+            "trigger_cond"    : trigger_vector[:self.stride_width],
+            "trigger_mask"    : trigger_vector[self.stride_width:],
+            "trigger_mode"    : trigger_mode,
+            "trigger_position": trigger_position
+        }
 
     def arm(self):
         """
@@ -462,19 +501,30 @@ class LibreILA_Driver:
 
         # Both indices point into the circular buffer, the readback below
         # unrolls it from the oldest sample, so rebase the trigger onto it.
-        trig_idx = (trig_idx + self.samp_buff_depth - frst_idx) % self.samp_buff_depth
+        trig_idx = (trig_idx + self.SAMP_BUFF_DEPTH - frst_idx) % self.SAMP_BUFF_DEPTH
 
         words = self.read_regs(self.LIBRE_ILA_REGS_SAMP_BUFF_BASE_REG_OFFSET,
-                               self.samp_buff_depth * self.stride_width)
+                               self.SAMP_BUFF_DEPTH * self.stride_width)
 
         samples = []
 
         # A sample takes stride_width registers in hardware but only the first
         # n_lanes of them carry probe bits, the rest is padding and gets
         # dropped here.
-        for i in range(self.samp_buff_depth):
-            base = ((frst_idx + i) % self.samp_buff_depth) * self.stride_width
+        for i in range(self.SAMP_BUFF_DEPTH):
+            base = ((frst_idx + i) % self.SAMP_BUFF_DEPTH) * self.stride_width
 
             samples.append(words[base:base + self.n_lanes])
 
         return samples, trig_idx
+
+    def close(self):
+        """
+        close: Close the serial connection to the ILA driver.
+
+        parameters: None
+
+        returns: None
+        """
+
+        self.serial_connection.close()

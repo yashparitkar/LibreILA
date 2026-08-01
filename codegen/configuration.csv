@@ -10,6 +10,9 @@
 # G_AXIL_CLK_FREQ: Clock speed of the AXIS
 # G_EXTERNAL_TRIG: 1 for external trigger pin, 0 for internal trigger
 # G_SAMP_BUFF_DEPTH: Depth of the sampling buffer in samples
+# G_UID: Identity of this instance, read back at UID (0x14), so that several
+#   cores in one system can be told apart. Optional, zero means unset. May be
+#   written in hex, and must fit in a VHDL natural, i.e. be at most 0x7FFFFFFF
 # GEN_TYPE: Type of the generated core. It can be one of the following:
 #   - 0: The core is generated as a standalone core with AXI4-Lite interface.
 #   - 1: The core is generated with a UART interface for communication with the host.
@@ -21,6 +24,7 @@ G_SAMP_CLK_FREQ,integer,100000000
 G_AXIL_CLK_FREQ,integer,100000000
 G_EXTERNAL_TRIG,integer,1
 G_SAMP_BUFF_DEPTH,natural,2048
+G_UID,natural,0
 GEN_TYPE,integer,1
 G_UART_RX_FIFO_DEPTH,natural,1024
 G_UART_TX_FIFO_DEPTH,natural,1024

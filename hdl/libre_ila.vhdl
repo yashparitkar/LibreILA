@@ -12,6 +12,9 @@
 --   * Configure the trigger and arm using the AXI4Lite port
 --   * The buffer is read back using AXI4Lite port
 --   * The data can be read back using the C driver provided
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 -------------------------------------------------------------------------------
 
 library ieee;
@@ -27,6 +30,12 @@ entity libre_ila is
     G_EXTERNAL_TRIG     : integer := 0;    -- 1 for external trigger pin
     G_PROBE_WIDTH       : natural := 67;
     G_SAMP_BUFF_DEPTH   : natural := 2048; -- Keep it a power of two
+
+    -- Identity of this instance, read back at UID. MGCKEY is the fixed constant
+    -- that says "this is a LibreILA", this one says which one, so several cores
+    -- in the same system can be told apart. Zero means unset.
+    G_UID               : natural := 0;
+
     C_S_AXIL_DATA_WIDTH : integer := 32;   -- DONT CHANGE
     C_S_AXIL_ADDR_WIDTH : integer := 32    -- DONT CHANGE
   );
@@ -858,7 +867,10 @@ begin
 
   slv_reg_out(4) <= STD_LOGIC_VECTOR(to_unsigned(G_SAMP_BUFF_DEPTH, C_S_AXIL_DATA_WIDTH));
 
-  slv_reg_out(5) <= (others => '0');
+  -- Identity of this instance, not of the core. Nothing reads it back on the
+  -- hardware side and every value is legal, zero included: MGCKEY above is
+  -- what a host checks to know it is talking to a LibreILA at all.
+  slv_reg_out(5) <= STD_LOGIC_VECTOR(to_unsigned(G_UID, C_S_AXIL_DATA_WIDTH));
 
   slv_reg_out(6)(trig_idx'range)                               <= STD_LOGIC_VECTOR(trig_idx);
   slv_reg_out(6)(C_S_AXIL_DATA_WIDTH - 1 downto C_ADDR_WIDTH ) <= (others => '0');

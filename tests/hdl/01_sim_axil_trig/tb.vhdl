@@ -10,6 +10,9 @@
 -- The Makefile runs this bench once per trigger position, each run in its
 -- own work directory with its own copy of this file and C_TRIG_IDX patched
 -- in it, see the VARIANTS list there.
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 ---------------------------------------------------------------------
 
 library ieee;
@@ -84,6 +87,11 @@ architecture sim of tb is
   constant C_SAMPLE_PRINT_COUNT : natural                       := C_SAMP_BUFF_DEPTH;
   constant C_STATUS_ADDR        : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 0 * C_AXIL_WORD_BYTES, 32));
   constant C_MAGIC_ADDR         : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 1 * C_AXIL_WORD_BYTES, 32));
+  -- Output register 5 carries the instance uid. Driven to something other than
+  -- the default here so that the readback proves the generic reached the
+  -- register rather than agreeing with a zero the reset would have left.
+  constant C_UID           : natural                       := 16#0BADC0DE#;
+  constant C_UID_ADDR      : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 5 * C_AXIL_WORD_BYTES, 32));
   -- Output register 6 carries trig_idx, the buffer slot that held the
   -- triggering sample. The readout order below is what the trigger position
   -- rotates, this is the anchor it is rotated around.
@@ -234,7 +242,8 @@ begin
     generic map (
       g_external_trig   => 0,
       g_probe_width     => C_PROBE_WIDTH,
-      g_samp_buff_depth => C_SAMP_BUFF_DEPTH
+      g_samp_buff_depth => C_SAMP_BUFF_DEPTH,
+      g_uid             => C_UID
     )
     port map (
       i_rst_sync               => i_rst_sync,
@@ -421,6 +430,16 @@ begin
     axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_MAGIC_ADDR, read_data);
     assert read_data = x"B01DFACE"
       report C_TEST_ID & ": magic key mismatch"
+      severity error;
+
+    -- The magic key says the core is a LibreILA, the uid says which one. The
+    -- two are separate registers so that a host can still recognise a core
+    -- whose uid it does not already know.
+    wait until rising_edge(s_axil_aclk);
+    axil_read(s_axil_aclk, s_axil_araddr, s_axil_arvalid, s_axil_rready, s_axil_rdata, s_axil_rvalid, C_UID_ADDR, read_data);
+    assert read_data = std_logic_vector(to_unsigned(C_UID, read_data'length))
+      report C_TEST_ID & ": the uid reads 0x" & to_hstring(read_data) & ", expected 0x"
+             & to_hstring(std_logic_vector(to_unsigned(C_UID, read_data'length)))
       severity error;
 
     wait until rising_edge(s_axil_aclk);

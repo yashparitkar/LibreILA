@@ -8,6 +8,9 @@
 #   Checks drivers/python/driver.py against a model of the wrapper's
 #   packet parser. This is a host side test, there is no GHDL and no
 #   generated core involved, so it runs anywhere python does.
+#
+# Copyright 2026 Yash Paritkar
+# SPDX-License-Identifier: CERN-OHL-P-2.0
 #####################################################################
 
 import os
@@ -57,6 +60,7 @@ class FakeWrapper:
         self.tx      = bytearray()     # waiting for the PC to read
         self.packets = []              # ("r"/"w", count, address) as parsed
         self.flushes = 0
+        self.closed  = False
 
     # pyserial surface ------------------------------------------------------
     def read(self, count):
@@ -77,6 +81,9 @@ class FakeWrapper:
     def reset_input_buffer(self):
         self.flushes += 1
         self.tx.clear()
+
+    def close(self):
+        self.closed = True
 
     # the wrapper's state machine -------------------------------------------
     def _run(self):
@@ -119,13 +126,18 @@ _PROBE_WIDTH = 67
 _DEPTH       = 2048
 _FREQ_HZ     = 100000000
 
-def identity_regs(probe_width=_PROBE_WIDTH, depth=_DEPTH, freq=_FREQ_HZ):
+# Staged non-zero so that a driver which never reads UID is caught, rather than
+# agreeing with the zero an unstaged address would have answered with anyway
+_UID = 0x0badc0de
+
+def identity_regs(probe_width=_PROBE_WIDTH, depth=_DEPTH, freq=_FREQ_HZ, uid=_UID):
     """
     identity_regs: The registers LibreILA_Driver reads while constructing.
 
     probe_width: The probe width the core is to report.
     depth: The sample buffer depth the core is to report.
     freq: The sampling clock frequency the core is to report.
+    uid: The instance identity the core is to report.
 
     returns: byte address -> word, ready to seed a FakeWrapper.
 
@@ -140,7 +152,8 @@ def identity_regs(probe_width=_PROBE_WIDTH, depth=_DEPTH, freq=_FREQ_HZ):
         0x04 : 0xb01dface,  # MGCKEY
         0x08 : freq,        # SAMP_CLK_FREQ
         0x0c : probe_width, # WIDTH
-        0x10 : depth        # DEPTH
+        0x10 : depth,       # DEPTH
+        0x14 : uid          # UID
     }
 
 def raw_driver(wrapper):
@@ -419,15 +432,16 @@ class TestRegisterMap(unittest.TestCase):
         self.assertEqual(ila.LIBRE_ILA_REGS_SAMP_CLK_FREQ_REG_OFFSET, base + 8)
         self.assertEqual(ila.LIBRE_ILA_REGS_WIDTH_REG_OFFSET, base + 12)
         self.assertEqual(ila.LIBRE_ILA_REGS_DEPTH_REG_OFFSET, base + 16)
-        # base + 20 is the reserved output register
+        self.assertEqual(ila.LIBRE_ILA_REGS_UID_REG_OFFSET, base + 20)
         self.assertEqual(ila.LIBRE_ILA_REGS_SAMP_BUFF_TRIG_IDX_REG_OFFSET, base + 24)
         self.assertEqual(ila.LIBRE_ILA_REGS_SAMP_BUFF_FRST_IDX_REG_OFFSET, base + 28)
 
     def test_synthesis_parameters_are_read_back(self):
         ila = make_driver(FakeWrapper(), 67, 4096)
 
-        self.assertEqual(ila.samp_buff_depth, 4096)
-        self.assertEqual(ila.samp_freq_hz, _FREQ_HZ)
+        self.assertEqual(ila.SAMP_BUFF_DEPTH, 4096)
+        self.assertEqual(ila.SAMP_FREQ_HZ, _FREQ_HZ)
+        self.assertEqual(ila.UID, _UID)
 
 class TestIdentityChecks(unittest.TestCase):
     """
@@ -439,10 +453,21 @@ class TestIdentityChecks(unittest.TestCase):
 
     def test_magic_key_is_checked(self):
         staged = identity_regs()
-        mgckey = min(staged) # MGCKEY is the lowest of the four
+        mgckey = min(staged) # MGCKEY is the lowest of the five
 
         with self.assertRaises(RuntimeError):
             raw_driver(FakeWrapper({**staged, mgckey: 0xdeadbeef}))
+
+    def test_any_uid_is_accepted(self):
+        # The uid is the one register in the block that is never a reason to
+        # refuse: every value is legal and zero is what a core built without
+        # one reports. Turning either into a rejection would take the job of
+        # recognising a LibreILA away from the magic key, which is the reason
+        # the two are separate registers in the first place.
+        for uid in (0x00000000, 0x0badc0de, 0xffffffff):
+            with self.subTest(f"uid 0x{uid:08x}"):
+                ila = raw_driver(FakeWrapper(identity_regs(uid=uid)))
+                self.assertEqual(ila.UID, uid)
 
     def test_nonsense_geometry_is_rejected(self):
         # Both are asserted at elaboration in the HDL, so a core reporting
@@ -457,9 +482,9 @@ class TestIdentityChecks(unittest.TestCase):
         ila = raw_driver(FakeWrapper(identity_regs(67)))
 
         # everything the driver needs comes off the wire, nothing is passed in
-        self.assertEqual(ila.probe_width, 67)
-        self.assertEqual(ila.samp_buff_depth, _DEPTH)
-        self.assertEqual(ila.samp_freq_hz, _FREQ_HZ)
+        self.assertEqual(ila.PROBE_WIDTH, 67)
+        self.assertEqual(ila.SAMP_BUFF_DEPTH, _DEPTH)
+        self.assertEqual(ila.SAMP_FREQ_HZ, _FREQ_HZ)
 
 class TestControl(unittest.TestCase):
     """

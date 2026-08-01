@@ -4,6 +4,9 @@
  * @brief Core LIBRE_ILA bare metal driver public API.
  *
  * @note Last Modified: 2026-07-27 Mon
+ *
+ * Copyright 2026 Yash Paritkar
+ * SPDX-License-Identifier: CERN-OHL-P-2.0
  */
 
 /*=========================================================================*//**
@@ -183,6 +186,10 @@ typedef struct __libre_ila_instance_t
     uint32_t probe_width;      /**< G_PROBE_WIDTH, total probed bits */
     uint32_t samp_buff_depth;  /**< G_SAMP_BUFF_DEPTH, samples held */
     uint32_t samp_clk_freq_hz; /**< G_SAMP_CLK_FREQ, sampling clock */
+    uint32_t uid;              /**< G_UID, identity of this instance, zero if
+                                    the core was built without one. Nothing is
+                                    derived from it, it is here so that code
+                                    driving several cores can tell them apart */
 
     uint32_t n_lanes;      /**< 32 bit words a probe word takes, ceil(width/32) */
     uint32_t stride_width; /**< registers a sample takes, n_lanes rounded up to
@@ -201,6 +208,8 @@ The LIBRE_ILA_init() function initializes the CoreLibreILA driver instance with 
 The init function checks the connection to the hardware by reading the MAGIC_KEY register, if the read value does not match the expected MAGIC_KEY value, the function returns failure status.
 
 It then reads the probe width, the buffer depth and the sampling clock frequency the hardware reports, and works the block base addresses out from them. Nothing is checked against a CORE_LIBRE_ILA_* build time value any more, the map comes from the core. A width or depth the HDL could not have been elaborated with is rejected as CMD_STATUS_BAD_CONFIG.
+
+The instance uid is read into ila.uid on the way past. It is not checked against anything, since every value is legal and zero simply means the core was built without one. Where MAGIC_KEY answers "is this a LibreILA", the uid answers "which one", which is what lets one binary tell apart the several cores it may be driving.
 
   @param this_libre_ila
     Pointer to the libre_ila_instance_t data structure instance holding all data

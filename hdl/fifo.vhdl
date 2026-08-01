@@ -4,6 +4,9 @@
 -- Last modified: 2026-07-24 Fri 20:47
 --
 -- Description: Synchronous FIFO made out of registers
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 -------------------------------------------------------------------------------
 
 library ieee;

@@ -21,6 +21,9 @@
  *   12 .. 12+a-1       TRIG_COND
  *   12+a .. 12+2a-1    TRIG_MASK
  *   12+2a ..           sample buffer, a registers per sample
+ *
+ * Copyright 2026 Yash Paritkar
+ * SPDX-License-Identifier: CERN-OHL-P-2.0
  */
 
 #include <stdio.h>
@@ -93,8 +96,13 @@ static uint32_t buff_reg(uint32_t w, uint32_t samp, uint32_t lane)
 #define REG_FREQ      (2u)
 #define REG_WIDTH     (3u)
 #define REG_DEPTH     (4u)
+#define REG_UID       (5u)
 #define REG_TRIG_IDX  (6u)
 #define REG_FRST_IDX  (7u)
+
+/* Staged non-zero so that a driver which never reads the register is caught,
+ * rather than agreeing with the zero fake_regs_clear() left behind. */
+#define STAGED_UID    (0x0badc0deu)
 
 static void stage_core(uint32_t width, uint32_t depth, uint32_t freq)
 {
@@ -104,6 +112,7 @@ static void stage_core(uint32_t width, uint32_t depth, uint32_t freq)
     fake_reg[REG_FREQ]   = freq;
     fake_reg[REG_WIDTH]  = width;
     fake_reg[REG_DEPTH]  = depth;
+    fake_reg[REG_UID]    = STAGED_UID;
 }
 
 /* ---- the geometry init() derives --------------------------------------- */
@@ -121,6 +130,10 @@ static void test_geometry(void)
     CHECK_EQ(ila.probe_width,      67u);
     CHECK_EQ(ila.samp_buff_depth,  8u);
     CHECK_EQ(ila.samp_clk_freq_hz, 100000000u);
+
+    /* Carried, not derived from. Nothing in the map moves with it, it is here
+     * so that one binary can tell apart the cores it is driving. */
+    CHECK_EQ(ila.uid, STAGED_UID);
 
     /* 67 bits need 3 lanes, and 3 rounds up to a stride of 4. The two are not
      * the same number and the map uses both. */
@@ -260,6 +273,20 @@ static void test_init_rejections(void)
 
     stage_core(67u, 0u, 100000000u);
     CHECK_EQ(LIBRE_ILA_init(&ila, 0u), CMD_STATUS_BAD_CONFIG);
+
+    /* The uid is the one thing here that is never a reason to refuse. Every
+     * value is legal and zero is what a core built without one reports, so
+     * neither may be turned into a rejection: the magic key is what says the
+     * core is a LibreILA, and it is unaffected by any of this. */
+    stage_core(67u, 8u, 100000000u);
+    fake_reg[REG_UID] = 0u;
+    CHECK_EQ(LIBRE_ILA_init(&ila, 0u), CMD_STATUS_SUCCESS);
+    CHECK_EQ(ila.uid, 0u);
+
+    stage_core(67u, 8u, 100000000u);
+    fake_reg[REG_UID] = 0xffffffffu;
+    CHECK_EQ(LIBRE_ILA_init(&ila, 0u), CMD_STATUS_SUCCESS);
+    CHECK_EQ(ila.uid, 0xffffffffu);
 }
 
 /* ---- status decode and the arm guards ---------------------------------- */

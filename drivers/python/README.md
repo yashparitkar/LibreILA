@@ -1,9 +1,88 @@
 # LibreILA Python driver
 This directory contains the python driver for the LibreILA IP. The driver is used to control the LibreILA when instantiated as libre_ila_uart.vhdl
 
+| File | What it is |
+|------|------------|
+| [libre_ila.py](libre_ila.py) | The command line front end. Every verb below lives here |
+| [driver.py](driver.py) | The register map over UART. Knows nothing about what the probe bits mean |
+| [vcd.py](vcd.py) | The portmap and the VCD. Turns raw samples back into named signals |
+| [gui.py](gui.py) | Not finished, `--gui` reports that and exits |
+
 ## Requirements
 Following packages are required:
 * pyserial: `sudo apt install python3-serial`
+
+## Usage
+Tell the tool about a core once, then talk to it by the UID it reports:
+
+```
+./libre_ila.py --add-device --serial-port /dev/ttyUSB0 --baud 115200
+./libre_ila.py --device 0 --info
+```
+
+`--add-device` connects, reads the UID back and writes `libreila_device<UID>.txt` in the working directory, holding one `port,baud` line. `--reset` forgets every stored device.
+
+**`--device` selects by UID, not by the order devices were added.** A core built without a `G_UID` reports 0, which is why `--device` defaults to 0. Give each core in a system its own `G_UID` in [configuration.csv](../../codegen/configuration.csv) and they stay apart.
+
+### Running a capture
+The flags are verbs. Whatever order they are given in, they are applied in this one:
+
+| # | Flag | Behaviour |
+|---|------|-----------|
+| 1 | `--reset` | forget every stored device, then stop |
+| 2 | `--add-device` | store the device on `--serial-port`, then stop |
+| 3 | | connect to `--device` |
+| 4 | `--info` | print what the core reports, then stop |
+| 5 | `--set-trigger-condition` / `--set-trigger-mask` / `--set-trigger-type` / `--set-trigger-reduction` | merged into one trigger write |
+| 6 | `--set-trigger-position` | where the trigger sits in the buffer, in samples |
+| 7 | `--get-trigger-configuration` | read the trigger back out of the core |
+| 8 | `--arm` | |
+| 9 | `--force-trigger` | |
+| 10 | `--wait-done [SECONDS]` | default 10 |
+| 11 | `--read-data` | write the `.vcd` to `--output` |
+
+So a whole capture is one line:
+
+```
+./libre_ila.py --set-trigger-condition 0x20000000000000000 \
+               --set-trigger-mask 0x20000000000000000 \
+               --set-trigger-type rising --arm --wait-done --read-data -o cap.vcd
+```
+
+and splitting it across invocations works just as well — `--arm` now, `--read-data` whenever. Nothing about the session is kept on the host: the core holds the trigger setup, the state and the samples, and the driver reads its whole register map back out of the core at startup. That is also why re-synthesising with a different probe width needs no change here.
+
+### Configuring the trigger
+`--set-trigger-condition` is the pattern the probe word is compared against and `--set-trigger-mask` picks which of its bits are compared. Both take one number in any base — `0x...`, `0b...`, `0o...` or decimal — covering the whole probe word, and **do not use the portmap**: bit 0 is the first signal listed there. For the stock AXI4S build `axis_tvalid` is bit 65, so triggering on it rising is:
+
+```
+--set-trigger-condition 0x20000000000000000 --set-trigger-mask 0x20000000000000000 \
+--set-trigger-type rising
+```
+
+`--set-trigger-type` is `level`, `rising` or `falling`, and `--set-trigger-reduction` is `and` (every masked bit matches) or `or` (any one of them). They are independent, and whichever you leave out keeps whatever the core already had — the trigger registers read back, so setting one field does not disturb the rest.
+
+A value with bits above the probe width is refused rather than trimmed. The core zero-extends each sample to the full register stride before comparing, so a mask bit up in the padding fires an `or` trigger on the very first sample and stops an `and` trigger from firing at all.
+
+### The .vcd
+`--read-data` names the signals from `portmap.csv`, found via `--portmap` and defaulting to [codegen/portmap.csv](../../codegen/portmap.csv). The widths it describes must add up to the probe width the core reports, or the readout is refused — that check is what catches a portmap which has drifted from the synthesised core, since the bits would otherwise still slice cleanly, just at the wrong boundaries.
+
+Note that `code_generator.py` defaults `--portmap` to `templates/default_portmap.csv` while the driver defaults to `codegen/portmap.csv`. They ship identical, but if you edit one, pass `--portmap` to both tools.
+
+The file is delta encoded: the first sample states every signal, after that only what moved. Timestamps are in picoseconds, one sample apart at the sampling clock the core reports. The trigger is carried as an extra 1-bit wire named `trigger` that pulses for exactly the sample it fired on, since VCD has no marker of its own.
+
+### Exit statuses
+| | |
+|---|---|
+| 0 | success |
+| 2 | usage error |
+| 3 | could not add the device |
+| 4 | no such stored device, or its file is unreadable |
+| 5 | no portmap |
+| 6 | the portmap does not match the core |
+| 7 | link error: no port, busy port, timeout or a desynced reply |
+| 8 | the capture did not reach DONE in time |
+| 9 | the core refused the operation, e.g. arming an armed ILA |
+| 10 | the GUI is not available |
 
 ## Setting the signal mapping
 The signal mapping is read from the portmap.csv file. It has three columns, namely, signal, width, type.
@@ -23,3 +102,5 @@ axis_tlast,1,in
 axis_tvalid,1,in
 axis_tready,1,out
 ```
+
+Blank lines and lines starting with `#` are skipped, but only in column 0, and the fields are not whitespace stripped — `axis_tdata, 64, in` is rejected. Both are true of the generator's parser too, deliberately: this file is parsed once to build the hardware and once to read it back, and the two have to accept exactly the same set of files.

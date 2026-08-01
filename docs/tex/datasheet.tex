@@ -525,6 +525,8 @@ For the stock 64-bit AXI4Stream build \verb|G_PROBE_WIDTH| is 67, so
         \hline
         \verb|G_SAMP_BUFF_DEPTH| & 2048 & Number of samples stored. Must be a power of two greater than one, checked at elaboration. \\
         \hline
+        \verb|G_UID| & 0 & Identity of this instance, reported at UID so that a system holding several cores can tell them apart. Configures no logic and every value is legal, zero meaning unset. A \verb|natural|, so at most \hex{7FFFFFFF}. \\
+        \hline
         \verb|G_UART_RX_FIFO_DEPTH| & 1024 & Wrapper only. Depth of the \acs{UART} receive FIFO in bytes. \\
         \hline
         \verb|G_UART_TX_FIFO_DEPTH| & 1024 & Wrapper only. Depth of the \acs{UART} transmit FIFO in bytes. \\
@@ -680,7 +682,7 @@ stock build ($a = 4$) in parentheses.
         \hline
         \hex{00} & STATUS             & R  & \hex{00000000} & \acs{ILA} status and state \\
         \hline
-        \hex{04} & MGCKEY             & R  & \hex{B01DFACE} & Magic key, identifies the core \\
+        \hex{04} & MGCKEY             & R  & \hex{B01DFACE} & Magic key, identifies the core type \\
         \hline
         \hex{08} & SAMP\_CLK\_FREQ    & R  & \verb|G_SAMP_CLK_FREQ| & Sampling clock frequency in Hz \\
         \hline
@@ -688,7 +690,7 @@ stock build ($a = 4$) in parentheses.
         \hline
         \hex{10} & DEPTH              & R  & \verb|G_SAMP_BUFF_DEPTH| & Sample buffer depth in samples \\
         \hline
-        \hex{14} & ---                & R  & \hex{00000000} & Reserved \\
+        \hex{14} & UID                & R  & \verb|G_UID| & Identity of this instance \\
         \hline
         \hex{18} & SAMP\_BUFF\_TRIG\_IDX & R & \hex{00000000} & Buffer index of the trigger sample \\
         \hline
@@ -795,6 +797,11 @@ capturing.
 Magic key register. It reads back a fixed constant, and is the cheapest
 way for a host to confirm that it is talking to a LibreILA core at the
 base address it was given, before it trusts anything else in the map.
+
+The constant is the same in every build, deliberately: it identifies the
+core \emph{type}, never the individual core. Telling one instance from
+another is the job of UID at \hex{14}, and the two are kept apart so
+that a host can still recognise a core whose UID it has never been told.
 
 \begin{regdiag}
     \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
@@ -928,6 +935,55 @@ can take its logarithm to get the width of a sample index.
 
 \noindent\textbf{Bits 31:0 -- DEPTH[31:0]} \verb|G_SAMP_BUFF_DEPTH|,
 the number of samples the buffer holds.
+
+\subsection{UID}
+\regprop{UID}{Output block}{\hex{14}}{\texttt{G\_UID}}{Read-only}
+
+Identity of this particular core, fixed at synthesis by \verb|G_UID|.
+Nothing inside the core reads it and no part of the register map moves
+with it; it exists so that a system carrying several ILAs can be told
+which one it has reached. Where MGCKEY answers \emph{is this a
+LibreILA}, UID answers \emph{which LibreILA}.
+
+Splitting the two is what makes discovery work. A host walking a list of
+base addresses, or of serial ports, checks MGCKEY to know a core is
+there at all and only then reads UID to find out which one it is. Were
+the identity folded into MGCKEY instead, a core whose \verb|G_UID| the
+host had not been told in advance would be indistinguishable from a
+peripheral that is not an ILA, or from a bus returning zeros.
+
+For that reason every value is legal and none is validated, by the
+hardware or by either driver. Zero is what a core built without a
+\verb|G_UID| reports and means no more than \emph{unset}.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \fldrow{\fldb{8}{UID[31:24]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \fldrow{\fldb{8}{UID[23:16]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\fldb{8}{UID[15:8]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{UID[7:0]}}
+    \bitacc{R}{R}{R}{R}{R}{R}{R}{R}
+    \bitrst{x}{x}{x}{x}{x}{x}{x}{x}
+\end{regdiag}
+
+\noindent\textbf{Bits 31:0 -- UID[31:0]} \verb|G_UID|, the identity this
+instance was given at synthesis. Bit 31 always reads zero: the generic
+is a \verb|natural|, whose upper bound is \hex{7FFFFFFF}.
 
 \subsection{SAMP\_BUFF\_TRIG\_IDX}
 \regprop{SAMP\_BUFF\_TRIG\_IDX}{Output block}{\hex{18}}{\hex{00000000}}{Read-only}

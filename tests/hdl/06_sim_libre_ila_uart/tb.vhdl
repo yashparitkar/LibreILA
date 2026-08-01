@@ -14,6 +14,9 @@
 -- wrapper starts sending as soon as it has the address, i.e. possibly
 -- while this testbench is still clocking out write-data bytes) is
 -- never dropped.
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 ---------------------------------------------------------------------
 
 library ieee;
@@ -71,6 +74,11 @@ architecture sim of tb is
 
   constant C_STATUS_ADDR : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 0 * C_AXIL_WORD_BYTES, 32));
   constant C_MAGIC_ADDR  : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 1 * C_AXIL_WORD_BYTES, 32));
+  -- Output register 5 carries the instance uid. The wrapper only passes the
+  -- generic down to the core, so a non-default value here is what catches it
+  -- being dropped from the generic map on the way through.
+  constant C_UID         : natural                       := 16#1234ABCD#;
+  constant C_UID_ADDR    : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_OUTPUT_REG_BASE + 5 * C_AXIL_WORD_BYTES, 32));
   constant C_SAMP_ADDR   : std_logic_vector(31 downto 0) := std_logic_vector(to_unsigned(C_SAMPLE_RAM_BASE, 32));
   constant C_SAMP_WORDS  : natural                       := C_DEPTH * C_SAMPLE_STRIDE;
 
@@ -135,6 +143,7 @@ architecture sim of tb is
       G_EXTERNAL_TRIG      : integer;
       G_PROBE_WIDTH        : natural;
       G_SAMP_BUFF_DEPTH    : natural;
+      G_UID                : natural;
       C_S_AXIL_DATA_WIDTH  : integer;
       C_S_AXIL_ADDR_WIDTH  : integer;
       G_UART_RX_FIFO_DEPTH : natural;
@@ -385,6 +394,7 @@ begin
       g_external_trig      => 0,
       g_probe_width        => C_PROBE_WIDTH,
       g_samp_buff_depth    => C_DEPTH,
+      g_uid                => C_UID,
       c_s_axil_data_width  => 32,
       c_s_axil_addr_width  => 32,
       g_uart_rx_fifo_depth => 64,
@@ -657,6 +667,18 @@ begin
                 );
     assert magic_word(0) = x"B01DFACE"
       report "06_sim_libre_ila_uart: magic key mismatch"
+      severity error;
+
+    -- Same read one register along, which is the only place the uid generic
+    -- surfaces after the wrapper has handed it down to the core.
+    uart_ila_read(
+                  s_axil_aclk, pc_tx_data, pc_tx_stb, pc_tx_ack,
+                  pc_rxfifo_rd_en, pc_rxfifo_rd_data, pc_rxfifo_nempty,
+                  C_UID_ADDR, 1, magic_word
+                );
+    assert magic_word(0) = std_logic_vector(to_unsigned(C_UID, magic_word(0)'length))
+      report "06_sim_libre_ila_uart: the uid reads 0x" & to_hstring(magic_word(0))
+             & ", expected 0x" & to_hstring(std_logic_vector(to_unsigned(C_UID, magic_word(0)'length)))
       severity error;
 
     -- Read the whole sample buffer back in a single UART transaction

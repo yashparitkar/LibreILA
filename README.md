@@ -14,7 +14,16 @@ The core itself is generic: it samples a single flat probe word of `G_PROBE_WIDT
 
 ## License
 
-This project is licensed under CERN Open Hardware Licence Version 2 - Permissive unless otherwise specified. See LICENSE for more details.
+Copyright 2026 Yash Paritkar
+
+Licensed under the CERN Open Hardware Licence Version 2 - Permissive
+(`CERN-OHL-P-2.0`). See [LICENSE](LICENSE). Every source file carries its own
+copyright and `SPDX-License-Identifier` header, so the licence travels with the
+file when you copy the HDL into your own project.
+
+Exception: [hdl/uart.vhdl](hdl/uart.vhdl) is derived from
+[pabennett/uart](https://github.com/pabennett/uart), Copyright 2015 Peter
+Bennett, licensed under Apache-2.0, and is modified here.
 
 ## Features
 * Generic probe: one flat probe word, the same layout is shared by the trigger vector and the sample buffer
@@ -29,6 +38,7 @@ This project is licensed under CERN Open Hardware Licence Version 2 - Permissive
     * The trigger condition can be taken on its level, its rising edge or its falling edge
     * Can also use an external trigger
 * CDC on the ARM and status bits
+* Each core carries an instance ID, `G_UID`, read back at `0x14`, so a system holding several ILAs can tell which one it has reached
 * A serial wrapper is also provided to easily use the ILA with the PC
 * A C driver for the bare AXI4Lite core, and a python driver (work in progress) for the serial wrapper
 
@@ -67,7 +77,7 @@ Since the core is generic, a build is fully described by two csv files in [codeg
 
 # Drivers
 * [drivers/baremetal/](drivers/baremetal/): C driver for the bare core over AXI4Lite. The probe is opaque to it, the whole register map is derived from the probe width, buffer depth and sampling clock frequency read back from the core.
-* [drivers/python/](drivers/python/): python driver for the UART wrapper, reads the signal names from `portmap.csv` and dumps a .vcd. Work in progress. `read_regs`/`write_regs` speak the UART packet format, splitting anything longer than 127 words across packets, and raise on a timeout or a mismatched response header.
+* [drivers/python/](drivers/python/): python driver for the UART wrapper. `libre_ila.py` is the command line front end, `driver.py` speaks the register map and `vcd.py` turns the samples back into named signals, reading `portmap.csv` for the names and writing a `.vcd` any waveform viewer will open. `read_regs`/`write_regs` speak the UART packet format, splitting anything longer than 127 words across packets, and raise on a timeout or a mismatched response header. The GUI is still to come.
 
 # Future improvements
 

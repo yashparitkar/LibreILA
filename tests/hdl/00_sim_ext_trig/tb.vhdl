@@ -9,6 +9,9 @@
 -- The Makefile runs this bench once per trigger position, each run in its
 -- own work directory with its own copy of this file and C_TRIG_IDX patched
 -- in it, see the VARIANTS list there.
+--
+-- Copyright 2026 Yash Paritkar
+-- SPDX-License-Identifier: CERN-OHL-P-2.0
 ---------------------------------------------------------------------
 
 library ieee;
