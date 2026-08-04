@@ -3,7 +3,7 @@
 # File: libre_ila.py
 # Author: Y.U.P. (yashparitkar)
 # Created: 2026-07-24 Fri 19:48
-# Last Modified: 2026-08-01 Sat 15:31
+# Last Modified: 2026-08-04 Tue 22:50
 #
 # Description: ILA command line interface
 #   This is the entry point. It wires the command line to driver.py, which
@@ -64,16 +64,17 @@ The flags are verbs. Whatever order they are given in, they run in this one:
   2  --add-device                store the device on --serial-port, then stop
   3  (connect to --device)
   4  --info                      print what the core reports, then stop
-  5  --set-trigger-condition
+  5  --disarm                     cancel a capture still in progress
+  6  --set-trigger-condition
      --set-trigger-mask
      --set-trigger-type
      --set-trigger-reduction     merged into one trigger write
-  6  --set-trigger-position
-  7  --get-trigger-configuration read the trigger back out of the core
-  8  --arm
-  9  --force-trigger
-  10 --wait-done
-  11 --read-data                 write the .vcd
+  7  --set-trigger-position
+  8  --get-trigger-configuration read the trigger back out of the core
+  9  --arm
+  10 --force-trigger
+  11 --wait-done
+  12 --read-data                 write the .vcd
 
 So a whole capture is one line:
 
@@ -82,7 +83,9 @@ So a whole capture is one line:
                --set-trigger-type rising --arm --wait-done --read-data
 
 and, because the core holds the state and not this tool, splitting it across
-invocations works just as well: --arm now, --read-data whenever."""
+invocations works just as well: --arm now, --read-data whenever. --disarm runs
+first for the same reason, so retrying a capture with a different trigger is
+also one line."""
 
 
 class CliError(Exception):
@@ -371,6 +374,12 @@ def build_parser():
         "--force-trigger",
         action="store_true",
         help="Trigger an armed ILA regardless of the condition",
+    )
+
+    parser.add_argument(
+        "--disarm",
+        action="store_true",
+        help="Cancel a capture in progress and put the ILA back to idle",
     )
 
     parser.add_argument(
@@ -685,7 +694,8 @@ def run(args, parser):
                                                        args.set_trigger_reduction))
 
     verbs = (args.info or args.get_trigger_configuration or args.arm or args.force_trigger
-             or args.read_data or sets_trigger or args.set_trigger_position is not None
+             or args.disarm or args.read_data or sets_trigger
+             or args.set_trigger_position is not None
              or args.wait_done is not None)
 
     # Nothing to do is not an error, but opening a port and closing it again
@@ -702,6 +712,10 @@ def run(args, parser):
         if args.info:
             do_info(ila, serial_port, baud)
             return _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_SUCCESS"]
+
+        if args.disarm:
+            ila.disarm()
+            print("disarmed")
 
         if sets_trigger:
             do_set_trigger(ila, args)

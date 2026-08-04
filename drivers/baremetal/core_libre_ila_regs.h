@@ -50,7 +50,8 @@
  *   0x08                    TRIG_CFG   bit0 = ANDOR,   0 -> AND,   1 -> OR
  *                                      bit1 = EDGE,    0 -> level, 1 -> edge
  *                                      bit2 = FALLING, 0 -> rising
- *   0x0C                    RSVD       reserved
+ *   0x0C                    DISARM     any write cancels a capture in progress
+ *                                      and returns the ILA to idle
  *   0x10 + 4*n, n = 0..a-1  TRIG_COND  trigger vector condition
  *
  * Trigger vector mask, one stride of registers from mask_base, word n at
@@ -598,13 +599,21 @@
          CORE_LIBRE_ILA_REGS_TRIG_CFG_REG_FALLING_FIELD_SHIFT)
 
 /*******************************************************************************
- * Register: RSVD_IN_REG
+ * Register: DISARM_REG
  *
- * Description: Reserved input register, reads back whatever was written to it
- * and has no effect on the hardware.
+ * Description: Any write to this register cancels a capture in progress and
+ * returns the ILA to idle, whether or not the trigger has already fired. The
+ * written value is irrelevant, the hardware toggles an internal disarm request
+ * on the write itself. A completed capture is not discarded, the hardware
+ * ignores the write once the ILA is done.
  */
-#define CORE_LIBRE_ILA_REGS_RSVD_IN_REG_OFFSET       0x0CU
-#define CORE_LIBRE_ILA_REGS_RSVD_IN_REG_LENGTH       0x04U
+#define CORE_LIBRE_ILA_REGS_DISARM_REG_OFFSET       0x0CU
+#define CORE_LIBRE_ILA_REGS_DISARM_REG_LENGTH       0x04U
+#define CORE_LIBRE_ILA_REGS_DISARM_REG_RW_MASK      0x00000000U
+#define CORE_LIBRE_ILA_REGS_DISARM_REG_RO_MASK      0x00000000U
+#define CORE_LIBRE_ILA_REGS_DISARM_REG_WO_MASK      0xFFFFFFFFU
+#define CORE_LIBRE_ILA_REGS_DISARM_REG_READ_MASK    0x00000000U
+#define CORE_LIBRE_ILA_REGS_DISARM_REG_WRITE_MASK   0xFFFFFFFFU
 
 /*******************************************************************************
  * Register: TRIG_COND_REG

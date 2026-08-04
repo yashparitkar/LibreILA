@@ -165,7 +165,8 @@ class TestNoImportSideEffects(unittest.TestCase):
         for verb in ("reset", "add_device", "device", "info", "set_trigger_position",
                      "set_trigger_condition", "set_trigger_mask", "set_trigger_type",
                      "set_trigger_reduction", "get_trigger_configuration", "arm",
-                     "force_trigger", "wait_done", "read_data", "output", "portmap"):
+                     "force_trigger", "disarm", "wait_done", "read_data", "output",
+                     "portmap"):
             with self.subTest(verb=verb):
                 self.assertIn(verb, options)
 
@@ -651,6 +652,22 @@ class TestCapture(TempCwd):
         self.assertEqual(status, libre_ila._libre_ila_main_status[
             "LIBRE_ILA_MAIN_STATUS_HARDWARE_ERROR"])
         self.assertIn("not armed", err)
+
+    def test_disarming_reports_and_writes_disarm(self):
+        wrapper = staged_wrapper(status=0x1)
+
+        status, out, _ = run_cli("--device", str(_UID), "--disarm", wrapper=wrapper)
+
+        self.assertEqual(status, 0)
+        self.assertIn("disarmed", out)
+
+    def test_disarming_an_idle_ila_is_refused(self):
+        status, _, err = run_cli("--device", str(_UID), "--disarm",
+                                 wrapper=staged_wrapper(status=0x0))
+
+        self.assertEqual(status, libre_ila._libre_ila_main_status[
+            "LIBRE_ILA_MAIN_STATUS_HARDWARE_ERROR"])
+        self.assertIn("no capture to cancel", err)
 
     def test_wait_done_returns_at_once_when_already_done(self):
         status, out, _ = run_cli("--device", str(_UID), "--wait-done", "0.1")

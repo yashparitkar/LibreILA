@@ -127,9 +127,10 @@ architecture rtl of libre_ila_uart is
   -- looks at araddr(ADDR_LSB+OPT_MEM_ADDR_BITS downto ADDR_LSB) and
   -- nothing else, so the low two bits are dropped rather than rejected
   -- and rresp/bresp are always OKAY. A misaligned request therefore
-  -- lands silently on a real register, and the second register of the
-  -- input block is Arm_FT, so a stray write can arm the ILA or clobber
-  -- the trigger configuration.
+  -- lands silently on a real register, and two registers of the input
+  -- block act on the write rather than on the data, Arm_FT and Disarm,
+  -- so a stray write can arm the ILA, throw away a capture it was part
+  -- way through, or clobber the trigger configuration.
   -- Nothing downstream can catch this, so the wrapper does.
   --
   -- Range checking is deliberately left to the host. It would need a

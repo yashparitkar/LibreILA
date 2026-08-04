@@ -167,7 +167,8 @@ class LibreILA_Driver:
         self.LIBRE_ILA_REGS_TRIG_POS_REG_OFFSET = self.LIBRE_ILA_INPUT_REG_OFFSET
         self.LIBRE_ILA_REGS_ARM_FT_REG_OFFSET   = self.LIBRE_ILA_INPUT_REG_OFFSET + 4
         self.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET = self.LIBRE_ILA_INPUT_REG_OFFSET + 8
-        # Register 3 is reserved, the trigger vector starts above it
+        self.LIBRE_ILA_REGS_DISARM_REG_OFFSET   = self.LIBRE_ILA_INPUT_REG_OFFSET + 12
+        # The trigger vector starts above the four fixed control registers
         self.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET = self.LIBRE_ILA_INPUT_REG_OFFSET + 16
         self.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET = self.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET \
                                                  + self.stride_width * 4
@@ -452,6 +453,35 @@ class LibreILA_Driver:
         # Same register as the arm, an armed ILA reads the write as a forced
         # trigger. The value written does not matter here either.
         self.write_regs(self.LIBRE_ILA_REGS_ARM_FT_REG_OFFSET, [2])
+
+    def disarm(self):
+        """
+        disarm: Cancel a capture in progress and put the ILA back to idle.
+
+        Works whether or not the trigger has already fired, so a capture left
+        waiting on a condition that never comes, or one triggered by the wrong
+        condition, can be taken back without resetting the core. The samples
+        already taken stay in the buffer but stop counting as a capture.
+
+        A completed capture is not discarded, the core ignores the write in
+        that state, so this raises rather than pretending it did something.
+
+        parameters: None
+
+        returns: None
+        """
+
+        status = self.get_status()
+
+        if status == _libre_ila_status["LIBRE_ILA_STATUS_IDLE"]:
+            raise RuntimeError("the ILA is not armed, there is no capture to cancel")
+
+        if status == _libre_ila_status["LIBRE_ILA_STATUS_DONE"]:
+            raise RuntimeError("the capture has already completed, DISARM does not "
+                               "discard it, arm again to start a new one")
+
+        # Write triggered like ARM_FT, the value written does not matter
+        self.write_regs(self.LIBRE_ILA_REGS_DISARM_REG_OFFSET, [1])
 
     def wait_done(self, timeout):
         """

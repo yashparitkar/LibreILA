@@ -26,6 +26,7 @@
  *
  *   cmd_status_t LIBRE_ILA_arm ( libre_ila_instance_t * this_libre_ila);
  *   cmd_status_t LIBRE_ILA_force_trigger ( libre_ila_instance_t * this_libre_ila);
+ *   cmd_status_t LIBRE_ILA_disarm ( libre_ila_instance_t * this_libre_ila);
  *
  *   cmd_status_t LIBRE_ILA_wait_done( libre_ila_instance_t * this_libre_ila, uint32_t timeout_ms);
  *
@@ -337,6 +338,38 @@ cmd_status_t LIBRE_ILA_force_trigger
     HAL_set_32bit_reg(this_libre_ila->ip_base, CORE_LIBRE_ILA_REGS_ARM_FT, 0x1u);
 
     return CMD_STATUS_SUCCESS; // Force trigger send successfully
+}
+
+/*-------------------------------------------------------------------------*//**
+ * LIBRE_ILA_disarm()
+ * See "core_libre_ila.h" for details of how to use this function.
+ */
+cmd_status_t LIBRE_ILA_disarm
+(
+    libre_ila_instance_t *   this_libre_ila
+)
+{
+    libre_ila_status_t ila_status;
+
+    if (this_libre_ila == NULL)
+    {
+        return CMD_STATUS_BAD_LIBRE_ILA; // Bad LIBRE_ILA instance
+    }
+
+    /* Armed and triggered are both cancellable, the hardware takes a disarm
+     * either side of the trigger. Idle has nothing to cancel and done holds a
+     * capture the hardware refuses to discard, so neither is worth a write. */
+    ila_status = LIBRE_ILA_get_status(this_libre_ila);
+
+    if ((ila_status != LIBRE_ILA_STATUS_ARMED) && (ila_status != LIBRE_ILA_STATUS_TRIGGERED))
+    {
+        return CMD_STATUS_ERROR; // No capture in progress to cancel
+    }
+
+    // Write triggered like the arm, the value written does not matter
+    HAL_set_32bit_reg(this_libre_ila->ip_base, CORE_LIBRE_ILA_REGS_DISARM, 0x1u);
+
+    return CMD_STATUS_SUCCESS; // ILA disarmed successfully
 }
 
 /*-------------------------------------------------------------------------*//**

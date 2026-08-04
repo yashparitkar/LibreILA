@@ -96,6 +96,22 @@
   Watch out for one corner, an all zero mask in AND mode matches vacuously and
   the ILA triggers on the first sample after arming.
 
+  A capture that is not going to complete does not need a reset to get rid of.
+  LIBRE_ILA_wait_done() returning CMD_STATUS_TIMEOUT means the trigger has not
+  fired, or has fired and is still counting out its post-trigger samples, and
+  LIBRE_ILA_disarm() takes the core back to idle from either of those so the
+  trigger can be reconfigured and armed again:
+
+  @code
+    if (LIBRE_ILA_wait_done(&ila, 1000u) == CMD_STATUS_TIMEOUT)
+    {
+        LIBRE_ILA_disarm(&ila);
+        // reconfigure the trigger and arm again
+    }
+  @endcode
+
+  A capture that did complete is not thrown away by it, see LIBRE_ILA_disarm().
+
  *//*=========================================================================*/
 #ifndef CORE_LIBRE_ILA_H_
 #define CORE_LIBRE_ILA_H_
@@ -326,6 +342,24 @@ The LIBRE_ILA_force_trigger() function forces a trigger event on the CoreLibreIL
     cmd_status_t, see enum __cmd_status_t for details of the return values.
   */
 cmd_status_t LIBRE_ILA_force_trigger
+(
+    libre_ila_instance_t * this_libre_ila
+);
+
+/*-------------------------------------------------------------------------*//**
+The LIBRE_ILA_disarm() function cancels a capture in progress on the CoreLibreILA hardware instance and returns it to idle. This is done by writing to the DISARM register of the CoreLibreILA hardware instance. It works both before and after the trigger has fired, so a capture waiting on a condition that never comes, or one started by the wrong condition, can be taken back without resetting the core. The samples already taken stay in the sample buffer but stop counting as a capture.
+
+A completed capture is not discarded. The hardware ignores a disarm once the ILA is done, and this function returns CMD_STATUS_ERROR rather than issuing the write. Arm again to start a new capture.
+
+The written value does not matter, the hardware acts on the write itself.
+
+  @param this_libre_ila
+    Pointer to the libre_ila_instance_t to operate on.
+
+  @return
+    cmd_status_t, see enum __cmd_status_t for details of the return values.
+  */
+cmd_status_t LIBRE_ILA_disarm
 (
     libre_ila_instance_t * this_libre_ila
 );

@@ -21,6 +21,7 @@ GHDL simulations of the core and the UART wrapper. The numbering is the order th
 | `02_sim_axil_trig_data`  | Trigger plus sample buffer readout |
 | `03_sim_axil_cdc`        | Clock domain crossing on arm and status |
 | `04_sim_axil_force_trig` | Force trigger |
+| `09_sim_axil_disarm`     | Disarm, from both sides of the trigger and from a finished capture |
 | `06_sim_libre_ila_uart`  | End to end dataflow through the UART wrapper |
 | `07_sim_edge_test`       | Level versus rising versus falling trigger, `trig_cfg` bits 1 and 2 |
 | `08_sim_addr_bound_check`| Address decoding at and past the end of the register map |
@@ -41,6 +42,18 @@ block, so a write under `C_AXIL_N_CTRL_REGS_OUT` is out of range by
 construction. Depth and probe width are picked so the register count is not a
 power of two, since otherwise the map fills the slice exactly and there is no
 unmapped region left to test; an elaboration assert catches that.
+
+`09_sim_axil_disarm` walks the state machine in the one order that keeps every
+arm coming out of `ILA_IDLE`: disarm from `ILA_ARMED`, then from `ILA_TRIGD`
+part way through the post trigger countdown, then a clean capture to prove the
+path still works, then a disarm against `ILA_DONE` that has to be ignored. Each
+phase checks the state it left behind rather than only the write it made, since
+a disarm that clears the status bits but leaves `en_wr` or `trig_idx` alone
+would otherwise pass. Its trigger position moves between phases for a reason:
+the first two want the whole buffer given to post trigger samples so
+`ILA_TRIGD` outlasts an AXI4Lite write, and the third wants the opposite, few
+enough post trigger samples that the run does not wrap and overwrite the slot
+`trig_idx` names.
 
 `07_sim_edge_test` runs its testbench three times over, once per trigger mode: `level`, `rising` and `falling`. All three share one stimulus in which the trigger condition is already true when the ILA is armed, then falls and rises again, because that is the case the three modes disagree about. The level run triggers on the first sample, the two edge runs wait for their transition, and each run checks the probe counter carried by the sample the DUT names in `trig_idx`. `make sim-rising` or `make wave-falling` picks one out. Since the condition holds across the arm, this is also what pins the seeding of `trig_lvl_prev`: cleared instead of seeded, the rising run would fire on the first sample and its check would fail.
 
@@ -77,4 +90,4 @@ See [c/00_reg_map/README.md](c/00_reg_map/README.md) for the case list and for t
 The same `FakeWrapper` also serves the register map, so the tests cover the two other places the driver can silently disagree with the hardware:
 
 * **The register map derived from the probe width.** Everything scales with the stride, the lane count rounded up to a power of two with a minimum of four, so `TestRegisterMap` pins the offsets against the map in the [datasheet](../docs/datasheet.pdf) rather than against the driver's own arithmetic. This matters because the core truncates an address it cannot decode instead of rejecting it, so a wrong stride aliases onto real registers rather than failing.
-* **The control path and the readout.** `TestControl` covers the status decode and the ARM_FT guards, `TestReadout` covers unrolling the circular buffer from the oldest sample and rebasing the trigger index onto that ordering.
+* **The control path and the readout.** `TestControl` covers the status decode and the ARM_FT and DISARM guards, `TestReadout` covers unrolling the circular buffer from the oldest sample and rebasing the trigger index onto that ordering.

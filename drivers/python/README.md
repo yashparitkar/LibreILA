@@ -33,13 +33,14 @@ The flags are verbs. Whatever order they are given in, they are applied in this 
 | 2 | `--add-device` | store the device on `--serial-port`, then stop |
 | 3 | | connect to `--device` |
 | 4 | `--info` | print what the core reports, then stop |
-| 5 | `--set-trigger-condition` / `--set-trigger-mask` / `--set-trigger-type` / `--set-trigger-reduction` | merged into one trigger write |
-| 6 | `--set-trigger-position` | where the trigger sits in the buffer, in samples |
-| 7 | `--get-trigger-configuration` | read the trigger back out of the core |
-| 8 | `--arm` | |
-| 9 | `--force-trigger` | |
-| 10 | `--wait-done [SECONDS]` | default 10 |
-| 11 | `--read-data` | write the `.vcd` to `--output` |
+| 5 | `--disarm` | cancel a capture in progress, before the trigger writes so a retry is one line |
+| 6 | `--set-trigger-condition` / `--set-trigger-mask` / `--set-trigger-type` / `--set-trigger-reduction` | merged into one trigger write |
+| 7 | `--set-trigger-position` | where the trigger sits in the buffer, in samples |
+| 8 | `--get-trigger-configuration` | read the trigger back out of the core |
+| 9 | `--arm` | |
+| 10 | `--force-trigger` | |
+| 11 | `--wait-done [SECONDS]` | default 10 |
+| 12 | `--read-data` | write the `.vcd` to `--output` |
 
 So a whole capture is one line:
 
@@ -81,7 +82,7 @@ The file is delta encoded: the first sample states every signal, after that only
 | 6 | the portmap does not match the core |
 | 7 | link error: no port, busy port, timeout or a desynced reply |
 | 8 | the capture did not reach DONE in time |
-| 9 | the core refused the operation, e.g. arming an armed ILA |
+| 9 | the core refused the operation, e.g. arming an armed ILA or disarming an idle one |
 | 10 | the GUI is not available |
 
 ## Setting the signal mapping

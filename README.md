@@ -1,8 +1,14 @@
 # LibreILA
 
-This project contains work related to LibreILA (In-System Logic Analyzer).
 
-![LibreILA](docs/tex/images/libre_ila_logo.svg)
+<p align="center" width="100%">
+    <img width="60%" src="docs/tex/images/libre_ila_logo.svg"> 
+</p>
+
+## What is LibreILA?
+
+### ILA (Integrated Logic Analyzer)
+It is a tool used to debug the signals in the FPGA fabric. It is a very useful tool to debug the signals in the FPGA fabric. The ILA core can be used to capture and analyze the signals in the FPGA fabric. The ILA core can be used to capture and analyze the signals in the FPGA fabric. The ILA core can be used to capture and analyze the signals in the FPGA fabric.
 
 The motivation to make this is follows:
 * There is no ILA like in Xilinx toolchain in the Microchip toolchain, the SmartDebug can not replace the ILA
@@ -11,19 +17,6 @@ The motivation to make this is follows:
 The core itself is generic: it samples a single flat probe word of `G_PROBE_WIDTH` bits and knows nothing about what those bits mean. The build shipped in [hdl/libre_ila.vhdl](hdl/libre_ila.vhdl) wires that probe to a pass through 64-bit AXI4S pair (67 probe bits), which is the reference configuration used by the tests and the drivers. Any other probe port map is meant to be produced by the generator in [codegen/](codegen/) from a `portmap.csv`.
 
 > The generator scripts in [codegen/](codegen/) are still work in progress, for now the probe concatenation is edited by hand in `w_probe`.
-
-## License
-
-Copyright 2026 Yash Paritkar
-
-Licensed under the CERN Open Hardware Licence Version 2 - Permissive
-(`CERN-OHL-P-2.0`). See [LICENSE](LICENSE). Every source file carries its own
-copyright and `SPDX-License-Identifier` header, so the licence travels with the
-file when you copy the HDL into your own project.
-
-Exception: [hdl/uart.vhdl](hdl/uart.vhdl) is derived from
-[pabennett/uart](https://github.com/pabennett/uart), Copyright 2015 Peter
-Bennett, licensed under Apache-2.0, and is modified here.
 
 ## Features
 * Generic probe: one flat probe word, the same layout is shared by the trigger vector and the sample buffer
@@ -37,7 +30,8 @@ Bennett, licensed under Apache-2.0, and is modified here.
     * Number of samples before and after trigger can be adjusted
     * The trigger condition can be taken on its level, its rising edge or its falling edge
     * Can also use an external trigger
-* CDC on the ARM and status bits
+    * A capture can be disarmed from either side of the trigger, so a condition that never fires costs a register write rather than a reset
+* CDC on the ARM, DISARM and status bits
 * Each core carries an instance ID, `G_UID`, read back at `0x14`, so a system holding several ILAs can tell which one it has reached
 * A serial wrapper is also provided to easily use the ILA with the PC
 * A C driver for the bare AXI4Lite core, and a python driver (work in progress) for the serial wrapper
@@ -100,3 +94,16 @@ If needed, user can also modify the core to use masked data values for triggerin
 VHDL Style Guide can be used to make the generated code more readable.
 
 GHDL can be used to verify the generated code in the make itself.
+
+## License
+
+Copyright 2026 Yash Paritkar
+
+Licensed under the CERN Open Hardware Licence Version 2 - Permissive
+(`CERN-OHL-P-2.0`). See [LICENSE](LICENSE). Every source file carries its own
+copyright and `SPDX-License-Identifier` header, so the licence travels with the
+file when you copy the HDL into your own project.
+
+Exception: [hdl/uart.vhdl](hdl/uart.vhdl) is derived from
+[pabennett/uart](https://github.com/pabennett/uart), Copyright 2015 Peter
+Bennett, licensed under Apache-2.0, and is modified here.

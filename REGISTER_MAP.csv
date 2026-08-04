@@ -20,7 +20,7 @@ input,0x28,TRIG_CFG,R/W,0x00000000,0,ANDOR,0 AND all enabled bits match; 1 OR an
 input,0x28,TRIG_CFG,R/W,0x00000000,1,EDGE,0 level sensitive; 1 edge sensitive
 input,0x28,TRIG_CFG,R/W,0x00000000,2,FALLING,0 rising edge; 1 falling edge. Read only when EDGE is 1
 input,0x28,TRIG_CFG,R/W,0x00000000,31:3,-,Reserved
-input,0x2C,-,R/W,0x00000000,31:0,-,Reserved
+input,0x2C,DISARM,W,0x00000000,31:0,DISARM,Any write cancels a capture in progress and returns the ILA to IDLE. Ignored once the capture is DONE
 input,0x30 + 4n,TRIG_COND(n),R/W,0x00000000,31:0,TRIG_COND,Trigger condition word n for n = 0..a-1. Value probe bit must take to match
 input,0x30 + 4n + 4a,TRIG_MASK(n),R/W,0x00000000,31:0,TRIG_MASK,Trigger mask word n for n = 0..a-1. 1 lets the bit take part 0 is don't care
 buffer,0x30 + 8a + 4(ak + l),"SAMP_BUFF(k,l)",R,-,31:0,SAMP_BUFF,Sample k lane l for k = 0..DEPTH-1 and l = 0..a-1. Lane l holds probe bits 32l+31 downto 32l. Lanes above ceil(WIDTH/32) are zero padding

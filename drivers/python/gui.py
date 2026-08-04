@@ -18,6 +18,7 @@
 #####################################################################
 
 import pyside6
+import driver
 
 _libre_ila_status_codes = {
     "LIBRE_ILA_GUI_WAVEFORM_VIEWER_NOT_FOUND" : -1,

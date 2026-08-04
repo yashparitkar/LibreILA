@@ -271,6 +271,8 @@ differentiator: capture and readout need no host on the wire at all.
         \hline
         0.0 & 25 July 2026 & Document created.\\
         \hline
+        0.1 & 4 August 2026 & DISARM mapped onto the reserved input register at \hex{2C}.\\
+        \hline
         \end{tabularx}
     \label{tab:hisotry}
 \end{table}
@@ -309,13 +311,16 @@ core latches where it happened, keeps sampling for the configured
 number of post-trigger samples, and stops. DONE then goes high and the
 buffer holds a window of history either side of the trigger, which the
 host reads back at its leisure -- the capture is over, so readout races
-nothing.
+nothing. A capture that has not got that far can be taken back at any
+point by writing DISARM, which returns the core to IDLE from either
+side of the trigger without disturbing a capture already finished.
 
 The core straddles two clock domains and is deliberate about which side
 each part lives on. Sampling, triggering and the buffer write port run
 on \verb|samp_aclk|, the clock of the probed link. The register map and
-the buffer read port run on \verb|s_axil_aclk|. Only the arm pulse and
-the three status bits actually cross, through two-flop synchronisers;
+the buffer read port run on \verb|s_axil_aclk|. Only the arm and disarm
+pulses and the three status bits actually cross, through two-flop
+synchronisers;
 the sample data never crosses a synchroniser at all, because the buffer
 is a dual-port RAM whose read port is simply clocked from the other
 domain.
@@ -467,10 +472,16 @@ parts of a design.
 The capture side runs entirely in the sampling clock domain, driven by
 \verb|samp_aclk|, which should be fed the clock the probed link runs
 on. The AXI4Lite port is a separate domain on \verb|s_axil_aclk|. The
-arm pulse and the ARMED, TRIGD and DONE status bits cross between them
-through two-flop synchronisers and so lag by a couple of cycles; the
-internal STATE field of the status register is not synchronised and is
-there for debugging only.
+arm and disarm pulses and the ARMED, TRIGD and DONE status bits cross
+between them through two-flop synchronisers and so lag by a couple of
+cycles; the internal STATE field of the status register is not
+synchronised and is there for debugging only.
+
+Arm and disarm cross on separate paths, each a write-toggled bit
+resynchronised and edge-detected on the sampling side. Two writes a few
+AXI cycles apart can therefore land in either order in the sampling
+domain, so a host that writes both back to back has to leave a gap
+between them if it cares which one wins.
 
 Readout needs no synchroniser at all. The sample buffer is a dual-port
 \acs{LSRAM} whose read port is clocked by the AXI4Lite clock, which is
@@ -704,7 +715,7 @@ stock build ($a = 4$) in parentheses.
         \hline
         \hex{28} & TRIG\_CFG          & R/W & \hex{00000000} & Trigger mode: AND/OR, level/edge, rising/falling \\
         \hline
-        \hex{2C} & ---                & R/W & \hex{00000000} & Reserved \\
+        \hex{2C} & DISARM             & W   & \hex{00000000} & Any write cancels a capture in progress and returns the \acs{ILA} to IDLE. Ignored once the capture is DONE \\
         \hline
         $\hex{30} + 4n$ & TRIG\_COND(n) & R/W & \hex{00000000} & Trigger condition, word $n$, $n = 0 \ldots a-1$ (\hex{30}--\hex{3C}) \\
         \hline
@@ -728,8 +739,9 @@ The AXI4Lite decoder \emph{truncates} an address it cannot decode
 rather than rejecting it, so a misaligned or out of range access
 silently aliases onto a real register. Both supplied drivers check
 alignment on the host side and the \acs{UART} wrapper checks it in
-hardware, because the second register of the input block is ARM\_FT and
-a stray write there would arm the core.
+hardware, because two registers of the input block act on the write
+rather than on the data: a stray write to ARM\_FT would arm the core,
+and one to DISARM would throw away a capture it was part way through.
 
 \subsection{STATUS}
 \regprop{STATUS}{Output block}{\hex{00}}{\hex{00000000}}{Read-only}
@@ -1215,6 +1227,58 @@ is 1.
         \hline
     \end{tabularx}
 \end{table}
+
+\subsection{DISARM}
+\regprop{DISARM}{Input block}{\hex{2C}}{\hex{00000000}}{Write-only}
+
+Disarm register. \textbf{Any} write to this register acts; the value
+written is ignored entirely, the same way ARM\_FT works. A write while
+the core is ARMED or TRIGD cancels the capture and returns it to IDLE,
+so a capture waiting on a condition that never comes, or one started by
+the wrong condition, can be taken back without resetting the core.
+
+Cancelling from TRIGD abandons the post-trigger samples still owed. The
+samples already taken stay in the buffer, but SAMP\_BUFF\_TRIG\_IDX goes
+back to zero with the state, so nothing that is read out afterwards
+claims to be a capture.
+
+A write while the core is IDLE does nothing, and a write while it is
+DONE is \emph{ignored}: DONE means a finished capture is sitting in the
+buffer waiting to be read, and returning to IDLE would clear the trigger
+index that is needed to unwrap it. Disarm cancels a capture, it does not
+discard a finished one --- arm again to start the next.
+
+A trigger arriving in the same cycle as a disarm wins, so a race between
+the two leaves the core in TRIGD rather than IDLE. A second disarm then
+cancels it.
+
+\begin{regdiag}
+    \bitnums{31}{30}{29}{28}{27}{26}{25}{24}
+    \fldrow{\fldb{8}{DISARM[31:24]}}
+    \bitacc{W}{W}{W}{W}{W}{W}{W}{W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{23}{22}{21}{20}{19}{18}{17}{16}
+    \fldrow{\fldb{8}{DISARM[23:16]}}
+    \bitacc{W}{W}{W}{W}{W}{W}{W}{W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{15}{14}{13}{12}{11}{10}{9}{8}
+    \fldrow{\fldb{8}{DISARM[15:8]}}
+    \bitacc{W}{W}{W}{W}{W}{W}{W}{W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+\begin{regdiag}
+    \bitnums{7}{6}{5}{4}{3}{2}{1}{0}
+    \fldrow{\fldb{8}{DISARM[7:0]}}
+    \bitacc{W}{W}{W}{W}{W}{W}{W}{W}
+    \bitrst{0}{0}{0}{0}{0}{0}{0}{0}
+\end{regdiag}
+
+\noindent\textbf{Bits 31:0 -- DISARM[31:0]} The write itself is the
+command, the data is a don't care.
 
 \subsection{TRIG\_COND(n) and TRIG\_MASK(n)}
 \regprop{TRIG\_COND(n) / TRIG\_MASK(n)}{Input block}{$\hex{30} + 4n$ / $\hex{30} + 4a + 4n$}{\hex{00000000}}{Read/Write}

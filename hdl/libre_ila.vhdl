@@ -2,7 +2,7 @@
 -- File: libre_ila.vhdl
 -- Author: Y.U.P. (yashparitkar)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-07-30 Thu 18:09
+-- Last Modified: 2026-08-04 Tue 21:53
 --
 -- Description: A generic ILA, the probe is described by codegen/portmap.csv
 -- Usage:
@@ -256,6 +256,14 @@ architecture rtl of libre_ila is
   signal arm_toggler_axilite : std_logic; -- in the axilite domain
   signal arm_samp            : std_logic; -- synchronised in samp
   signal arm_sync            : std_logic_vector(2 downto 0);
+
+  -- Disarm takes the same toggle-and-edge-detect route as arm. The two are
+  -- independent paths, so back to back writes to ARM_FT and DISARM can land in
+  -- either order in the sampling domain, software has to leave a gap between
+  -- them if it cares which one wins.
+  signal disarm_toggler_axilite : std_logic; -- in the axilite domain
+  signal disarm_samp            : std_logic; -- synchronised in samp
+  signal disarm_sync            : std_logic_vector(2 downto 0);
   -------------------------------------------------------------------
 
   -- From the axiliteslave template ---------------------------------
@@ -493,6 +501,14 @@ begin
               else
                 ila_state <= ILA_TRIGD;
               end if;
+            -- A trigger landing in the same cycle as a disarm wins, the capture
+            -- the host asked for is worth more than the cancel it changed its
+            -- mind about. It can always disarm again from ILA_TRIGD
+            elsif (disarm_samp = '1') then
+              ila_state          <= ILA_IDLE;
+              en_wr              <= '0';
+              trig_idx           <= (others => '0');
+              post_trig_samp_cnt <= (others => '0');
             else
               trig_idx           <= (others => '0');
               post_trig_samp_cnt <= (others => '0');
@@ -503,6 +519,15 @@ begin
             if (post_trig_samp_cnt = post_trig_samp_tgt - 1) then
               ila_state <= ILA_DONE;
               en_wr     <= '0';
+            -- Aborting a capture whose trigger has already fired, for a trigger
+            -- condition that turned out to be the wrong one. The samples taken
+            -- so far stay in the buffer, but trig_idx goes back to zero with the
+            -- state so nothing claims they are a capture
+            elsif (disarm_samp = '1') then
+              ila_state          <= ILA_IDLE;
+              en_wr              <= '0';
+              trig_idx           <= (others => '0');
+              post_trig_samp_cnt <= (others => '0');
             else
               post_trig_samp_cnt <= post_trig_samp_cnt + 1;
               en_wr              <= '1';
@@ -510,8 +535,13 @@ begin
 
           when ILA_DONE =>
 
+            -- Deliberately no disarm here. ILA_DONE means a capture is sitting
+            -- in the buffer waiting to be read and going to ILA_IDLE would clear
+            -- trig_idx, the one thing the host needs to unwrap it. Disarm cancels
+            -- a capture, it does not discard a finished one
             if (arm_samp = '1') then
               ila_state <= ILA_ARMED;
+              en_wr     <= '1';
             end if;
 
           when others =>
@@ -533,15 +563,18 @@ begin
 
     if (rising_edge(samp_aclk)) then
       if (i_rst_sync = '1') then
-        arm_sync <= (others => '0');
+        arm_sync    <= (others => '0');
+        disarm_sync <= (others => '0');
       else
-        arm_sync <= arm_sync(1 downto 0) & arm_toggler_axilite;
+        arm_sync    <= arm_sync(1 downto 0) & arm_toggler_axilite;
+        disarm_sync <= disarm_sync(1 downto 0) & disarm_toggler_axilite;
       end if;
     end if;
 
   end process p_signal_cdc;
 
-  arm_samp <= arm_sync(2) xor arm_sync(1);
+  arm_samp    <= arm_sync(2) xor arm_sync(1);
+  disarm_samp <= disarm_sync(2) xor disarm_sync(1);
   -------------------------------------------------------------------
 
   -- STATE synchroniser process --------------------------------------
@@ -703,7 +736,8 @@ begin
     if rising_edge(s_axil_aclk) then
       if (s_axil_aresetn = '0') then
         -- clear the register array
-        arm_toggler_axilite <= '0';
+        arm_toggler_axilite    <= '0';
+        disarm_toggler_axilite <= '0';
 
         for i in 0 to C_AXIL_N_CTRL_REGS_IN - 1 loop
 
@@ -720,8 +754,12 @@ begin
           -- one aimed at the sample buffer.
           if (idx >= C_AXIL_N_CTRL_REGS_OUT and idx < C_AXIL_N_CTRL_REGS) then
             in_idx := idx - C_AXIL_N_CTRL_REGS_OUT;
+            -- ARM_FT and DISARM act on the write itself, the data written is
+            -- stored like any other input register but never looked at
             if (in_idx = 1) then
               arm_toggler_axilite <= not arm_toggler_axilite;
+            elsif (in_idx = 3) then
+              disarm_toggler_axilite <= not disarm_toggler_axilite;
             end if;
             slv_reg_in(in_idx) <= s_axil_wdata;
           end if;
@@ -841,7 +879,8 @@ begin
   -- Add user connections here --------------------------------------------------
   trig_tgt <= unsigned(slv_reg_in(0)(trig_tgt'range));
   trig_cfg <= slv_reg_in(2);
-  -- slv_reg_in(1) is ARM_FT (write-triggered, see p_wlg), slv_reg_in(3) is reserved
+  -- slv_reg_in(1) is ARM_FT and slv_reg_in(3) is DISARM, both write-triggered,
+  -- see p_wlg
 
   trig_cond_gen : for i in 0 to C_AXIL_STRIDE - 1 generate
     trig_cond(i * 32 + 31 downto 32 * i) <= slv_reg_in(i + 4);

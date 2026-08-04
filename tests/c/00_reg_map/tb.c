@@ -17,7 +17,7 @@
  * The map, all indices from the AXI4Lite base, a = stride:
  *
  *   0  .. 7            output block, fixed size in every build
- *   8  .. 11           TRIG_POS, ARM_FT, TRIG_CFG, RSVD
+ *   8  .. 11           TRIG_POS, ARM_FT, TRIG_CFG, DISARM
  *   12 .. 12+a-1       TRIG_COND
  *   12+a .. 12+2a-1    TRIG_MASK
  *   12+2a ..           sample buffer, a registers per sample
@@ -181,7 +181,7 @@ static void test_control_writes(void)
 
     CHECK_EQ(fake_reg[ip_reg(2u)], (uint32_t)LIBRE_ILA_TRIG_MODE_OR);
 
-    /* Nothing should have touched the reserved input register or the output
+    /* Configuring the trigger should not have reached DISARM or the output
      * block on the way past */
     CHECK_EQ(fake_reg[ip_reg(3u)], 0u);
     CHECK_EQ(fake_reg[REG_MGCKEY], 0xb01dfaceu);
@@ -189,6 +189,11 @@ static void test_control_writes(void)
     /* Arming is a write to input index 1, whatever value goes with it */
     CHECK_EQ(LIBRE_ILA_arm(&ila), CMD_STATUS_SUCCESS);
     CHECK(fake_reg[ip_reg(1u)] != 0u);
+
+    /* And disarming index 3, the register that used to be the reserved one */
+    fake_reg[REG_STATUS] = 0x1u;
+    CHECK_EQ(LIBRE_ILA_disarm(&ila), CMD_STATUS_SUCCESS);
+    CHECK(fake_reg[ip_reg(3u)] != 0u);
 }
 
 /* ---- the argument checks ------------------------------------------------ */
@@ -243,6 +248,7 @@ static void test_argument_checks(void)
     CHECK_EQ(LIBRE_ILA_set_trigger_position(NULL, 0u),    CMD_STATUS_BAD_LIBRE_ILA);
     CHECK_EQ(LIBRE_ILA_arm(NULL),                         CMD_STATUS_BAD_LIBRE_ILA);
     CHECK_EQ(LIBRE_ILA_force_trigger(NULL),               CMD_STATUS_BAD_LIBRE_ILA);
+    CHECK_EQ(LIBRE_ILA_disarm(NULL),                      CMD_STATUS_BAD_LIBRE_ILA);
     CHECK_EQ(LIBRE_ILA_get_status(NULL),  (uint32_t)LIBRE_ILA_STATUS_BAD_LIBRE_ILA);
     CHECK_EQ(fake_reg[ip_reg(0u)], before);
 }
@@ -323,6 +329,20 @@ static void test_status(void)
     fake_reg[REG_STATUS] = 0x0u;
     CHECK_EQ(LIBRE_ILA_force_trigger(&ila), CMD_STATUS_ERROR);
     CHECK_EQ(LIBRE_ILA_arm(&ila),           CMD_STATUS_SUCCESS);
+
+    /* Disarm takes the two states that have a capture running, either side of
+     * the trigger, and refuses idle and done where the hardware ignores it */
+    fake_reg[REG_STATUS] = 0x1u;
+    CHECK_EQ(LIBRE_ILA_disarm(&ila), CMD_STATUS_SUCCESS);
+
+    fake_reg[REG_STATUS] = 0x3u;
+    CHECK_EQ(LIBRE_ILA_disarm(&ila), CMD_STATUS_SUCCESS);
+
+    fake_reg[REG_STATUS] = 0x0u;
+    CHECK_EQ(LIBRE_ILA_disarm(&ila), CMD_STATUS_ERROR);
+
+    fake_reg[REG_STATUS] = 0x7u;
+    CHECK_EQ(LIBRE_ILA_disarm(&ila), CMD_STATUS_ERROR);
 
     fake_reg[REG_STATUS] = 0x4u;
     CHECK_EQ(LIBRE_ILA_wait_done(&ila, 10u), CMD_STATUS_SUCCESS);

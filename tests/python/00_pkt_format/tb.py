@@ -401,7 +401,7 @@ class TestRegisterMap(unittest.TestCase):
         self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_POS_REG_OFFSET, 0x20)
         self.assertEqual(ila.LIBRE_ILA_REGS_ARM_FT_REG_OFFSET, 0x24)
         self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_CFG_REG_OFFSET, 0x28)
-        # 0x2C is the reserved input register, not the trigger vector
+        self.assertEqual(ila.LIBRE_ILA_REGS_DISARM_REG_OFFSET, 0x2C)
         self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_COND_REG_OFFSET, 0x30)
         self.assertEqual(ila.LIBRE_ILA_REGS_TRIG_MASK_REG_OFFSET, 0x40)
         self.assertEqual(ila.LIBRE_ILA_REGS_SAMP_BUFF_BASE_REG_OFFSET, 0x50)
@@ -489,8 +489,8 @@ class TestIdentityChecks(unittest.TestCase):
 class TestControl(unittest.TestCase):
     """
     TestControl: The control path, against LIBRE_ILA_get_status, LIBRE_ILA_arm,
-    LIBRE_ILA_force_trigger and LIBRE_ILA_set_trigger_position in
-    drivers/baremetal/core_libre_ila.c.
+    LIBRE_ILA_force_trigger, LIBRE_ILA_disarm and
+    LIBRE_ILA_set_trigger_position in drivers/baremetal/core_libre_ila.c.
     """
 
     ARMED = 0x1
@@ -550,6 +550,27 @@ class TestControl(unittest.TestCase):
         ila.force_trigger()
 
         self.assertIn(ila.LIBRE_ILA_REGS_ARM_FT_REG_OFFSET, wrapper.mem)
+
+    def test_disarm_writes_disarm_either_side_of_the_trigger(self):
+        """The core takes a disarm from ARMED and from TRIGD alike."""
+        for status in (self.ARMED, self.ARMED | self.TRIGD):
+            with self.subTest(status=status):
+                wrapper, ila = self._ila(status)
+
+                ila.disarm()
+
+                self.assertIn(ila.LIBRE_ILA_REGS_DISARM_REG_OFFSET, wrapper.mem)
+
+    def test_disarm_refuses_when_there_is_no_capture(self):
+        """Idle has nothing to cancel, done holds a capture the core keeps."""
+        for status in (0, self.ARMED | self.TRIGD | self.DONE):
+            with self.subTest(status=status):
+                wrapper, ila = self._ila(status)
+
+                with self.assertRaises(RuntimeError):
+                    ila.disarm()
+
+                self.assertNotIn(ila.LIBRE_ILA_REGS_DISARM_REG_OFFSET, wrapper.mem)
 
     def test_wait_done_returns_on_done(self):
         _, ila = self._ila(self.ARMED | self.TRIGD | self.DONE)
