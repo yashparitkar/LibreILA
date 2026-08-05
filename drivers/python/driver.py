@@ -254,12 +254,16 @@ class LibreILA_Driver:
 
         return [int.from_bytes(payload[i:i + 4], "big") for i in range(0, len(payload), 4)]
 
-    def read_regs(self, base_address, count):
+    def read_regs(self, base_address, count, progress=None):
         """
         read_regs: Read the AXILite registers at the specified address.
 
         base_address: The address of the register to read.
         count: The number of words to read from the register array
+        progress: Called as progress(words_read, count) after each packet, or
+            None. A read of the sample buffer is thousands of words and takes
+            seconds on the link, so the caller is given the one place the count
+            is already known rather than having to split the read up itself.
 
         returns: vector of register values read from the specified address.
         """
@@ -274,6 +278,9 @@ class LibreILA_Driver:
         while len(values) < count:
             chunk   = min(count - len(values), _uart_max_words)
             values += self._transact(base_address + 4 * len(values), chunk)
+
+            if progress is not None:
+                progress(len(values), count)
 
         return values
 
@@ -514,11 +521,12 @@ class LibreILA_Driver:
 
         return [frst_idx, trig_idx]
 
-    def read_data(self):
+    def read_data(self, progress=None):
         """
         read_data: Read the captured data from the ILA driver.
 
-        parameters: None
+        progress: Passed to read_regs for the sample buffer, see there. The two
+            index registers are one packet and are not reported on.
 
         returns: (samples, trigger_sample_idx). samples is the captured data
         from the ILA driver, arranged in a vector where each row corresponds to
@@ -534,7 +542,8 @@ class LibreILA_Driver:
         trig_idx = (trig_idx + self.SAMP_BUFF_DEPTH - frst_idx) % self.SAMP_BUFF_DEPTH
 
         words = self.read_regs(self.LIBRE_ILA_REGS_SAMP_BUFF_BASE_REG_OFFSET,
-                               self.SAMP_BUFF_DEPTH * self.stride_width)
+                               self.SAMP_BUFF_DEPTH * self.stride_width,
+                               progress=progress)
 
         samples = []
 

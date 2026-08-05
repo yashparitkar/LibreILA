@@ -38,6 +38,7 @@ pkt = importlib.util.module_from_spec(_pkt_format_spec)
 _pkt_format_spec.loader.exec_module(pkt)
 
 import libre_ila
+import session
 import vcd
 
 _PORTMAP     = os.path.join(_REPO_ROOT, "codegen", "portmap.csv")
@@ -142,7 +143,7 @@ class TempCwd(unittest.TestCase):
         returns: The path written.
         """
 
-        return libre_ila.save_device(uid, port, baud)
+        return session.save_device(uid, port, baud)
 
 
 class TestNoImportSideEffects(unittest.TestCase):
@@ -206,7 +207,7 @@ class TestDeviceStore(TempCwd):
     def test_a_device_round_trips(self):
         self.add_device(_UID, "/dev/ttyUSB3", 921600)
 
-        self.assertEqual(libre_ila.load_device(_UID), ("/dev/ttyUSB3", 921600))
+        self.assertEqual(session.load_device(_UID), ("/dev/ttyUSB3", 921600))
 
     def test_the_file_is_named_for_the_uid(self):
         path = self.add_device(1234)

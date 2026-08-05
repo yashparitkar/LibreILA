@@ -4,13 +4,21 @@ This directory contains the python driver for the LibreILA IP. The driver is use
 | File | What it is |
 |------|------------|
 | [libre_ila.py](libre_ila.py) | The command line front end. Every verb below lives here |
+| [session.py](session.py) | One connection to one core, and every operation either front end can ask of it |
 | [driver.py](driver.py) | The register map over UART. Knows nothing about what the probe bits mean |
 | [vcd.py](vcd.py) | The portmap and the VCD. Turns raw samples back into named signals |
 | [gui.py](gui.py) | Not finished, `--gui` reports that and exits |
 
+`session.py` sits between the front ends and the two layers below, because the front ends disagree about **lifetime and nothing else**. The command line builds a session, runs its verbs and drops it, so a capture still spans invocations by leaving the state in the core. The GUI keeps one alive per tab, because a window that reopened the port on every button press would pay for the identity block each time and could not hold the port across two actions at all.
+
+Neither of those is a different design. The core is the record either way; a session is just how long the host keeps the port open while reading it. So nothing in `session.py` prints, exits or knows what a widget is: a failure the host reasoned about becomes an `OperationError` carrying a symbolic reason, and the front end decides whether that reason is an exit status or a line in a status bar. The messages state the fact and stop, because the answer to a capture that has not finished is `--wait-done` here and a button there.
+
+**One session may only be touched by one thread at a time.** The wrapper is a request/response protocol over a single port and `_transact` flushes the input buffer on the way in, so two overlapping operations desync the wrapper and each other. Sessions are independent of one another, one port each. `Session.capture` takes a `progress` callback for the same reason: the readout is the one operation that takes seconds rather than a packet, so an event driven front end runs it off the thread serving its event loop. `Session.wait_done` is the blocking alternative and is for a front end with nothing else to do, since it polls in a loop. An event driven one polls `Session.status` on a timer instead, which it wants anyway to keep a state display honest.
+
 ## Requirements
 Following packages are required:
 * pyserial: `sudo apt install python3-serial`
+* PySide6: `sudo apt install python3-pyside6` for the GUI
 
 ## Usage
 Tell the tool about a core once, then talk to it by the UID it reports:
@@ -20,7 +28,9 @@ Tell the tool about a core once, then talk to it by the UID it reports:
 ./libre_ila.py --device 0 --info
 ```
 
-`--add-device` connects, reads the UID back and writes `libreila_device<UID>.txt` in the working directory, holding one `port,baud` line. `--reset` forgets every stored device.
+`--add-device` connects, reads the UID back and writes `libreila_device<UID>.txt` in the working directory, holding one `port,baud` line. `--reset` forgets every stored device, and `--device-dir` puts the store somewhere other than the working directory.
+
+The GUI will read the same store, so a core added on the command line comes up as a tab and one added in a tab is reachable with `--device` — which only holds while both are pointed at the same place. That is what `--device-dir` is for: the working directory is the right default for a tool run from a shell and the wrong one for a window started from a desktop entry.
 
 **`--device` selects by UID, not by the order devices were added.** A core built without a `G_UID` reports 0, which is why `--device` defaults to 0. Give each core in a system its own `G_UID` in [configuration.csv](../../codegen/configuration.csv) and they stay apart.
 
