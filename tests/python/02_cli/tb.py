@@ -20,6 +20,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 
 _HERE      = os.path.dirname(os.path.abspath(__file__))
@@ -112,6 +113,40 @@ def run_cli(*argv, wrapper=None):
         status = libre_ila.main(list(argv))
 
     return status, out.getvalue(), err.getvalue()
+
+
+@contextlib.contextmanager
+def stub_gui(run_gui=None, on_import=False):
+    """
+    stub_gui: Stand a fake gui module in for the real one.
+
+    run_gui: What gui.run_gui should do when called.
+    on_import: Make "import gui" itself fail, which is what a machine without
+        PySide6 does.
+
+    returns: A context manager, restoring sys.modules on the way out.
+    """
+
+    present  = "gui" in sys.modules
+    previous = sys.modules.get("gui")
+
+    if on_import:
+        # None in sys.modules is what python turns into an ImportError, so the
+        # missing dependency is modelled at the import and not after it
+        sys.modules["gui"] = None
+    else:
+        module = types.ModuleType("gui")
+        module.run_gui = run_gui
+
+        sys.modules["gui"] = module
+
+    try:
+        yield
+    finally:
+        if present:
+            sys.modules["gui"] = previous
+        else:
+            sys.modules.pop("gui", None)
 
 
 class TempCwd(unittest.TestCase):
@@ -329,13 +364,27 @@ class TestUsage(TempCwd):
 
                 self.assertEqual(args.set_trigger_condition, expected)
 
-    def test_the_gui_is_reported_as_unavailable(self):
-        # gui.py is still a sketch and raises SyntaxError rather than
-        # ImportError, so a narrow except would let it escape as a traceback
-        status, _, err = run_cli("--gui")
+    def test_the_gui_gets_the_arguments_it_needs(self):
+        # Stubbed rather than launched: a real run_gui enters the Qt event loop
+        # and never comes back, which would hang the suite rather than fail it
+        calls = []
+
+        with stub_gui(lambda *argv: calls.append(argv)):
+            status, _, _ = run_cli("--gui", "--waveform-viewer", "surfer",
+                                   "--device-dir", "somewhere", "--portmap", "some.csv")
+
+        self.assertEqual(status, 0)
+        self.assertEqual(calls, [("surfer", "somewhere", "some.csv")])
+
+    def test_a_gui_without_pyside6_is_reported_as_unavailable(self):
+        # PySide6 is optional, so its absence names the packages rather than
+        # arriving as a traceback
+        with stub_gui(on_import=True):
+            status, _, err = run_cli("--gui")
 
         self.assertEqual(status, libre_ila._libre_ila_main_status[
             "LIBRE_ILA_MAIN_STATUS_GUI_UNAVAILABLE"])
+        self.assertIn("PySide6", err)
         self.assertIn("--help", err)
 
 

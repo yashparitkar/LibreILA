@@ -8,8 +8,9 @@ The split is by what a test **needs to run**, not by what it covers:
 | `hdl/`    | ghdl, plus the generated core in `codegen/gen_axis/` | `make sim-hdl` |
 | `python/` | python3 and nothing else | `make sim-python` |
 | `c/`      | a C compiler and nothing else | `make sim-c` |
+| `full/`   | ghdl and cocotb, plus the generated core | not wired up yet, see [full/README.md](full/README.md) |
 
-`make sim` from the project root runs all three, host side tests first because they take milliseconds and a broken packet format or register map should not wait for the simulations to finish. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on.
+`make sim` from the project root runs all three wired-up ones, host side tests first because they take milliseconds and a broken packet format or register map should not wait for the simulations to finish. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on — which is also why `full/`, whose Makefile carries no targets yet, is not part of `make sim`.
 
 ## hdl/
 GHDL simulations of the core and the UART wrapper. The numbering is the order they build up in, each one leaning on what the last established.
@@ -70,12 +71,16 @@ Host side tests for the drivers. No ghdl, no generated core, and pyserial is stu
 | `01_vcd` | The portmap parsing and the VCD writing, against the generator's parse rules and a second reader of the format |
 | `02_cli` | Every verb of `libre_ila.py` end to end, against the same model of the wrapper |
 | `03_session` | `session.py`, the layer both front ends drive, held open across many operations the way the GUI holds one per tab |
+| `04_trigger` | `trigger.py`, the per-signal patterns and the condition/mask pair they assemble into |
+| `05_gui` | `gui.py`, driven offscreen against the same model of the wrapper |
 
 `00_pkt_format` exists because the UART packet format is the one thing the RTL and the python driver have to agree on, and nothing else checks that agreement: the wrapper is happy to answer a malformed request and the driver is happy to misparse a well-formed reply.
 
 `01_vcd` exists for the same reason one level up: `portmap.csv` is parsed once by the generator to build the hardware and once by the driver to name the bits coming back, and nothing links the two. A layout that disagrees does not raise, it produces a waveform with the boundaries in the wrong places.
 
 `02_cli` covers what sits between argparse and the driver and is reachable from neither: when a port gets opened, how a half-given trigger is merged into the one the core already holds, which files `--reset` is willing to delete, and what exit status a shell ends up seeing.
+
+`04_trigger` and `05_gui` cover the GUI's two halves. `trigger.py` imports neither Qt nor pyserial, so it runs anywhere; `05_gui` needs PySide6's widget packages and **skips** without them, since this target is documented as needing python3 and nothing else. Its `make gui` target opens the real GUI against fake cores, which is how to look at it without a board.
 
 `03_session` covers the same layer from the other side. `session.py` exists so the command line and the GUI differ in lifetime and nothing else, and 02_cli only ever exercises the command line's: one connection per invocation. So the properties that only appear when a session is held open — that a whole capture costs one open port and one read of the identity block, that a status poll is one packet, that letting go writes nothing to the core — are pinned here instead, by counting rather than by assuming.
 
@@ -94,3 +99,9 @@ The same `FakeWrapper` also serves the register map, so the tests cover the two 
 
 * **The register map derived from the probe width.** Everything scales with the stride, the lane count rounded up to a power of two with a minimum of four, so `TestRegisterMap` pins the offsets against the map in the [datasheet](../docs/datasheet.pdf) rather than against the driver's own arithmetic. This matters because the core truncates an address it cannot decode instead of rejecting it, so a wrong stride aliases onto real registers rather than failing.
 * **The control path and the readout.** `TestControl` covers the status decode and the ARM_FT and DISARM guards, `TestReadout` covers unrolling the circular buffer from the oldest sample and rebasing the trigger index onto that ordering.
+
+## full/
+Not populated yet. See [full/README.md](full/README.md) for the idea: cocotb
+driving the generated core in simulation, through the same UART wrapper the
+python driver talks to on real hardware, rather than through `hdl/`'s
+testbenches or `python/`'s stubbed model of that wrapper.

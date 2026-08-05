@@ -46,7 +46,7 @@ route to one part of it, or the thing it describes.
 | Looking for | Go to |
 |-------------|-------|
 | How the core behaves and how to talk to it: probe and port structure, capture and trigger behaviour, clock domains, core parameters, the AXI4Lite register map register by register, and the UART packet format | [docs/datasheet.pdf](docs/datasheet.pdf) |
-| The same register map, machine-readable, one row per field | [REGISTER_MAP.csv](REGISTER_MAP.csv) |
+| The same register map, csv for ease of use, one row per field | [REGISTER_MAP.csv](REGISTER_MAP.csv) |
 | Step-by-step usage | [docs/manual.pdf](docs/manual.pdf), work in progress |
 | Generating a core for your own probe: the `portmap.csv` and `configuration.csv` formats, the `^^XX` directives, and why there is no `inout` | [codegen/README.md](codegen/README.md) |
 | Driving the bare core from firmware over AXI4Lite | [drivers/baremetal/README.md](drivers/baremetal/README.md) |

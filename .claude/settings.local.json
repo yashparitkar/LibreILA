@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -)",
+      "Bash(make clean *)",
+      "Bash(rm -rf ../../../codegen/gen_axis)",
+      "Bash(make sim *)"
+    ]
+  }
+}

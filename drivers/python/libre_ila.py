@@ -376,21 +376,20 @@ def cmd_gui(args):
     returns: An exit status.
     """
 
-    # gui.py is still a sketch and does not parse, so this catches whatever it
-    # raises rather than only the ImportError it would raise once finished.
+    # Only the import is caught. PySide6 is an optional dependency and its
+    # absence is worth a message naming the packages, but once the GUI is
+    # running its failures are its own and reporting them as "not available"
+    # would send the user to --help over a bug.
     try:
         import gui
-
-        run_gui = getattr(gui, "run_gui", None)
-
-        if run_gui is None:
-            raise AttributeError("gui.py defines no run_gui()")
-
-        run_gui(args.waveform_viewer, args.device_dir, args.portmap)
-    except Exception as err:
-        raise CliError(f"the GUI is not available yet ({type(err).__name__}: {err}). "
-                       f"Everything it would do is on the command line, see --help.",
+    except ImportError as err:
+        raise CliError(f"the GUI needs PySide6 ({err}). Install it with 'sudo apt install "
+                       f"python3-pyside6.qtwidgets python3-pyside6.qtgui', or if your distro "
+                       f"doesn't package it (e.g. Ubuntu 22.04), 'pip install PySide6'. "
+                       f"Otherwise use the command line, see --help.",
                        _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_GUI_UNAVAILABLE"])
+
+    gui.run_gui(args.waveform_viewer, args.device_dir, args.portmap)
 
     return _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_SUCCESS"]
 

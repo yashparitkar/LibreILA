@@ -1,10 +1,8 @@
 # File: Makefile
 # Author: Y.U.P. (yashparitkar)
-# Last Modified: 2026-07-29 Wed
+# Last Modified: 2026-08-05 Wed 15:41
 #
 # This is project file makefile
-
-#
 
 # tests/ is split by what a test needs to run, not by what it covers. The GHDL
 # simulations under tests/hdl/ need ghdl and the generated core, the host side
@@ -28,7 +26,14 @@ GEN_STAMP := $(GEN_AXIS)/.stamp
 # directly stays just as up to date as going through this file.
 GEN_DEPS  := $(CODEGEN) $(wildcard hdl/*.vhdl) $(wildcard codegen/templates/*.csv)
 
-.PHONY: all configure sim sim-hdl sim-python sim-c clean $(TEST_DIRS) $(DOC_DIRS)
+# One venv for whatever optional dependency the system python3 doesn't have:
+# PySide6 (Ubuntu 22.04 predates its apt packaging) and, later, cocotb.
+# tests/python/05_gui carries the actual PySide6 resolution logic and needs to
+# run standalone anyway; this is a placeholder for a future top level gui
+# target, which will want the same venv.
+VENV := venv-libreila
+
+.PHONY: all configure sim sim-hdl sim-python sim-c check-pyside6 check-cocotb clean $(TEST_DIRS) $(DOC_DIRS)
 
 all: sim
 
@@ -63,6 +68,19 @@ sim-python:
 sim-c:
 	@echo "Running the baremetal driver tests..."
 	@for d in $(C_TEST_DIRS); do $(MAKE) -C $$d sim || exit 1; done
+
+# check-pyside6: not part of any build, just tells the user how to get PySide6
+check-pyside6:
+	@python3 -c "import PySide6.QtWidgets" >/dev/null 2>&1 || [ -x $(VENV)/bin/python3 ] || \
+	  { echo "PySide6 not found for python3 or in $(VENV)/."; \
+	    echo "Install it with: python3 -m venv $(VENV) && $(VENV)/bin/pip install PySide6"; }
+
+# check-cocotb: not part of any build yet, tells the user how to get cocotb.
+# tests/full/ will want it once there is something there to run with it.
+check-cocotb:
+	@python3 -c "import cocotb" >/dev/null 2>&1 || [ -x $(VENV)/bin/python3 ] || \
+	  { echo "cocotb not found for python3 or in $(VENV)/."; \
+	    echo "Install it with: python3 -m venv $(VENV) && $(VENV)/bin/pip install cocotb"; }
 
 # clean: cleans up all the generated files in the project, recursing into
 # every test/doc directory that has its own Makefile with a clean target

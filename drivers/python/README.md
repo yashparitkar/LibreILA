@@ -7,7 +7,8 @@ This directory contains the python driver for the LibreILA IP. The driver is use
 | [session.py](session.py) | One connection to one core, and every operation either front end can ask of it |
 | [driver.py](driver.py) | The register map over UART. Knows nothing about what the probe bits mean |
 | [vcd.py](vcd.py) | The portmap and the VCD. Turns raw samples back into named signals |
-| [gui.py](gui.py) | Not finished, `--gui` reports that and exits |
+| [trigger.py](trigger.py) | Per-signal trigger patterns, `0b00101xxxx` and the like, to and from the condition/mask pair |
+| [gui.py](gui.py) | The graphical front end, `--gui` |
 
 `session.py` sits between the front ends and the two layers below, because the front ends disagree about **lifetime and nothing else**. The command line builds a session, runs its verbs and drops it, so a capture still spans invocations by leaving the state in the core. The GUI keeps one alive per tab, because a window that reopened the port on every button press would pay for the identity block each time and could not hold the port across two actions at all.
 
@@ -18,7 +19,11 @@ Neither of those is a different design. The core is the record either way; a ses
 ## Requirements
 Following packages are required:
 * pyserial: `sudo apt install python3-serial`
-* PySide6: `sudo apt install python3-pyside6` for the GUI
+* PySide6, for `--gui` only: `sudo apt install python3-pyside6.qtwidgets python3-pyside6.qtgui`
+
+PySide6 ships one package per Qt module on Debian and Ubuntu, so `python3-pyside6` is not a package and `python3-pyside6.qtcore` on its own is not enough. Everything except `--gui` works without either.
+
+Ubuntu 22.04 predates PySide6's apt packaging, so those packages don't exist there; use `pip install PySide6` instead. The root [Makefile](../../Makefile) and [tests/python/05_gui](../../tests/python/05_gui/) both resolve PySide6 from `venv-libreila` at the repo root if it's set up: `python3 -m venv venv-libreila && ./venv-libreila/bin/pip install PySide6`.
 
 ## Usage
 Tell the tool about a core once, then talk to it by the UID it reports:
@@ -80,6 +85,15 @@ A value with bits above the probe width is refused rather than trimmed. The core
 Note that `code_generator.py` defaults `--portmap` to `templates/default_portmap.csv` while the driver defaults to `codegen/portmap.csv`. They ship identical, but if you edit one, pass `--portmap` to both tools.
 
 The file is delta encoded: the first sample states every signal, after that only what moved. Timestamps are in picoseconds, one sample apart at the sampling clock the core reports. The trigger is carried as an extra 1-bit wire named `trigger` that pulses for exactly the sample it fired on, since VCD has no marker of its own.
+
+### The GUI
+`./libre_ila.py --gui` opens one tab per stored device, titled `CONNECTED ILA<UID>` or `DISCONNECTED ILA<UID>`. A tab owns one session for as long as it lives, so the port is opened once and held rather than reopened per button press.
+
+It reads the same device store as `--device`, so `--device-dir` has to agree between the two. `--waveform-viewer` and `--portmap` are passed through.
+
+To see it without hardware, `make gui` in [tests/python/05_gui](../../tests/python/05_gui/) runs it against fake cores.
+
+This first pass covers connect, arm, disarm, force trigger, capture with a progress bar, gtkwave, and a read-only view of the trigger. The per-signal conditions table is next; the translator behind it is already in [trigger.py](trigger.py).
 
 ### Exit statuses
 | | |
