@@ -2,7 +2,7 @@
 # File: gui.py
 # Author: Y.U.P. (yashparitkar)
 # Created: 2026-07-24 Fri 19:49
-# Last Modified: 2026-08-05 Wed 10:41
+# Last Modified: 2026-08-05 Wed 16:42
 #
 # Description: ILA graphical interface
 #   One tab per device, each owning a session.Session for as long as the tab
@@ -287,7 +287,7 @@ class DeviceTab(QWidget):
         # what TRIG_CFG is: EDGE decides whether FALLING means anything at all,
         # which the register map spells "read only when EDGE is 1".
         self.level_edge_combo = QComboBox()
-        self.level_edge_combo.addItems(["level  ⎍", "edge  ⭘"])
+        self.level_edge_combo.addItems(["level ⎍", "edge _/⎺"])
         self.level_edge_combo.currentIndexChanged.connect(self._on_level_edge_changed)
 
         self.direction_combo = QComboBox()

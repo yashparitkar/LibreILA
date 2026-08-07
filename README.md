@@ -2,7 +2,7 @@
 
 
 <p align="center" width="100%">
-    <img width="60%" src="docs/tex/images/libre_ila_logo.svg"> 
+    <img width="20%" src="docs/tex/images/libre_ila_logo.svg"> 
 </p>
 
 ## What is LibreILA?
@@ -70,6 +70,10 @@ Since the core is generic, a build is fully described by two csv files in [codeg
 `make sim` runs all three, host side first because those take milliseconds. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on. See [tests/README.md](tests/README.md) for what each one covers.
 
 # Drivers
+
+<p align="center" width="100%">
+    <img width="60%" src="docs/tex/images/05-armed.png"> 
+</p>
 * [drivers/baremetal/](drivers/baremetal/): C driver for the bare core over AXI4Lite. The probe is opaque to it, the whole register map is derived from the probe width, buffer depth and sampling clock frequency read back from the core.
 * [drivers/python/](drivers/python/): python driver for the UART wrapper. `libre_ila.py` is the command line front end, `driver.py` speaks the register map and `vcd.py` turns the samples back into named signals, reading `portmap.csv` for the names and writing a `.vcd` any waveform viewer will open. `read_regs`/`write_regs` speak the UART packet format, splitting anything longer than 127 words across packets, and raise on a timeout or a mismatched response header. The GUI is still to come.
 

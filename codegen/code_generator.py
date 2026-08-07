@@ -1,3 +1,4 @@
+#!/bin/python3
 #####################################################################
 # File: code_generator.py
 # Author: Y.U.P. (yashparitkar)
