@@ -2,7 +2,7 @@
 -- File: libre_ila.vhdl
 -- Author: Y.U.P. (yashparitkar)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-08-04 Tue 21:53
+-- Last Modified: 2026-08-07 Fri 17:50
 --
 -- Description: A generic ILA, the probe is described by codegen/portmap.csv
 -- Usage:
@@ -25,19 +25,19 @@ library ieee;
 entity libre_ila is
   generic (
     -- Clock speed of the sampling (probe) domain, used in plotting
-    G_SAMP_CLK_FREQ     : integer := 100000000;
-    G_AXIL_CLK_FREQ     : integer := 100000000;
-    G_EXTERNAL_TRIG     : integer := 0;    -- 1 for external trigger pin
-    G_PROBE_WIDTH       : natural := 67;
-    G_SAMP_BUFF_DEPTH   : natural := 2048; -- Keep it a power of two
+    G_SAMP_CLK_FREQ   : integer := 100000000;
+    G_AXIL_CLK_FREQ   : integer := 100000000;
+    G_EXTERNAL_TRIG   : integer := 0;    -- 1 for external trigger pin
+    G_PROBE_WIDTH     : natural := 67;
+    G_SAMP_BUFF_DEPTH : natural := 2048; -- Keep it a power of two
 
     -- Identity of this instance, read back at UID. MGCKEY is the fixed constant
     -- that says "this is a LibreILA", this one says which one, so several cores
     -- in the same system can be told apart. Zero means unset.
-    G_UID               : natural := 0;
+    G_UID : natural := 0;
 
-    C_S_AXIL_DATA_WIDTH : integer := 32;   -- DONT CHANGE
-    C_S_AXIL_ADDR_WIDTH : integer := 32    -- DONT CHANGE
+    C_S_AXIL_DATA_WIDTH : integer := 32; -- DONT CHANGE
+    C_S_AXIL_ADDR_WIDTH : integer := 32  -- DONT CHANGE
   );
   port (
     i_rst_sync : in    std_logic;
@@ -155,11 +155,21 @@ architecture rtl of libre_ila is
 
   type t_lane is array (0 to G_SAMP_BUFF_DEPTH - 1) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
 
-  type t_lane_arr is array (0 to C_N_LANES - 1) of t_lane;
+  type t_lane_rd_arr is array (0 to C_N_LANES - 1) of std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
 
-  signal samp_buff : t_lane_arr;
   attribute syn_ramstyle : string;
-  attribute syn_ramstyle of samp_buff : signal is "lsram";
+
+  -- Shared read-address decode for the sample buffer, combinational, fans
+  -- out to every lane in g_samp_lanes. r_intra_stride_idx trails it by one
+  -- cycle so it lands together with lane_rd_data once that's registered.
+  signal w_rd_hit           : std_logic;
+  signal w_stride_idx       : integer range 0 to G_SAMP_BUFF_DEPTH - 1;
+  signal w_intra_stride_idx : integer range 0 to C_AXIL_STRIDE - 1;
+  signal r_intra_stride_idx : integer range 0 to C_AXIL_STRIDE - 1;
+
+  -- One registered read per lane, muxed into samp_rd_data by
+  -- p_samp_rd_mux once r_intra_stride_idx catches up
+  signal lane_rd_data : t_lane_rd_arr;
 
   signal r_wr_idx  : unsigned(C_ADDR_WIDTH - 1 downto 0);
   signal w_probe   : std_logic_vector(G_PROBE_WIDTH - 1 downto 0);
@@ -287,6 +297,9 @@ architecture rtl of libre_ila is
   signal axil_rresp   : std_logic_vector(1 downto 0);
   signal axil_rvalid  : std_logic;
 
+  -- Registered read of the per-lane sample buffers, see p_samp_rd_mux
+  signal samp_rd_data : std_logic_vector(C_S_AXIL_DATA_WIDTH - 1 downto 0);
+
   -- Example-specific design signals
   -- local parameter for addressing 32 bit / 64 bit C_S_AXIL_DATA_WIDTH
   -- ADDR_LSB is used for addressing 32/64 bit registers/memories
@@ -373,16 +386,7 @@ begin
     trig_and <= '1' when (trig_mask and not trig_vect) = (trig_vect'range => '0') else
                 '0';
 
-    -- One sample of history on the reduced condition.
-    --
-    -- arm_samp seeds it with the live condition rather than clearing it: a
-    -- condition that is already true when the ILA is armed must not look like a
-    -- 0 -> 1 transition, or the edge modes would fire on the first sample
-    -- exactly like the level mode does, which is the thing they exist to avoid.
-    --
-    -- The update is gated with en_wr so "previous" means the previous *stored*
-    -- sample. That keeps the edge aligned with the sample train if the write
-    -- enable is ever qualified with a handshake, see p_write below.
+    -- For edge triggers
     p_trig_edge : process (samp_aclk) is
     begin
 
@@ -400,7 +404,7 @@ begin
 
     -- trig_cfg(1): 0 = level, 1 = edge
     -- trig_cfg(2): 0 = rising, 1 = falling, only read when trig_cfg(1) = '1'
-    trig <= trig_lvl                           when trig_cfg(1) = '0' else
+    trig <= trig_lvl when trig_cfg(1) = '0' else
             (trig_lvl and (not trig_lvl_prev)) when trig_cfg(2) = '0' else
             ((not trig_lvl) and trig_lvl_prev);
 
@@ -436,18 +440,44 @@ begin
       -- Example,
       -- elsif (probe_slave_tvalid = '1' and probe_master_tready = '1') then
       elsif (en_wr = '1') then
-
-        for lane in 0 to C_N_LANES - 1 loop
-
-          samp_buff(lane)(to_integer(r_wr_idx)) <= w_wr_data(lane * 32 + 31 downto lane * 32);
-
-        end loop;
-
         r_wr_idx <= r_wr_idx + 1;
       end if;
     end if;
 
   end process p_write;
+
+  -- Sample buffer storage, one independent flat RAM per lane; using array of lanes didn't get synthesized as RAMs in both GHDL and Libero 2025.2
+
+  g_samp_lanes : for lane in 0 to C_N_LANES - 1 generate
+
+    signal lane_mem : t_lane;
+    attribute syn_ramstyle of lane_mem : signal is "lsram";
+
+  begin
+
+    p_lane_write : process (samp_aclk) is
+    begin
+
+      if rising_edge(samp_aclk) then
+        if (en_wr = '1') then
+          lane_mem(to_integer(r_wr_idx)) <= w_wr_data(lane * 32 + 31 downto lane * 32);
+        end if;
+      end if;
+
+    end process p_lane_write;
+
+    p_lane_read : process (s_axil_aclk) is
+    begin
+
+      if rising_edge(s_axil_aclk) then
+        if (w_rd_hit = '1') then
+          lane_rd_data(lane) <= lane_mem(w_stride_idx);
+        end if;
+      end if;
+
+    end process p_lane_read;
+
+  end generate g_samp_lanes;
 
   -------------------------------------------------------------------
 
@@ -831,13 +861,64 @@ begin
 
   end process p_rsm;
 
+  -- Address decode is combinational and shared by every lane in
+  p_rd_decode : process (s_axil_araddr, state_read, s_axil_arvalid, axil_arready) is
+
+    variable rd_idx      : integer range 0 to C_MAX_DECODED_IDX;
+    variable samp_rd_idx : integer range 0 to ((G_SAMP_BUFF_DEPTH + 1) * C_AXIL_STRIDE);
+
+  begin
+
+    w_rd_hit           <= '0';
+    w_stride_idx       <= 0;
+    w_intra_stride_idx <= 0;
+
+    if (state_read = RADDR and s_axil_arvalid = '1' and axil_arready = '1') then
+      rd_idx := to_integer(unsigned(s_axil_araddr(ADDR_LSB + OPT_MEM_ADDR_BITS downto ADDR_LSB)));
+
+      if (rd_idx >= C_AXIL_N_CTRL_REGS and rd_idx < (C_AXIL_N_CTRL_REGS + G_SAMP_BUFF_DEPTH * C_AXIL_STRIDE)) then
+        samp_rd_idx := rd_idx - C_AXIL_N_CTRL_REGS;
+
+        w_stride_idx       <= samp_rd_idx / C_AXIL_STRIDE;
+        w_intra_stride_idx <= samp_rd_idx mod C_AXIL_STRIDE;
+        w_rd_hit           <= '1';
+      end if;
+    end if;
+
+  end process p_rd_decode;
+
+  -- processing stride index
+  p_rd_meta : process (s_axil_aclk) is
+  begin
+
+    if rising_edge(s_axil_aclk) then
+      if (w_rd_hit = '1') then
+        r_intra_stride_idx <= w_intra_stride_idx;
+      end if;
+    end if;
+
+  end process p_rd_meta;
+
+  -- reading proper lane
+  p_samp_rd_mux : process (r_intra_stride_idx, lane_rd_data) is
+  begin
+
+    samp_rd_data <= (others => '0');
+
+    if (r_intra_stride_idx < C_N_LANES) then
+      samp_rd_data <= lane_rd_data(r_intra_stride_idx);
+    end if;
+
+  end process p_samp_rd_mux;
+
+  -------------------------------------------------------------------
+
   -- Implement memory mapped register select and read logic generation
   -- Bounds-check address to avoid out-of-range access on register arrays.
-  p_rlg : process (axil_araddr, slv_reg_in, slv_reg_out, samp_buff) is
+  p_rlg : process (axil_araddr, slv_reg_in, slv_reg_out, samp_rd_data) is
 
     variable rd_idx           : integer range 0 to C_MAX_DECODED_IDX;
     variable samp_rd_idx      : integer range 0 to ((G_SAMP_BUFF_DEPTH + 1) * C_AXIL_STRIDE);
-    variable stride_idx       : integer range 0 to G_SAMP_BUFF_DEPTH - 1;
     variable intra_stride_idx : integer range 0 to C_AXIL_STRIDE - 1;
 
   begin
@@ -853,13 +934,12 @@ begin
     elsif (rd_idx < (C_AXIL_N_CTRL_REGS + G_SAMP_BUFF_DEPTH  * C_AXIL_STRIDE)) then
       -- Mapping of the RAM regs
       samp_rd_idx      := rd_idx - C_AXIL_N_CTRL_REGS;
-      stride_idx       := samp_rd_idx / C_AXIL_STRIDE;
       intra_stride_idx := samp_rd_idx mod C_AXIL_STRIDE;
 
       -- Display the data STRIDE wise
 
       if (intra_stride_idx < C_N_LANES) then
-        s_axil_rdata <= samp_buff(intra_stride_idx)(stride_idx);
+        s_axil_rdata <= samp_rd_data;
       else
         s_axil_rdata <= (others => '0');
       end if;

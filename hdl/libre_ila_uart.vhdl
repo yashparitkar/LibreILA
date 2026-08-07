@@ -24,14 +24,14 @@ library ieee;
 
 entity libre_ila_uart is
   generic (
-    G_SAMP_CLK_FREQ      : integer := 100_000_000;
-    G_AXIL_CLK_FREQ      : integer := 100_000_000;
-    G_EXTERNAL_TRIG      : integer := 0;       -- 1 for external trigger pin
-    G_PROBE_WIDTH        : natural := 67;      -- Keep it a multiple of 32 for best results
-    G_SAMP_BUFF_DEPTH    : natural := 2048;    -- Keep it a power of two for best results
+    G_SAMP_CLK_FREQ   : integer := 100_000_000;
+    G_AXIL_CLK_FREQ   : integer := 100_000_000;
+    G_EXTERNAL_TRIG   : integer := 0;    -- 1 for external trigger pin
+    G_PROBE_WIDTH     : natural := 67;   -- Keep it a multiple of 32 for best results
+    G_SAMP_BUFF_DEPTH : natural := 2048; -- Keep it a power of two for best results
 
     -- Identity of this instance, passed straight to the core. Zero means unset
-    G_UID                : natural := 0;
+    G_UID : natural := 0;
 
     G_UART_RX_FIFO_DEPTH : natural := 1024;    -- Depth of the FIFO for UART RX
     G_UART_TX_FIFO_DEPTH : natural := 1024;    -- Depth of the FIFO for UART TX
@@ -479,12 +479,7 @@ begin
   -- writing to the UART FIFOs, and handling the AXI4Lite read and
   -- write requests.
   p_main : process (s_axil_aclk) is
-
-    variable byte_count_int : integer range 0 to 15;
-
   begin
-
-    byte_count_int := to_integer(unsigned(byte_count));
 
     if rising_edge(s_axil_aclk) then
       if ((i_rst_sync = '1') or (wdt_trig = '1')) then
@@ -548,10 +543,37 @@ begin
             -- Get next 4 bytes from the UART RX FIFO for the address, MSB first
             if (byte_count < 4) then
               if (uart_rx_fifo_nempty = '1' and uart_rx_fifo_rd_en_d1 = '0') then
-                uart_rx_fifo_rd_en                                                    <= '1';
-                uart_rx_fifo_rd_en_d1                                                 <= '1';
-                word_addr((31 - byte_count_int * 8) downto (24 - byte_count_int * 8)) <= uart_rx_fifo_rd_data;
-                byte_count                                                            <= byte_count + 1;
+                uart_rx_fifo_rd_en    <= '1';
+                uart_rx_fifo_rd_en_d1 <= '1';
+                byte_count            <= byte_count + 1;
+
+                -- Synplify rejects a variable-bounded slice on the left of a
+                -- signal assignment (VHDL-1133), so the byte lane is picked
+                -- with a case on byte_count instead, same as IUW_HDR below.
+                case byte_count is
+
+                  when "0000" =>
+
+                    word_addr(31 downto 24) <= uart_rx_fifo_rd_data;
+
+                  when "0001" =>
+
+                    word_addr(23 downto 16) <= uart_rx_fifo_rd_data;
+
+                  when "0010" =>
+
+                    word_addr(15 downto 8) <= uart_rx_fifo_rd_data;
+
+                  when "0011" =>
+
+                    word_addr(7 downto 0) <= uart_rx_fifo_rd_data;
+
+                  when others =>
+
+                    null;
+
+                end case;
+
               end if;
             else
               -- Address received, judge the request and move to header
@@ -669,9 +691,35 @@ begin
                     if (uart_tx_fifo_nfull = '1' and uart_tx_fifo_wr_en_d1 = '0') then
                       uart_tx_fifo_wr_en    <= '1';
                       uart_tx_fifo_wr_en_d1 <= '1';
-                      uart_tx_fifo_wr_data  <= word_data((31 - byte_count_int * 8) downto (24 - byte_count_int * 8));
                       byte_count            <= byte_count + 1;
                       wdt_reset             <= '1';
+
+                      -- See IUW_ADDR for why this is a case on byte_count
+                      -- rather than a variable-bounded slice of word_data.
+                      case byte_count is
+
+                        when "0000" =>
+
+                          uart_tx_fifo_wr_data <= word_data(31 downto 24);
+
+                        when "0001" =>
+
+                          uart_tx_fifo_wr_data <= word_data(23 downto 16);
+
+                        when "0010" =>
+
+                          uart_tx_fifo_wr_data <= word_data(15 downto 8);
+
+                        when "0011" =>
+
+                          uart_tx_fifo_wr_data <= word_data(7 downto 0);
+
+                        when others =>
+
+                          null;
+
+                      end case;
+
                     end if;
                   else
                     -- All bytes written, increment word count and address.
@@ -713,10 +761,36 @@ begin
                   -- Get the next byte from the UART RX FIFO
                   if (byte_count < 4) then
                     if (uart_rx_fifo_nempty = '1' and uart_rx_fifo_rd_en_d1 = '0') then
-                      uart_rx_fifo_rd_en                                                <= '1';
-                      uart_rx_fifo_rd_en_d1                                             <= '1';
-                      word_data(31 - byte_count_int * 8 downto 24 - byte_count_int * 8) <= uart_rx_fifo_rd_data;
-                      byte_count                                                        <= byte_count + 1;
+                      uart_rx_fifo_rd_en    <= '1';
+                      uart_rx_fifo_rd_en_d1 <= '1';
+                      byte_count            <= byte_count + 1;
+
+                      -- See IUW_ADDR for why this is a case on byte_count
+                      -- rather than a variable-bounded slice of word_data.
+                      case byte_count is
+
+                        when "0000" =>
+
+                          word_data(31 downto 24) <= uart_rx_fifo_rd_data;
+
+                        when "0001" =>
+
+                          word_data(23 downto 16) <= uart_rx_fifo_rd_data;
+
+                        when "0010" =>
+
+                          word_data(15 downto 8) <= uart_rx_fifo_rd_data;
+
+                        when "0011" =>
+
+                          word_data(7 downto 0) <= uart_rx_fifo_rd_data;
+
+                        when others =>
+
+                          null;
+
+                      end case;
+
                     end if;
                   else
                     -- All bytes received, request AXI4Lite Write process.
