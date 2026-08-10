@@ -1,0 +1,10 @@
+Detailed Resource Usage
+Module Name,Fabric 4LUT,Fabric DFF,Interface 4LUT,Interface DFF,Single-Ended I/O,Differential I/O Pairs,uSRAM (64x12),LSRAM (20K),Chip Globals,PLL
+libre_ila_uart_0/Primitives,115,302,0,0,0,0,0,0,0,0
+libre_ila_uart_0/libre_ila_inst/Primitives,600,388,252,252,0,0,0,7,0,0
+libre_ila_uart_0/libre_ila_inst/p_wlg.slv_reg_in_p_wlg.slv_reg_in_0_0/Primitives,0,0,12,12,0,0,1,0,0,0
+libre_ila_uart_0/libre_ila_inst/p_wlg.slv_reg_in_p_wlg.slv_reg_in_0_1/Primitives,0,0,12,12,0,0,1,0,0,0
+libre_ila_uart_0/libre_ila_inst/p_wlg.slv_reg_in_p_wlg.slv_reg_in_0_2/Primitives,0,0,12,12,0,0,1,0,0,0
+libre_ila_uart_0/uart_inst/Primitives,156,83,0,0,0,0,0,0,0,0
+libre_ila_uart_0/uart_rx_fifo_inst/Primitives,367,22,36,36,0,0,0,1,0,0
+libre_ila_uart_0/uart_tx_fifo_inst/Primitives,42,22,36,36,0,0,0,1,0,0

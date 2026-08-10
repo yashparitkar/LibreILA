@@ -1,0 +1,21 @@
+####################################################################
+# File: axi4s_full_portmap.csv
+# Author: Y.U.P. (yashparitkar)
+# Last Modified: 2026-08-10 Mon 11:22
+#
+# Description: AMBA AXI4S portmap, modify tdata, tstrb, tkeep, tid, 
+# tdest, tuser widths as per your design requirements.
+####################################################################
+# signal,width,type
+axis_aclk,1,in
+axis_aresetn,1,in
+axis_tvalid,1,in
+axis_tready,1,out
+axis_tdata,64,in
+axis_tstrb,8,in
+axis_tkeep,8,in
+axis_tlast,1,in
+axis_tid,8,in
+axis_tdest,8,in
+axis_tuser,8,in
+axis_twakeup,1,in

@@ -219,7 +219,7 @@ typedef struct __libre_ila_instance_t
 #define MAGIC_KEY               0xb01dface
 
 /*-------------------------------------------------------------------------*//**
-The LIBRE_ILA_init() function initializes the CoreLibreILA driver instance with thte base address of the CoreLibreILA hardware instance and the function pointers to send through PCDMA.
+The LIBRE_ILA_init() function initializes the CoreLibreILA driver instance with thte base address of the CoreLibreILA hardware instance.
 
 The init function checks the connection to the hardware by reading the MAGIC_KEY register, if the read value does not match the expected MAGIC_KEY value, the function returns failure status.
 

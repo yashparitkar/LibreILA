@@ -1,6 +1,6 @@
 % File: datasheet.tex
 % Author: Y.U.P. (yashparitkar)
-% Last Modified: 2026-08-05 Wed 16:45
+% Last Modified: 2026-08-10 Mon 19:57
 %
 % Description: LaTeX source file for the LibreILA datasheet. This covers the technical specifications and features of the LibreILA tool.
 
@@ -520,7 +520,9 @@ For the stock 64-bit AXI4Stream build \verb|G_PROBE_WIDTH| is 67, so
 \verb|C_N_LANES| is 3, $a$ is 4 and \verb|C_ADDR_WIDTH| is 11.
 
 \subsection{Configuration parameters}
-\begin{table}[H]
+The core is parameterised by a set of generics, which are listed in Table \ref{tab:generics}. The wrapper adds the \acs{UART} parameters, which are also listed in the same table. The AXI4Lite parameters are fixed and should not be changed.  The parameters G\_PROBE\_WIDTH is generated from the portmap.csv file and must be generated rather than changed by hand. 
+
+\begin{table}[h]
     \centering
     \begin{tabularx}{\textwidth}{|l|l|X|}
         \hline
@@ -568,7 +570,7 @@ belongs on the fabric side of the IO buffer where the bus is not
 bidirectional yet. Where a link genuinely cannot be spliced, tap it
 with \verb|mon| instead.
 
-\begin{table}[H]
+\begin{table}[h]
     \centering
     \begin{tabular}{|l|l|l|l|}
         \hline
@@ -590,7 +592,7 @@ Table~\ref{tab:ports}. The AXI4Lite slave port carries the standard AW,
 W, B, AR and R channel signals with the \verb|s_axil_| prefix and is
 not enumerated here.
 
-\begin{table}[H]
+\begin{table}[h]
     \centering
     \begin{tabularx}{\textwidth}{|l|l|l|X|}
         \hline
@@ -681,6 +683,14 @@ Table~\ref{tab:regsummary} lists the whole map. Offsets in the input
 block and above are given symbolically in $a$, with the value for the
 stock build ($a = 4$) in parentheses.
 
+The AXI4Lite decoder \emph{truncates} an address it cannot decode
+rather than rejecting it, so a misaligned or out of range access
+silently aliases onto a real register. Both supplied drivers check
+alignment on the host side and the \acs{UART} wrapper checks it in
+hardware, because two registers of the input block act on the write
+rather than on the data: a stray write to ARM\_FT would arm the core,
+and one to DISARM would throw away a capture it was part way through.
+
 % Not a table*: the body is \onecolumn, where the two-column float machinery
 % is off and a starred float ends up typeset twice.
 \begin{table}[H]
@@ -735,14 +745,7 @@ $a \times$\verb|G_SAMP_BUFF_DEPTH| buffer registers. For the stock
 build that is 20 control registers and 8192 buffer registers, ending at
 byte offset \hex{8050}.
 
-The AXI4Lite decoder \emph{truncates} an address it cannot decode
-rather than rejecting it, so a misaligned or out of range access
-silently aliases onto a real register. Both supplied drivers check
-alignment on the host side and the \acs{UART} wrapper checks it in
-hardware, because two registers of the input block act on the write
-rather than on the data: a stray write to ARM\_FT would arm the core,
-and one to DISARM would throw away a capture it was part way through.
-
+\newpage
 \subsection{STATUS}
 \regprop{STATUS}{Output block}{\hex{00}}{\hex{00000000}}{Read-only}
 
@@ -803,6 +806,7 @@ core is capturing its post-trigger samples.
 \noindent\textbf{Bit 0 -- ARMED} Set while the core is armed and
 capturing.
 
+\newpage
 \subsection{MGCKEY}
 \regprop{MGCKEY}{Output block}{\hex{04}}{\hex{B01DFACE}}{Read-only}
 
@@ -842,6 +846,7 @@ that a host can still recognise a core whose UID it has never been told.
 
 \noindent\textbf{Bits 31:0 -- MGCKEY[31:0]} Constant \hex{B01DFACE}.
 
+\newpage
 \subsection{SAMP\_CLK\_FREQ}
 \regprop{SAMP\_CLK\_FREQ}{Output block}{\hex{08}}{\texttt{G\_SAMP\_CLK\_FREQ}}{Read-only}
 
@@ -879,6 +884,7 @@ being told the clock rate separately.
 \verb|samp_aclk| in Hz. Here and below, a reset of \texttt{x} means the
 bit is fixed at synthesis by the corresponding generic.
 
+\newpage
 \subsection{WIDTH}
 \regprop{WIDTH}{Output block}{\hex{0C}}{\texttt{G\_PROBE\_WIDTH}}{Read-only}
 
@@ -914,6 +920,7 @@ lane count and the stride $a$ both follow from it.
 \noindent\textbf{Bits 31:0 -- WIDTH[31:0]} \verb|G_PROBE_WIDTH|, the
 width of the probe word in bits.
 
+\newpage
 \subsection{DEPTH}
 \regprop{DEPTH}{Output block}{\hex{10}}{\texttt{G\_SAMP\_BUFF\_DEPTH}}{Read-only}
 
@@ -948,6 +955,7 @@ can take its logarithm to get the width of a sample index.
 \noindent\textbf{Bits 31:0 -- DEPTH[31:0]} \verb|G_SAMP_BUFF_DEPTH|,
 the number of samples the buffer holds.
 
+\newpage
 \subsection{UID}
 \regprop{UID}{Output block}{\hex{14}}{\texttt{G\_UID}}{Read-only}
 
@@ -997,6 +1005,7 @@ hardware or by either driver. Zero is what a core built without a
 instance was given at synthesis. Bit 31 always reads zero: the generic
 is a \verb|natural|, whose upper bound is \hex{7FFFFFFF}.
 
+\newpage
 \subsection{SAMP\_BUFF\_TRIG\_IDX}
 \regprop{SAMP\_BUFF\_TRIG\_IDX}{Output block}{\hex{18}}{\hex{00000000}}{Read-only}
 
@@ -1036,6 +1045,7 @@ the stock 2048-deep build where that is 11 bits. Bits above
 \noindent\textbf{Bits 10:0 -- TRIG\_IDX} Buffer index of the trigger
 sample, valid once DONE is set.
 
+\newpage
 \subsection{SAMP\_BUFF\_FRST\_IDX}
 \regprop{SAMP\_BUFF\_FRST\_IDX}{Output block}{\hex{1C}}{\hex{00000000}}{Read-only}
 
@@ -1071,6 +1081,7 @@ $(\mathrm{FRST\_IDX} + i) \bmod \mathrm{DEPTH}$.
 \noindent\textbf{Bits 10:0 -- FRST\_IDX} Buffer index of the oldest
 sample, valid once DONE is set.
 
+\newpage
 \subsection{TRIG\_POS}
 \regprop{TRIG\_POS}{Input block}{\hex{20}}{\hex{00000000}}{Read/Write}
 
@@ -1108,6 +1119,7 @@ the diagram shows the stock 2048-deep build.
 
 \noindent\textbf{Bits 10:0 -- TRIG\_POS} Number of pre-trigger samples.
 
+\newpage
 \subsection{ARM\_FT}
 \regprop{ARM\_FT}{Input block}{\hex{24}}{\hex{00000000}}{Write-only}
 
@@ -1148,6 +1160,7 @@ writing here.
 \noindent\textbf{Bits 31:0 -- ARM\_FT[31:0]} The write itself is the
 command, the data is a don't care.
 
+\newpage
 \subsection{TRIG\_CFG}
 \regprop{TRIG\_CFG}{Input block}{\hex{28}}{\hex{00000000}}{Read/Write}
 
@@ -1228,6 +1241,7 @@ is 1.
     \end{tabularx}
 \end{table}
 
+\newpage
 \subsection{DISARM}
 \regprop{DISARM}{Input block}{\hex{2C}}{\hex{00000000}}{Write-only}
 
@@ -1280,6 +1294,7 @@ cancels it.
 \noindent\textbf{Bits 31:0 -- DISARM[31:0]} The write itself is the
 command, the data is a don't care.
 
+\newpage
 \subsection{TRIG\_COND(n) and TRIG\_MASK(n)}
 \regprop{TRIG\_COND(n) / TRIG\_MASK(n)}{Input block}{$\hex{30} + 4n$ / $\hex{30} + 4a + 4n$}{\hex{00000000}}{Read/Write}
 
@@ -1322,6 +1337,7 @@ mask bits at 0.
 \noindent\textbf{Bits 31:0} Trigger condition and mask for probe bits
 $32n+31$ downto $32n$.
 
+\newpage
 \subsection{SAMP\_BUFF(k,l)}
 \regprop{SAMP\_BUFF(k,l)}{Sample buffer}{$\hex{30} + 8a + 4(ak + l)$}{---}{Read-only}
 
@@ -1524,32 +1540,52 @@ and is not stored, so a 67-bit probe occupies three lanes in RAM and
 not four. For the stock build that is $2048 \times 3 \times 32 =
 196{,}608$ bits, which maps onto PolarFire \acs{LSRAM} blocks.
 
-Logic usage is dominated by the trigger comparator, which is
-combinational and carries two bits of configuration per probed bit,
-plus the sample counter and the small AXI4Lite slave state machine. The
-\acs{UART} wrapper adds its two FIFOs, sized by
-\verb|G_UART_RX_FIFO_DEPTH| and \verb|G_UART_TX_FIFO_DEPTH|, the
-\acs{UART} itself and the packet parser.
-
-\todo{Instantiate the core on the PolarFire SoC at several probe widths
-and buffer depths, and fill in the measured LUT, DFF and \acs{LSRAM}
-counts along with the achieved fmax for both clock domains.}
+This design uses UART at 115200 baud and size of both the transmit and receive \acs{FIFO}s is 1024 bytes. The core is clocked at 100 MHz for both clock domains.
 
 \begin{table}[H]
     \centering
-    \begin{tabularx}{\textwidth}{|l|l|X|X|X|X|}
+    \begin{tabularx}{\textwidth}{|l|l|X|X|X|X|X|X|}
         \hline
-        \rowcolor{gray!40} \textbf{Probe width} & \textbf{Depth} & \textbf{LUTs} & \textbf{DFFs} & \textbf{LSRAM} & \textbf{fmax} \\
+        \rowcolor{gray!40} \textbf{Probe width} & \textbf{Depth} & \textbf{Fabric 4LUT} & \textbf{Fabric DFF} & \textbf{Interface 4LUT} & \textbf{Interface DFF} & \textbf{LSRAM (20K)} & \textbf{fmax} \\
         \hline
-        67   & 2048 & --- & --- & --- & --- \\
+        67   & 2048 & 1280 & 817 & 360 & 360 & 9 & 243 MHz \\
         \hline
-        32   & 1024 & --- & --- & --- & --- \\
+        67 (ext\_trig)  & 2048 & 1015 & 558 & 360 & 360 & 9 & 270 MHz \\
         \hline
-        128  & 4096 & --- & --- & --- & --- \\
+        67   & 4096 & 1267 & 828 & 540 & 540 & 14 & 252 MHz \\
+        \hline
+        35   & 2048 & 1238 & 817 & 288 & 288 & 7 & 252 MHz \\
         \hline
     \end{tabularx}
-    \caption{Device utilization, PolarFire SoC. To be measured.}
+    \caption{Device utilization, PolarFire SoC. Includes the \acs{UART} wrapper
+        (\acs{UART}, TX/RX \acs{FIFO}s and packet parser) around the
+        \texttt{libre\_ila} core.}
     \label{tab:utilization}
+\end{table}
+
+Table~\ref{tab:utilization-core} isolates the \texttt{libre\_ila} core
+itself (the sample buffer, trigger comparator, address decode and
+AXI4Lite slave state machine), excluding the \acs{UART} wrapper that
+surrounds it in the \acs{IP} used for this measurement.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|X|X|X|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Probe width} & \textbf{Depth} & \textbf{Fabric 4LUT} & \textbf{Fabric DFF} & \textbf{Interface 4LUT} & \textbf{Interface DFF} & \textbf{LSRAM (20K)} \\
+        \hline
+        67   & 2048 & 600 & 388 & 288 & 288 & 7 \\
+        \hline
+        67 (ext\_trig)   & 2048 & 352 & 129 & 288 & 288 & 7 \\
+        \hline
+        67   & 4096 & 595 & 395 & 468 & 468 & 12 \\
+        \hline
+        35   & 2048 & 556 & 388 & 216 & 216 & 5 \\
+        \hline
+    \end{tabularx}
+    \caption{Device utilization of the \texttt{libre\_ila} core module
+        alone, PolarFire SoC.}
+    \label{tab:utilization-core}
 \end{table}
 
 \end{document}

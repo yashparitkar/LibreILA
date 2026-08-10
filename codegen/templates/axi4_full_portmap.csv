@@ -1,0 +1,45 @@
+####################################################################
+# File: axi4_full_portmap.csv
+# Author: Y.U.P. (yashparitkar)
+# Last Modified: 2026-08-10 Mon 12:15
+#
+# Description: AMBA AXI4 full portmap, modify width as per requirements.
+#  The default is taken from  Microsemi Application Note AC409
+####################################################################
+# signal,width,type
+axi_awid,4,in
+axi_awaddr,32,in
+axi_awlen,4,in
+axi_awsize,3,in
+axi_awburst,2,in
+axi_awlock,2,in
+axi_awcache,4,in
+axi_awprot,3,in
+axi_awvalid,1,in
+axi_awready,1,out
+axi_wid,4,in
+axi_wdata,32,in
+axi_wstrb,4,in
+axi_wlast,1,in
+axi_wvalid,1,in
+axi_wready,1,out
+axi_bid,4,out
+axi_bresp,2,out
+axi_bvalid,1,out
+axi_bready,1,in
+axi_arid,4,in
+axi_araddr,32,in
+axi_arlen,4,in
+axi_arsize,3,in
+axi_arburst,2,in
+axi_arlock,2,in
+axi_arcache,4,in
+axi_arprot,3,in
+axi_arvalid,1,in
+axi_arready,1,out
+axi_rid,4,out
+axi_rdata,32,out
+axi_rresp,2,out
+axi_rlast,1,out
+axi_rvalid,1,out
+axi_rready,1,in
