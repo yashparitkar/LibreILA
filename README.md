@@ -18,6 +18,10 @@ The core itself is generic: it samples a single flat probe word of `G_PROBE_WIDT
 
 > The generator scripts in [codegen/](codegen/) are still work in progress, for now the probe concatenation is edited by hand in `w_probe`.
 
+<p align="center" width="100%">
+    <img width="80%" src="docs/tex/images/architecture_diagram_liu_fabric.drawio.svg">
+</p>
+
 ## Features
 * Generic probe: one flat probe word, the same layout is shared by the trigger vector and the sample buffer
 * Optional external trigger port to synchronise with other ILAs
@@ -79,19 +83,14 @@ Since the core is generic, a build is fully described by two csv files in [codeg
 
 # Future improvements
 
+### Chained trigger (planned for v2.0)
+Chained trigger is using sequence of events to act as a trigger. This can be implemented to make ILA much more powerful.
+
 ### Data compression
 This can be further optimised for the data storage compression although I don't prefer that as it will make the readout complex.
 
-### Finishing the generator script
-The generator writes the probe port declarations, the shorting block, the `w_probe` concatenation and the default generics. One thing is still open:
-
-* `i_ext_trig`/`o_trig_out` are always declared. `G_EXTERNAL_TRIG` only selects which trigger logic is generated inside, it does not remove the pins when they are unused.
-
-### Generating the driver headers
-`drivers/baremetal/core_libre_ila_regs.h` still wants `CORE_LIBRE_ILA_PROBE_WIDTH` and friends defined by hand per synthesis. The generator already computes all of it and could emit the header, and the per signal bit offsets it prints could feed the python driver's .vcd naming directly instead of it re-parsing `portmap.csv`.
-
-### Masked data values
-If needed, user can also modify the core to use masked data values for triggering.
+### Strided sampling
+Sampling every n th sample can be implemented to reduce the data storage requirements.
 
 # Serving suggestions
 
