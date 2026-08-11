@@ -1,25 +1,25 @@
 # LibreILA
 
-
 <p align="center" width="100%">
-    <img width="20%" src="docs/tex/images/libre_ila_logo.svg"> 
+    <img width="20%" src="docs/tex/images/libre_ila_logo.svg">
 </p>
 
-## What is LibreILA?
+An open source Integrated Logic Analyzer for FPGAs. Tap any signals in your fabric, trigger on a condition, and pull the capture back over UART as a `.vcd` you can open in GTKWave.
 
-### ILA (Integrated Logic Analyzer)
-It is a tool used to debug the signals in the FPGA fabric. It is a very useful tool to debug the signals in the FPGA fabric. The ILA core can be used to capture and analyze the signals in the FPGA fabric. The ILA core can be used to capture and analyze the signals in the FPGA fabric. The ILA core can be used to capture and analyze the signals in the FPGA fabric.
+The ILA is a generic core, written in plain VHDL and the PC driver is written in python. The core can be used with any FPGA, and the driver can be used with any OS. But the C drivers are primarily written for the Microchip PolarFire SoC, from where the need of an ILA was felt.
 
-The motivation to make this is follows:
-* There is no ILA like in Xilinx toolchain in the Microchip toolchain, the SmartDebug can not replace the ILA
-* ILA serves as a really good tool to debug the signals
+<p align="center" width="100%">
+    <img width="60%" src="docs/tex/images/05-armed.png">
+    <br>
+    <em>Setting a trigger and arming the core from the python GUI</em>
+</p>
 
-The core itself is generic: it samples a single flat probe word of `G_PROBE_WIDTH` bits and knows nothing about what those bits mean. The build shipped in [hdl/libre_ila.vhdl](hdl/libre_ila.vhdl) wires that probe to a pass through 64-bit AXI4S pair (67 probe bits), which is the reference configuration used by the tests and the drivers. Any other probe port map is meant to be produced by the generator in [codegen/](codegen/) from a `portmap.csv`.
-
-> The generator scripts in [codegen/](codegen/) are still work in progress, for now the probe concatenation is edited by hand in `w_probe`.
+The core samples one flat probe word and knows nothing about what those bits mean. The probe layout, and the signal names you get back in the `.vcd`, come from a `portmap.csv` you write.
 
 <p align="center" width="100%">
     <img width="80%" src="docs/tex/images/architecture_diagram_liu_fabric.drawio.svg">
+    <br>
+    <em>Architecture diagram of the ILA core</em>
 </p>
 
 ## Features
@@ -70,16 +70,14 @@ Since the core is generic, a build is fully described by two csv files in [codeg
 * [tests/hdl/](tests/hdl/): GHDL simulations of the core and the wrapper, numbered in the order they build up in. These need ghdl and the generated core. `make sim-hdl`
 * [tests/python/](tests/python/): host side tests for the python driver, no ghdl and no generated core, pyserial stubbed so nothing opens a port. `make sim-python`
 * [tests/c/](tests/c/): the baremetal driver compiled and run on the host against a stubbed HAL, so it needs a C compiler and nothing from the PolarFire toolchain. `make sim-c`
+* [tests/full/](tests/full/): full system tests, the core is built and run in ghdl, the python driver is run against it. This contains three tests, one for full simulation test with cocotb, one for the baremetal driver and one for the python driver. (work in progress)
 
 `make sim` runs all three, host side first because those take milliseconds. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on. See [tests/README.md](tests/README.md) for what each one covers.
 
 # Drivers
 
-<p align="center" width="100%">
-    <img width="60%" src="docs/tex/images/05-armed.png"> 
-</p>
 * [drivers/baremetal/](drivers/baremetal/): C driver for the bare core over AXI4Lite. The probe is opaque to it, the whole register map is derived from the probe width, buffer depth and sampling clock frequency read back from the core.
-* [drivers/python/](drivers/python/): python driver for the UART wrapper. `libre_ila.py` is the command line front end, `driver.py` speaks the register map and `vcd.py` turns the samples back into named signals, reading `portmap.csv` for the names and writing a `.vcd` any waveform viewer will open. `read_regs`/`write_regs` speak the UART packet format, splitting anything longer than 127 words across packets, and raise on a timeout or a mismatched response header. The GUI is still to come.
+* [drivers/python/](drivers/python/): python driver for the UART wrapper. `libre_ila.py` is the command line front end, `driver.py` speaks the register map and `vcd.py` turns the samples back into named signals, reading `portmap.csv` for the names and writing a `.vcd` any waveform viewer will open. `read_regs`/`write_regs` speak the UART packet format, splitting anything longer than 127 words across packets, and raise on a timeout or a mismatched response header. `gui.py` is the graphical front end shown at the top, it is implemented but not yet validated against hardware.
 
 # Future improvements
 
