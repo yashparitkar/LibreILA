@@ -585,22 +585,26 @@ class TestDeviceStore(TempCwd):
 
         self.assertEqual(session.load_device(_UID), ("/dev/ttyUSB3", 921600))
 
-    def test_the_default_directory_does_not_decorate_the_name(self):
-        # The path goes into messages the user reads, and "./libreila_device0.txt"
-        # says nothing the bare name does not
-        self.assertEqual(session.device_path(0), "libreila_device0.txt")
+    def test_the_path_is_normalised(self):
+        # The path goes into messages the user reads, so the same directory
+        # written three ways has to come out one way
+        expected = os.path.join(session.DEFAULT_DEVICE_DIR, "libre_ila_device0.txt")
+
+        self.assertEqual(session.device_path(0), expected)
+        self.assertEqual(session.device_path(0, f"./{session.DEFAULT_DEVICE_DIR}"), expected)
+        self.assertEqual(session.device_path(0, f"{session.DEFAULT_DEVICE_DIR}/"), expected)
 
     def test_a_directory_can_be_given(self):
         directory = tempfile.mkdtemp()
 
         path = session.save_device(5, "/dev/ttyUSB0", 115200, directory)
 
-        self.assertEqual(path, os.path.join(directory, "libreila_device5.txt"))
+        self.assertEqual(path, os.path.join(directory, "libre_ila_device5.txt"))
         self.assertTrue(os.path.exists(path))
         self.assertEqual(session.load_device(5, directory), ("/dev/ttyUSB0", 115200))
 
-        # And it is not in the working directory, which is the point
-        self.assertFalse(os.path.exists("libreila_device5.txt"))
+        # And it is not in the default store, which is the point
+        self.assertFalse(os.path.exists(session.device_path(5)))
 
     def test_devices_are_listed_by_uid_ascending(self):
         for uid in (77, 3, 0x0badc0de, 1):
@@ -611,33 +615,45 @@ class TestDeviceStore(TempCwd):
     def test_an_empty_store_lists_nothing(self):
         self.assertEqual(session.list_devices(), [])
 
+    def _stray(self, name, contents="not a device\n"):
+        """
+        _stray: Put a file in the store that the pattern must not match.
+        """
+
+        path = os.path.join(session.DEFAULT_DEVICE_DIR, name)
+
+        os.makedirs(session.DEFAULT_DEVICE_DIR, exist_ok=True)
+
+        with open(path, "w") as stray:
+            stray.write(contents)
+
+        return path
+
     def test_listing_ignores_a_file_that_merely_starts_with_the_prefix(self):
         session.save_device(9, "/dev/fake", 115200)
 
-        with open("libreila_devices.txt", "w") as stray:
-            stray.write("not a device\n")
-
-        with open("libreila_device_backup.txt", "w") as stray:
-            stray.write("not a device either\n")
+        self._stray("libre_ila_devices.txt")
+        self._stray("libre_ila_device_backup.txt")
 
         self.assertEqual(session.list_devices(), [9])
 
     def test_reset_leaves_a_file_that_merely_starts_with_the_prefix(self):
         session.save_device(9, "/dev/fake", 115200)
 
-        with open("libreila_devices.txt", "w") as stray:
-            stray.write("not a device\n")
+        stray = self._stray("libre_ila_devices.txt")
 
         removed = session.remove_devices()
 
-        self.assertEqual(removed, ["libreila_device9.txt"])
-        self.assertTrue(os.path.exists("libreila_devices.txt"))
+        self.assertEqual(removed, [session.device_path(9)])
+        self.assertTrue(os.path.exists(stray))
 
     def test_a_mangled_device_file_is_reported_not_traced(self):
         for contents in ("", "nonsense\n", "/dev/ttyUSB0\n", "/dev/ttyUSB0,fast\n",
                          ",115200\n", "a,b,c\n"):
             with self.subTest(contents=contents.strip()):
-                with open("libreila_device1.txt", "w") as device_file:
+                os.makedirs(session.DEFAULT_DEVICE_DIR, exist_ok=True)
+
+                with open(session.device_path(1), "w") as device_file:
                     device_file.write(contents)
 
                 with self.assertRaises(session.OperationError) as caught:
@@ -650,7 +666,7 @@ class TestDeviceStore(TempCwd):
             session.load_device(42)
 
         self.assertEqual(caught.exception.reason, session.REASON_DEVICE_NOT_FOUND)
-        self.assertIn("libreila_device42.txt", str(caught.exception))
+        self.assertIn("libre_ila_device42.txt", str(caught.exception))
 
 
 class TestTriggerDecode(unittest.TestCase):

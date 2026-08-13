@@ -16,6 +16,8 @@
 # SPDX-License-Identifier: CERN-OHL-P-2.0
 #####################################################################
 
+import os
+
 # The portmap is the single definition of the probe bit order, and the
 # generator writes the hardware from it. It is deliberately re-parsed here
 # rather than handed over from codegen, see the comment at
@@ -233,6 +235,13 @@ def write_vcd(path, samples, trig_idx, probes, samp_freq_hz):
     # identifiers when the portmap changes.
     idents         = [_ident(i) for i in range(len(probes) + 1)]
     trigger_ident  = idents[-1]
+
+    # The default output directory need not exist yet, and a path the caller
+    # gave is theirs to have made
+    directory = os.path.dirname(path)
+
+    if directory:
+        os.makedirs(directory, exist_ok=True)
 
     with open(path, "w") as vcd_file:
         vcd_file.write("$timescale 1ps $end\n")

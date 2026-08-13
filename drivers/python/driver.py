@@ -2,7 +2,7 @@
 # File: driver.py
 # Author: Y.U.P. (yashparitkar)
 # Created: 2026-07-24 Fri 19:48
-# Last Modified: 2026-08-01 Sat 14:18
+# Last Modified: 2026-08-13 Thu 02:08
 #
 # Description: ILA Driver file
 #   This file provides the core functions and structure for the ILA driver
@@ -12,15 +12,12 @@
 # SPDX-License-Identifier: CERN-OHL-P-2.0
 #####################################################################
 
+import os
 import time
 import serial
 
-# Nothing here is fixed at synthesis time. The baremetal driver has a reason to
-# bake the probe width and buffer depth in, it sizes static buffers with them,
-# but a host tool gains nothing from it and pays for it by having to be told
-# what it is talking to. So the driver reads the lot back instead: the output
-# block sits at the base address whatever the core was built with, and the part
-# of the map that does move with the probe width follows from what it says.
+# The driver probe takes synthesis information using the register map; so that,
+# correct number of registers are read and written to the core
 
 _libre_ila_status = {
     "LIBRE_ILA_STATUS_ERROR"    : -1,
@@ -112,10 +109,31 @@ def _get_stride(n_lanes):
     # The control registers always need four of them, whatever the probe width
     return max(stride, 4)
 
+# Everything the tools write goes here, so a run leaves one directory behind
+# rather than scattering files over the one it was started in. Relative, so it
+# follows the working directory the way --device-dir and --output do.
+DEFAULT_OUTPUT_DIR = "capture"
+
+DEBUG_LOG_FILENAME = os.path.join(DEFAULT_OUTPUT_DIR, "libre_ila.log")
+
+
 class LibreILA_Driver:
-    def __init__(self, serial_port, baudrate=115200):
+    def __init__(self, serial_port, baudrate=115200, debug=False, debug_log=DEBUG_LOG_FILENAME):
         self.serial_port = serial_port
-        self.serial_connection = serial.Serial(serial_port, baudrate, timeout=1)
+        self.baudrate    = baudrate
+        self.serial_connection = serial.Serial(serial_port, baudrate, timeout=2)
+
+        # Appended and flushed per line, so GUI tabs can share one file and a
+        # hang still leaves the log on disk
+        if debug:
+            os.makedirs(os.path.dirname(debug_log) or ".", exist_ok=True)
+
+        self._debug_log = open(debug_log, "a") if debug else None
+        self._log(f"connect baudrate={baudrate}")
+
+        # Anything already on the wire predates this connection, so it is not
+        # the answer to the identity read below
+        self._resync()
 
         self.LIBRE_ILA_REGS_STATUS_REG_OFFSET             = 0
         self.LIBRE_ILA_REGS_MGCKEY_REG_OFFSET             = 4
@@ -176,6 +194,63 @@ class LibreILA_Driver:
         self.LIBRE_ILA_REGS_SAMP_BUFF_BASE_REG_OFFSET = \
                 (self.axil_n_op_registers + self.axil_n_ip_registers) * 4
 
+    def _log(self, message):
+        """
+        _log: Append one line to the debug log, if --debug turned it on.
+
+        message: The line to write, without a timestamp or port.
+
+        returns: None
+        """
+
+        if self._debug_log is None:
+            return
+
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+        self._debug_log.write(f"{timestamp} {self.serial_port} {message}\n")
+        self._debug_log.flush()
+
+    def _resync(self, limit=2.0):
+        """
+        _resync: Read and discard until the link goes quiet.
+
+        Nothing in a later reply can put a desynced link back in step, so the
+        only way back is an idle one. The wrapper speaks only when spoken to,
+        so silence means both ends agree there is nothing outstanding.
+
+        limit: Seconds to drain before giving up.
+
+        returns: The number of bytes dropped.
+        """
+
+        # 64 byte times, floored for the slow baud rates
+        quiet = max(0.02, 64 * 10 / self.baudrate)
+
+        original = getattr(self.serial_connection, "timeout", None)
+        deadline = time.time() + limit
+        dropped  = 0
+
+        try:
+            self.serial_connection.timeout = quiet
+
+            while time.time() < deadline:
+                chunk = self.serial_connection.read(4096)
+
+                if not chunk:
+                    break
+
+                dropped += len(chunk)
+        finally:
+            self.serial_connection.timeout = original
+
+        self.serial_connection.reset_input_buffer()
+
+        if dropped:
+            self._log(f"RESYNC dropped {dropped} stale bytes")
+
+        return dropped
+
     def _recv(self, count):
         """
         _recv: Read exactly count bytes from the serial port.
@@ -221,38 +296,60 @@ class LibreILA_Driver:
             for word in data:
                 packet += (word & 0xffffffff).to_bytes(4, "big")
 
-        # Whatever is still buffered predates this request, and the wrapper
-        # drops every byte it cannot parse, so both ends start from a clean slate.
-        self.serial_connection.reset_input_buffer()
-        self.serial_connection.write(packet)
-        self.serial_connection.flush()
+        self._log(f"TX {'write' if is_write else 'read '} addr=0x{base_address:08x} "
+                  f"count={count} bytes={packet.hex(' ')}")
 
-        # The wrapper echoes the request back before it serves it, on writes too
-        header = self._recv(_uart_header_len)
+        try:
+            # Whatever is still buffered predates this request, and the wrapper
+            # drops every byte it cannot parse, so both ends start from a clean slate.
+            self.serial_connection.reset_input_buffer()
+            self.serial_connection.write(packet)
+            self.serial_connection.flush()
 
-        if header[0] != _uart_sync_resp:
-            raise OSError(f"bad sync byte 0x{header[0]:02x} in the response header")
+            # The wrapper echoes the request back before it serves it, on writes too
+            header = self._recv(_uart_header_len)
 
-        # The wrapper refuses a request whose address is misaligned or that
-        # arrived after the RX FIFO dropped a byte. Nothing reached the AXI
-        # bus, so the registers are untouched either way.
-        if not header[1] & _uart_resp_valid:
-            raise OSError(f"the wrapper refused the request at 0x{base_address:08x}, the address is "
-                          f"misaligned or bytes were dropped on the way in")
+            self._log(f"RX header bytes={header.hex(' ')}")
 
-        echo_count   = header[1] & _uart_word_count_mask
-        echo_address = int.from_bytes(header[2:_uart_header_len], "big")
+            if header[0] != _uart_sync_resp:
+                raise OSError(f"bad sync byte 0x{header[0]:02x} in the response header")
 
-        if echo_count != count or echo_address != base_address:
-            raise OSError(f"the wrapper echoed {echo_count} words at 0x{echo_address:08x}, "
-                          f"expected {count} words at 0x{base_address:08x}")
+            # The wrapper refuses a request whose address is misaligned or that
+            # arrived after the RX FIFO dropped a byte. Nothing reached the AXI
+            # bus, so the registers are untouched either way.
+            if not header[1] & _uart_resp_valid:
+                raise OSError(f"the wrapper refused the request at 0x{base_address:08x}, the address is "
+                              f"misaligned or bytes were dropped on the way in")
 
-        if is_write:
-            return []
+            echo_count   = header[1] & _uart_word_count_mask
+            echo_address = int.from_bytes(header[2:_uart_header_len], "big")
 
-        payload = self._recv(4 * count)
+            if echo_count != count or echo_address != base_address:
+                raise OSError(f"the wrapper echoed {echo_count} words at 0x{echo_address:08x}, "
+                              f"expected {count} words at 0x{base_address:08x}")
 
-        return [int.from_bytes(payload[i:i + 4], "big") for i in range(0, len(payload), 4)]
+            if is_write:
+                self._log("RX write acknowledged")
+                return []
+
+            payload = self._recv(4 * count)
+            words   = [int.from_bytes(payload[i:i + 4], "big") for i in range(0, len(payload), 4)]
+
+            self._log(f"RX payload words={' '.join(f'0x{w:08x}' for w in words)}")
+
+            return words
+        except Exception as err:
+            self._log(f"ERR {err}")
+
+            # Leave the link idle, or the next request is read as the tail of
+            # this one
+            try:
+                self._resync()
+            except OSError as drain_err:
+                # The error on its way out already says the link is broken
+                self._log(f"ERR resync failed: {drain_err}")
+
+            raise
 
     def read_regs(self, base_address, count, progress=None):
         """
@@ -567,3 +664,8 @@ class LibreILA_Driver:
         """
 
         self.serial_connection.close()
+
+        if self._debug_log is not None:
+            self._log("disconnect")
+            self._debug_log.close()
+            self._debug_log = None

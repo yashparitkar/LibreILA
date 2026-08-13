@@ -82,9 +82,14 @@ check-cocotb:
 	  { echo "cocotb not found for python3 or in $(VENV)/."; \
 	    echo "Install it with: python3 -m venv $(VENV) && $(VENV)/bin/pip install cocotb"; }
 
+# Where the python driver writes the device store, the .vcd and --debug's log.
+# It follows the working directory, so clean only knows about the one a run
+# from drivers/python leaves behind.
+CAPTURE := drivers/python/capture
+
 # clean: cleans up all the generated files in the project, recursing into
 # every test/doc directory that has its own Makefile with a clean target
 clean:
 	echo "Cleaning up the project..."
 	for d in $(DOC_DIRS) $(TEST_DIRS); do $(MAKE) -C $$d clean; done
-	rm -rf $(GEN_AXIS) $(GEN_USER)
+	rm -rf $(GEN_AXIS) $(GEN_USER) $(CAPTURE)

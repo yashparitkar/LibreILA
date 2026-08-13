@@ -31,13 +31,13 @@ import vcd
 # is what a device is selected on. The store lives here rather than in the CLI
 # because both front ends read it: a core added on the command line should come
 # up as a tab, and one added in a tab should be reachable with --device.
-DEVICE_FILE_GLOB = "libreila_device*.txt"
-DEVICE_FILE_RE   = re.compile(r"^libreila_device(\d+)\.txt$")
+DEVICE_FILE_GLOB = "libre_ila_device*.txt"
+DEVICE_FILE_RE   = re.compile(r"^libre_ila_device(\d+)\.txt$")
 
 # The directory the store defaults to. Relative on purpose, so the command line
 # keeps the behaviour it documents; a front end that is not started from a
 # working directory the user chose should pass one explicitly.
-DEFAULT_DEVICE_DIR = "."
+DEFAULT_DEVICE_DIR = driver.DEFAULT_OUTPUT_DIR
 
 # Why an operation failed, in terms of the host's own reasoning rather than of
 # what any one front end does about it. libre_ila.py maps these onto POSIX exit
@@ -87,10 +87,9 @@ def device_path(uid, directory=DEFAULT_DEVICE_DIR):
     returns: The path to the device file.
     """
 
-    # Normalised so the default directory drops out of the name entirely. The
-    # path goes into messages the user reads and into the store's own listing,
-    # and "./libreila_device0.txt" says nothing "libreila_device0.txt" does not.
-    return os.path.normpath(os.path.join(directory, f"libreila_device{uid}.txt"))
+    # Normalised so a directory given as "./capture" or "capture/" reads the
+    # same way in the messages the user sees and in the store's own listing
+    return os.path.normpath(os.path.join(directory, f"libre_ila_device{uid}.txt"))
 
 
 def save_device(uid, serial_port, baud, directory=DEFAULT_DEVICE_DIR):
@@ -106,6 +105,8 @@ def save_device(uid, serial_port, baud, directory=DEFAULT_DEVICE_DIR):
     """
 
     path = device_path(uid, directory)
+
+    os.makedirs(directory, exist_ok=True)
 
     with open(path, "w") as device_file:
         device_file.write(f"{serial_port},{baud}\n")
@@ -240,7 +241,7 @@ class Session:
     happened, and says so rather than opening a port behind the caller's back.
     """
 
-    def __init__(self, serial_port, baud=115200, portmap_path=None, uid=None):
+    def __init__(self, serial_port, baud=115200, portmap_path=None, uid=None, debug=False):
         """
         serial_port: The port the core answers on.
         baud: The baud rate it answers at.
@@ -249,12 +250,14 @@ class Session:
         uid: The UID this session is expected to reach, if it came out of the
             device store. Checked on connect, since a port that has been
             re-enumerated can point at a different core than it did.
+        debug: Log every UART transaction to driver.DEBUG_LOG_FILENAME.
         """
 
         self.serial_port  = serial_port
         self.baud         = baud
         self.portmap_path = portmap_path
         self.expected_uid = uid
+        self.debug        = debug
 
         self.ila      = None
         self._probes  = None
@@ -289,7 +292,7 @@ class Session:
         if self.is_connected:
             return
 
-        ila = driver.LibreILA_Driver(self.serial_port, baudrate=self.baud)
+        ila = driver.LibreILA_Driver(self.serial_port, baudrate=self.baud, debug=self.debug)
 
         # A stored device is reached by UID, so a port that now answers as a
         # different core is worth catching here rather than letting the caller

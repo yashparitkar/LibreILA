@@ -33,7 +33,9 @@ Tell the tool about a core once, then talk to it by the UID it reports:
 ./libre_ila.py --device 0 --info
 ```
 
-`--add-device` connects, reads the UID back and writes `libreila_device<UID>.txt` in the working directory, holding one `port,baud` line. `--reset` forgets every stored device, and `--device-dir` puts the store somewhere other than the working directory.
+`--add-device` connects, reads the UID back and writes `capture/libre_ila_device<UID>.txt`, holding one `port,baud` line. `--reset` forgets every stored device, and `--device-dir` puts the store somewhere else.
+
+Everything these tools write lands in `capture/` under the working directory — the device store, the `.vcd` and `--debug`'s log — so a run leaves one directory behind rather than scattering files. It is created when something is written, never on import, and `make clean` at the repo root removes the one a run from here leaves.
 
 The GUI will read the same store, so a core added on the command line comes up as a tab and one added in a tab is reachable with `--device` — which only holds while both are pointed at the same place. That is what `--device-dir` is for: the working directory is the right default for a tool run from a shell and the wrong one for a window started from a desktop entry.
 
@@ -94,6 +96,20 @@ It reads the same device store as `--device`, so `--device-dir` has to agree bet
 To see it without hardware, `make gui` in [tests/python/05_gui](../../tests/python/05_gui/) runs it against fake cores.
 
 This first pass covers connect, arm, disarm, force trigger, capture with a progress bar, gtkwave, and a read-only view of the trigger. The per-signal conditions table is next; the translator behind it is already in [trigger.py](trigger.py).
+
+### Debugging the link
+`--debug` logs every UART transaction to `capture/libre_ila.log`. It works with every verb and with `--gui`, where all tabs share the one file.
+
+```
+2026-08-13 12:49:30 /dev/ttyACM0 connect baudrate=115200
+2026-08-13 12:49:30 /dev/ttyACM0 TX read  addr=0x00000004 count=5 bytes=55 05 00 00 00 04
+2026-08-13 12:49:30 /dev/ttyACM0 RX header bytes=aa 85 00 00 00 04
+2026-08-13 12:49:30 /dev/ttyACM0 RX payload words=0xb01dface 0x05f5e100 0x00000043 0x00000800 0x00000000
+```
+
+Every line carries the port, so two tabs writing at once stay apart, and the file is appended to and flushed per line, so a run that hangs or is killed still leaves everything up to that point on disk.
+
+`ERR` lines carry the failure, and a `RESYNC dropped N stale bytes` line follows one when the driver drained the link to get back in step. **The byte counts are worth reading, not just the errors:** the wrapper answers a read with a 6 byte header and 4 bytes per word, so a reply that is short or long for the request it followed says the two ends disagree about which request is being served, rather than that one reply got corrupted.
 
 ### Exit statuses
 | | |

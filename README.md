@@ -81,13 +81,19 @@ Since the core is generic, a build is fully described by two csv files in [codeg
 
 # Future improvements
 
+### Cocotb end to end test (planned for v1.1)
+A full system test using cocotb can be implemented to verify the HDL core and the driver together.
+
+### Adding support for [surfer waveform viewer](https://surfer-project.org/) (planned for v1.2)
+The surfer waveform viewer is a free and open source waveform viewer that can be used to view the captured data. 
+
 ### Chained trigger (planned for v2.0)
 Chained trigger is using sequence of events to act as a trigger. This can be implemented to make ILA much more powerful.
 
-### Data compression
+### Data compression (unplanned)
 This can be further optimised for the data storage compression although I don't prefer that as it will make the readout complex.
 
-### Strided sampling
+### Strided sampling (planned for v2.1)
 Sampling every n th sample can be implemented to reduce the data storage requirements.
 
 # Serving suggestions

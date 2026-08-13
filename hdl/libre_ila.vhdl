@@ -2,7 +2,7 @@
 -- File: libre_ila.vhdl
 -- Author: Y.U.P. (yashparitkar)
 -- Created: 2026-07-14 Tue 11:11
--- Last Modified: 2026-08-07 Fri 17:50
+-- Last Modified: 2026-08-13 Thu 00:15
 --
 -- Description: A generic ILA, the probe is described by codegen/portmap.csv
 -- Usage:
@@ -446,7 +446,8 @@ begin
 
   end process p_write;
 
-  -- Sample buffer storage, one independent flat RAM per lane; using array of lanes didn't get synthesized as RAMs in both GHDL and Libero 2025.2
+  -- Sample buffer storage, one independent flat RAM per lane
+  -- Using array of lanes didn't get synthesized as RAMs in both GHDL and Libero 2025.2
 
   g_samp_lanes : for lane in 0 to C_N_LANES - 1 generate
 

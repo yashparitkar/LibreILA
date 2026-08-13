@@ -31,6 +31,7 @@ import argparse
 import os
 import sys
 
+import driver
 import session
 
 # Exit statuses. These are POSIX process statuses, so they have to be small
@@ -50,8 +51,6 @@ _libre_ila_main_status = {
 }
 
 # What a session's refusal means as a process status. session.py reasons about
-# the failure and this table is the only place that turns that reasoning into
-# something a shell can read, which is exactly what a GUI cannot reuse.
 _libre_ila_reason_status = {
     session.REASON_USAGE            : _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_USAGE"],
     session.REASON_DEVICE_NOT_FOUND : _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_DEVICE_NOT_FOUND"],
@@ -72,7 +71,7 @@ _libre_ila_reason_hint = {
 
 SCRIPT_DIR      = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_PORTMAP = os.path.join(SCRIPT_DIR, os.pardir, os.pardir, "codegen", "portmap.csv")
-DEFAULT_VCD     = "libreila_capture.vcd"
+DEFAULT_VCD     = os.path.join(driver.DEFAULT_OUTPUT_DIR, "libre_ila.vcd")
 
 EXECUTION_ORDER = """\
 The flags are verbs. Whatever order they are given in, they run in this one:
@@ -205,9 +204,17 @@ def build_parser():
         "--device-dir",
         type=str,
         default=session.DEFAULT_DEVICE_DIR,
-        help="Where the libreila_device<UID>.txt files live (default: the working directory). "
+        help=f"Where the libre_ila_device<UID>.txt files live (default: {session.DEFAULT_DEVICE_DIR}/ "
+             f"under the working directory). "
              "The GUI reads the same store, so a device added on either side is visible to "
              "the other, which only holds if both are pointed at the same place",
+    )
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help=f"Log every UART transaction (request and response bytes) to "
+             f"{driver.DEBUG_LOG_FILENAME}, appended to on every run",
     )
 
     ## Reading the core
@@ -337,7 +344,7 @@ def cmd_add_device(args):
     returns: An exit status.
     """
 
-    ila = session.Session(args.serial_port, baud=args.baud)
+    ila = session.Session(args.serial_port, baud=args.baud, debug=args.debug)
 
     ila.connect()
 
@@ -389,7 +396,7 @@ def cmd_gui(args):
                        f"Otherwise use the command line, see --help.",
                        _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_GUI_UNAVAILABLE"])
 
-    gui.run_gui(args.waveform_viewer, args.device_dir, args.portmap)
+    gui.run_gui(args.waveform_viewer, args.device_dir, args.portmap, debug=args.debug)
 
     return _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_SUCCESS"]
 
@@ -540,7 +547,7 @@ def run(args, parser):
     # The GUI keeps the same object alive for as long as its tab is connected,
     # which is the only thing the two front ends do differently.
     ila = session.Session(serial_port, baud=baud, portmap_path=args.portmap,
-                          uid=args.device)
+                          uid=args.device, debug=args.debug)
 
     ila.connect()
 

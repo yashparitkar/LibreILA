@@ -208,7 +208,7 @@ class GuiTest(unittest.TestCase):
         returns: The window.
         """
 
-        self.window = gui.MainWindow(viewer, ".", _PORTMAP)
+        self.window = gui.MainWindow(viewer, session.DEFAULT_DEVICE_DIR, _PORTMAP)
 
         return self.window
 
@@ -279,7 +279,7 @@ class TestTabStrip(GuiTest):
         # stop the window opening
         session.save_device(_UID, "/dev/fake", 115200)
 
-        with open("libreila_device5.txt", "w") as broken:
+        with open(session.device_path(5), "w") as broken:
             broken.write("nonsense\n")
 
         window = self.open_window()
@@ -297,7 +297,7 @@ class TestTabStrip(GuiTest):
         self.assertTrue(self.wrapper.closed)
 
         # Closing a tab is not forgetting the core, --reset is what does that
-        self.assertEqual(session.list_devices("."), [_UID])
+        self.assertEqual(session.list_devices(), [_UID])
 
     def test_closing_the_window_puts_every_session_down(self):
         tab = self.connected_tab()
@@ -491,7 +491,7 @@ class TestConditionsTable(GuiTest):
         # look like a working trigger for something else
         session.save_device(_UID, "/dev/fake", 115200)
 
-        window = gui.MainWindow("gtkwave", ".", _PORTMAP)
+        window = gui.MainWindow("gtkwave", session.DEFAULT_DEVICE_DIR, _PORTMAP)
         self.window = window
 
         # A core whose width the stock portmap cannot describe
@@ -839,7 +839,7 @@ class TestAddDevice(GuiTest):
     def test_adding_a_device_stores_the_uid_the_core_reports(self):
         window = self.open_window()
 
-        dialog = gui.AddDeviceDialog(".", window)
+        dialog = gui.AddDeviceDialog(session.DEFAULT_DEVICE_DIR,window)
         dialog.port_combo.setCurrentText("/dev/fake")
         dialog.baud_combo.setCurrentText("115200")
 
@@ -847,13 +847,13 @@ class TestAddDevice(GuiTest):
 
         self.assertEqual(dialog.result(), QDialog.Accepted)
         self.assertEqual(dialog.uid, _UID)
-        self.assertEqual(session.list_devices("."), [_UID])
-        self.assertEqual(session.load_device(_UID, "."), ("/dev/fake", 115200))
+        self.assertEqual(session.list_devices(), [_UID])
+        self.assertEqual(session.load_device(_UID), ("/dev/fake", 115200))
 
     def test_the_dialog_lets_go_of_the_port(self):
         # It connects only to read the UID back, and the tab is what holds the
         # port afterwards
-        dialog = gui.AddDeviceDialog(".", self.open_window())
+        dialog = gui.AddDeviceDialog(session.DEFAULT_DEVICE_DIR,self.open_window())
         dialog.port_combo.setCurrentText("/dev/fake")
 
         dialog.add()
@@ -861,7 +861,7 @@ class TestAddDevice(GuiTest):
         self.assertTrue(self.wrapper.closed)
 
     def test_a_bad_baud_rate_is_reported_in_the_dialog(self):
-        dialog = gui.AddDeviceDialog(".", self.open_window())
+        dialog = gui.AddDeviceDialog(session.DEFAULT_DEVICE_DIR,self.open_window())
         dialog.port_combo.setCurrentText("/dev/fake")
         dialog.baud_combo.setCurrentText("quickly")
 
@@ -874,14 +874,14 @@ class TestAddDevice(GuiTest):
         # An empty wrapper answers zero to everything, so the magic key is wrong
         self.port.wrapper = pkt.FakeWrapper()
 
-        dialog = gui.AddDeviceDialog(".", self.open_window())
+        dialog = gui.AddDeviceDialog(session.DEFAULT_DEVICE_DIR,self.open_window())
         dialog.port_combo.setCurrentText("/dev/fake")
 
         dialog.add()
 
         self.assertNotEqual(dialog.result(), QDialog.Accepted)
         self.assertIn("magic key", dialog.message.text())
-        self.assertEqual(session.list_devices("."), [])
+        self.assertEqual(session.list_devices(), [])
 
 
 class TestHelpers(GuiTest):

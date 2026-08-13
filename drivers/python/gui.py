@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (QApplication, QComboBox, QDialog, QDialogButtonBo
                                QMainWindow, QProgressBar, QPushButton, QScrollArea,
                                QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget)
 
+import driver
 import session
 import trigger
 
@@ -75,7 +76,7 @@ DISCONNECT_COLOUR  = "#c62828"
 
 BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600]
 
-DEFAULT_CAPTURE = "libreila_capture.vcd"
+DEFAULT_CAPTURE = os.path.join(driver.DEFAULT_OUTPUT_DIR, "libre_ila.vcd")
 
 # What to do about a refusal, in this front end's words. session.py states the
 # fact and stops, because the answer is a flag on the command line and a button
@@ -217,7 +218,7 @@ class DeviceTab(QWidget):
 
     title_changed = Signal()
 
-    def __init__(self, uid, serial_port, baud, portmap, waveform_viewer, parent=None):
+    def __init__(self, uid, serial_port, baud, portmap, waveform_viewer, parent=None, debug=False):
         super().__init__(parent)
 
         self.uid             = uid
@@ -229,7 +230,8 @@ class DeviceTab(QWidget):
         # call mark_edited as soon as a default lands in a widget
         self._trigger_edited = False
 
-        self.ila = session.Session(serial_port, baud=baud, portmap_path=portmap, uid=uid)
+        self.ila = session.Session(serial_port, baud=baud, portmap_path=portmap, uid=uid,
+                                   debug=debug)
 
         self._build()
 
@@ -629,6 +631,11 @@ class DeviceTab(QWidget):
         returns: True if it went through.
         """
 
+        # The poll would otherwise land a status read between this operation's
+        # request and its reply, and the wrapper cannot tell the two apart
+        was_polling = self.poll_timer.isActive()
+        self.poll_timer.stop()
+
         try:
             call()
         except session.OperationError as err:
@@ -638,6 +645,9 @@ class DeviceTab(QWidget):
             # The driver already names the port in these
             self.report(str(err))
             return False
+        finally:
+            if was_polling:
+                self.poll_timer.start()
 
         return True
 
@@ -1052,6 +1062,10 @@ class DeviceTab(QWidget):
         returns: None
         """
 
+        # The readout runs on its own thread and owns the port while it does
+        if self.worker is not None:
+            return
+
         try:
             status = self.ila.status()
         except (session.OperationError, RuntimeError, ValueError, OSError, TimeoutError) as err:
@@ -1168,12 +1182,13 @@ class AddDeviceDialog(QDialog):
     with --device and the other way round.
     """
 
-    def __init__(self, device_dir, parent=None):
+    def __init__(self, device_dir, parent=None, debug=False):
         super().__init__(parent)
 
         self.setWindowTitle("Add a LibreILA device")
 
         self.device_dir = device_dir
+        self.debug      = debug
         self.uid        = None
 
         self.port_combo = QComboBox()
@@ -1215,7 +1230,7 @@ class AddDeviceDialog(QDialog):
             self.message.setText(f"'{self.baud_combo.currentText()}' is not a baud rate")
             return
 
-        ila = session.Session(port, baud=baud)
+        ila = session.Session(port, baud=baud, debug=self.debug)
 
         try:
             ila.connect()
@@ -1250,7 +1265,7 @@ class MainWindow(QMainWindow):
     MainWindow: The tab strip, one tab per stored device.
     """
 
-    def __init__(self, waveform_viewer, device_dir, portmap, parent=None):
+    def __init__(self, waveform_viewer, device_dir, portmap, debug=False, parent=None):
         super().__init__(parent)
 
         self.setWindowTitle("LibreILA")
@@ -1258,6 +1273,7 @@ class MainWindow(QMainWindow):
         self.waveform_viewer = waveform_viewer
         self.device_dir      = device_dir
         self.portmap         = portmap
+        self.debug           = debug
 
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
@@ -1266,9 +1282,20 @@ class MainWindow(QMainWindow):
         self.add_button = QPushButton("+ ADD TAB")
         self.add_button.clicked.connect(self.add_device)
 
-        self.tabs.setCornerWidget(self.add_button)
+        # Not the tab bar's corner widget: that collapses to zero height along
+        # with the bar itself when there are no tabs yet, which is every run
+        # against an empty device store, leaving no way to add the first one.
+        top = QHBoxLayout()
+        top.addStretch()
+        top.addWidget(self.add_button)
 
-        self.setCentralWidget(self.tabs)
+        central = QWidget()
+        layout  = QVBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(top)
+        layout.addWidget(self.tabs)
+
+        self.setCentralWidget(central)
 
         # The store is relative to the working directory unless it was given
         # one, so say where the tabs came from rather than leaving an empty
@@ -1307,7 +1334,8 @@ class MainWindow(QMainWindow):
         returns: The tab.
         """
 
-        tab = DeviceTab(uid, serial_port, baud, self.portmap, self.waveform_viewer, self)
+        tab = DeviceTab(uid, serial_port, baud, self.portmap, self.waveform_viewer,
+                       debug=self.debug, parent=self)
 
         tab.title_changed.connect(self.retitle)
 
@@ -1351,7 +1379,7 @@ class MainWindow(QMainWindow):
         returns: None
         """
 
-        dialog = AddDeviceDialog(self.device_dir, self)
+        dialog = AddDeviceDialog(self.device_dir, debug=self.debug, parent=self)
 
         if dialog.exec() != QDialog.Accepted:
             return
@@ -1408,13 +1436,14 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
-def run_gui(waveform_viewer, device_dir, portmap):
+def run_gui(waveform_viewer, device_dir, portmap, debug=False):
     """
     run_gui: Open the window and run until it closes.
 
     waveform_viewer: The command --waveform-viewer named.
     device_dir: Where the device store lives.
     portmap: The portmap.csv the cores were generated from.
+    debug: Log every tab's UART transactions to driver.DEBUG_LOG_FILENAME.
 
     returns: None
     """
@@ -1428,7 +1457,7 @@ def run_gui(waveform_viewer, device_dir, portmap):
     app.styleHints().setColorScheme(Qt.ColorScheme.Light)
     app.setPalette(light_palette())
 
-    window = MainWindow(waveform_viewer, device_dir, portmap)
+    window = MainWindow(waveform_viewer, device_dir, portmap, debug=debug)
     window.resize(1100, 800)
     window.show()
 

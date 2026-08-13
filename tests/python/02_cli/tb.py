@@ -247,7 +247,8 @@ class TestDeviceStore(TempCwd):
     def test_the_file_is_named_for_the_uid(self):
         path = self.add_device(1234)
 
-        self.assertEqual(path, "libreila_device1234.txt")
+        self.assertEqual(path, os.path.join(session.DEFAULT_DEVICE_DIR,
+                                            "libre_ila_device1234.txt"))
         self.assertTrue(os.path.exists(path))
 
     def test_add_device_stores_the_uid_the_core_reports(self):
@@ -255,7 +256,7 @@ class TestDeviceStore(TempCwd):
 
         self.assertEqual(status, 0)
         self.assertIn(str(_UID), out)
-        self.assertTrue(os.path.exists(f"libreila_device{_UID}.txt"))
+        self.assertTrue(os.path.exists(session.device_path(_UID)))
 
     def test_a_device_that_cannot_be_saved_is_not_a_link_error(self):
         # The core answered, so the failure is the filesystem's. Reporting it
@@ -293,14 +294,16 @@ class TestDeviceStore(TempCwd):
         for contents in ("", "nonsense\n", "/dev/ttyUSB0\n", "/dev/ttyUSB0,fast\n",
                          ",115200\n", "a,b,c\n"):
             with self.subTest(contents=contents.strip()):
-                with open(f"libreila_device{_UID}.txt", "w") as device_file:
+                os.makedirs(session.DEFAULT_DEVICE_DIR, exist_ok=True)
+
+                with open(session.device_path(_UID), "w") as device_file:
                     device_file.write(contents)
 
                 status, _, err = run_cli("--device", str(_UID), "--info")
 
                 self.assertEqual(status, libre_ila._libre_ila_main_status[
                     "LIBRE_ILA_MAIN_STATUS_DEVICE_NOT_FOUND"])
-                self.assertIn(f"libreila_device{_UID}.txt", err)
+                self.assertIn(f"libre_ila_device{_UID}.txt", err)
 
     def test_reset_removes_stored_devices(self):
         self.add_device(0)
@@ -309,14 +312,19 @@ class TestDeviceStore(TempCwd):
         status, out, _ = run_cli("--reset")
 
         self.assertEqual(status, 0)
-        self.assertFalse(os.path.exists("libreila_device0.txt"))
-        self.assertFalse(os.path.exists(f"libreila_device{_UID}.txt"))
+        self.assertFalse(os.path.exists(session.device_path(0)))
+        self.assertFalse(os.path.exists(session.device_path(_UID)))
 
     def test_reset_leaves_everything_else_alone(self):
         # --reset takes no argument and matches a pattern, so what it does not
-        # match matters as much as what it does
-        neighbours = ["notes.txt", "libreila_device.txt", "libreila_deviceX.txt",
-                      "libreila_devices.txt", "libreila_device0.txt.bak", "capture.vcd"]
+        # match matters as much as what it does. The neighbours go in the store
+        # directory, which is the only place --reset looks.
+        os.makedirs(session.DEFAULT_DEVICE_DIR, exist_ok=True)
+
+        neighbours = [os.path.join(session.DEFAULT_DEVICE_DIR, name)
+                      for name in ("notes.txt", "libre_ila_device.txt",
+                                   "libre_ila_deviceX.txt", "libre_ila_devices.txt",
+                                   "libre_ila_device0.txt.bak", "libre_ila.vcd")]
 
         for name in neighbours:
             with open(name, "w") as neighbour:
@@ -327,7 +335,7 @@ class TestDeviceStore(TempCwd):
         status, _, _ = run_cli("--reset")
 
         self.assertEqual(status, 0)
-        self.assertFalse(os.path.exists("libreila_device7.txt"))
+        self.assertFalse(os.path.exists(session.device_path(7)))
 
         for name in neighbours:
             with self.subTest(neighbour=name):
@@ -369,12 +377,13 @@ class TestUsage(TempCwd):
         # and never comes back, which would hang the suite rather than fail it
         calls = []
 
-        with stub_gui(lambda *argv: calls.append(argv)):
+        with stub_gui(lambda *argv, debug=False: calls.append(argv + (debug,))):
             status, _, _ = run_cli("--gui", "--waveform-viewer", "surfer",
-                                   "--device-dir", "somewhere", "--portmap", "some.csv")
+                                   "--device-dir", "somewhere", "--portmap", "some.csv",
+                                   "--debug")
 
         self.assertEqual(status, 0)
-        self.assertEqual(calls, [("surfer", "somewhere", "some.csv")])
+        self.assertEqual(calls, [("surfer", "somewhere", "some.csv", True)])
 
     def test_a_gui_without_pyside6_is_reported_as_unavailable(self):
         # PySide6 is optional, so its absence names the packages rather than
