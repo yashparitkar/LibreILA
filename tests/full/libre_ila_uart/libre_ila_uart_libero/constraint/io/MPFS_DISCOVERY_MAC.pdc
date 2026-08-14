@@ -1,0 +1,23 @@
+set_io -port_name MDIO_PAD \
+    -pin_name D16 \
+    -fixed true \
+    -io_std LVCMOS33 \
+    -DIRECTION INOUT
+    
+set_io -port_name MAC_0_MDC \
+    -pin_name D15 \
+    -fixed true \
+    -io_std LVCMOS33 \
+    -DIRECTION OUTPUT
+
+#set_io -port_name VSC_RESETN \
+    #-pin_name A14 \
+    #-fixed true \
+    #-io_std LVCMOS33 \
+    #-DIRECTION OUTPUT
+    #
+#set_io -port_name VSC_TXDIS_SRESETN \
+    #-pin_name E20 \
+    #-fixed true \
+    #-io_std LVCMOS33 \
+    #-DIRECTION OUTPUT

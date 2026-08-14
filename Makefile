@@ -90,6 +90,6 @@ CAPTURE := drivers/python/capture
 # clean: cleans up all the generated files in the project, recursing into
 # every test/doc directory that has its own Makefile with a clean target
 clean:
-	echo "Cleaning up the project..."
-	for d in $(DOC_DIRS) $(TEST_DIRS); do $(MAKE) -C $$d clean; done
+	@echo "Cleaning up the project..."
+	@for d in $(DOC_DIRS) $(TEST_DIRS); do $(MAKE) -C $$d clean || exit 1; done
 	rm -rf $(GEN_AXIS) $(GEN_USER) $(CAPTURE)

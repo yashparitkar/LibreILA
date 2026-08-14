@@ -20,6 +20,10 @@ gen
 gen_axis
 venv*
 
+# compiled test binaries, removed by "make clean"
+tests/c/*/tb
+tests/hdl/*/tb
+
 # python bytecode, the host side tests import the driver on every run
 __pycache__/
 *.pyc
@@ -58,3 +62,6 @@ report_staging/
 *.bcf
 *.run.xml
 docs/tex/*.pdf
+docs/tex/chapters/*.pdf
+docs/tex/appendices/*.pdf
+docs/tex/images/*_converted.pdf

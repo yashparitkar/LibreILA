@@ -1,0 +1,54 @@
+%% File: chapters/chapter3.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: The code generator: describing a build with two CSV files.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{The Code Generator}
+\label{ch:codegen}
+
+\todo{A build is fully described by \texttt{portmap.csv} and \texttt{configuration.csv}: how to write both, how to run the generator, and two recipes at the end.}
+
+\section{Working of the code generator}
+\label{sec:codegen_how}
+
+\todo{Find and replace against the templates in \texttt{hdl/}, driven by the \texttt{\^{}\^{}XX} directives. The directive table (DI, DO, MI, MO, SH, MX), and why a directive listed for a file but not found aborts the run: a dropped block cannot become an unconnected port.}
+
+\section{Writing configuration.csv}
+\label{sec:codegen_config}
+
+\todo{One line per generic, as \texttt{generic,type,value}. The generics that matter in practice: GEN\_TYPE, which picks core only or core plus wrapper, G\_SAMP\_BUFF\_DEPTH, G\_EXTERNAL\_TRIG and the UART settings. G\_UID may be omitted entirely and may be written in hex. The full ranges stay in the datasheet.}
+
+\section{Writing portmap.csv}
+\label{sec:codegen_portmap}
+
+\todo{Three columns, \texttt{signal,width,type}, listed LSB first, and that order is the probe bit order everything else inherits. Parsing is strict: no whitespace around fields, comments only in column 0. The stock AXI4S portmap and one other example.}
+
+\subsection{Choosing the signal type}
+\label{sec:codegen_types}
+
+\todo{\texttt{in}, \texttt{out} and \texttt{mon} as a table, described from the \texttt{probe\_slave\_} side.}
+
+\subsection{Using bidirectional signals}
+\label{sec:codegen_inout}
+
+\todo{A signal assignment cannot pass a bidirectional line through, so the splice goes on the fabric side of the IO buffer, across the three signals the tristate is built from. The QPI flash example, including the turnaround it captures and a pad probe cannot. Where a bus cannot be spliced at all, \texttt{mon}.}
+
+\section{Running the generator}
+\label{sec:codegen_running}
+
+\todo{The command lines and the flag table. Output lands in \texttt{gen\_axis/} for the stock build and \texttt{gen/} otherwise, overridden by \texttt{--outdir}, and neither is tracked. The trap worth calling out: after editing anything in \texttt{hdl/}, \texttt{gen\_axis/} has to go, by hand or with \texttt{make clean}, or the tests keep simulating the previous build.}
+
+\section{Building a generic logic analyzer}
+\label{sec:codegen_generic}
+
+\todo{Two ways there: every port \texttt{mon}, or every port \texttt{in} with the master side left open. Which one to prefer and why, and that a \texttt{mon} build has no pass-through, so the core only observes.}
+
+\section{Probing multiple channels in same build}
+\label{sec:codegen_multi}
+
+\todo{Several channels on one ILA, as long as they share a clock.}
+\end{document}

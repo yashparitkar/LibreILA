@@ -22,6 +22,8 @@ The core samples one flat probe word and knows nothing about what those bits mea
     <em>Architecture diagram of the ILA core</em>
 </p>
 
+The LibreILA is successfully tested on hardware with Polarfire SoC Discovery Kit, triggered on actual stream and the project files are added in /tests/full/libre_ila_uart. Step by step instructions are added in manual in the docs. Note that, only single clock domain is currently tested, i.e., same clock for sampling and axilite interface.
+
 ## Features
 * Generic probe: one flat probe word, the same layout is shared by the trigger vector and the sample buffer
 * Optional external trigger port to synchronise with other ILAs
@@ -38,7 +40,7 @@ The core samples one flat probe word and knows nothing about what those bits mea
 * CDC on the ARM, DISARM and status bits
 * Each core carries an instance ID, `G_UID`, read back at `0x14`, so a system holding several ILAs can tell which one it has reached
 * A serial wrapper is also provided to easily use the ILA with the PC
-* A C driver for the bare AXI4Lite core, and a python driver (work in progress) for the serial wrapper
+* A C driver for the bare AXI4Lite core, and a python driver for the serial wrapper
 
 # Documentation
 
@@ -51,7 +53,7 @@ route to one part of it, or the thing it describes.
 |-------------|-------|
 | How the core behaves and how to talk to it: probe and port structure, capture and trigger behaviour, clock domains, core parameters, the AXI4Lite register map register by register, and the UART packet format | [docs/datasheet.pdf](docs/datasheet.pdf) |
 | The same register map, csv for ease of use, one row per field | [REGISTER_MAP.csv](REGISTER_MAP.csv) |
-| Step-by-step usage | [docs/manual.pdf](docs/manual.pdf), work in progress |
+| Step-by-step usage manual | [docs/manual.pdf](docs/manual.pdf), work in progress |
 | Generating a core for your own probe: the `portmap.csv` and `configuration.csv` formats, the `^^XX` directives, and why there is no `inout` | [codegen/README.md](codegen/README.md) |
 | Driving the bare core from firmware over AXI4Lite | [drivers/baremetal/README.md](drivers/baremetal/README.md) |
 | Driving the UART wrapper from a PC and dumping a `.vcd` | [drivers/python/README.md](drivers/python/README.md) |
@@ -70,14 +72,14 @@ Since the core is generic, a build is fully described by two csv files in [codeg
 * [tests/hdl/](tests/hdl/): GHDL simulations of the core and the wrapper, numbered in the order they build up in. These need ghdl and the generated core. `make sim-hdl`
 * [tests/python/](tests/python/): host side tests for the python driver, no ghdl and no generated core, pyserial stubbed so nothing opens a port. `make sim-python`
 * [tests/c/](tests/c/): the baremetal driver compiled and run on the host against a stubbed HAL, so it needs a C compiler and nothing from the PolarFire toolchain. `make sim-c`
-* [tests/full/](tests/full/): full system tests, the core is built and run in ghdl, the python driver is run against it. This contains three tests, one for full simulation test with cocotb, one for the baremetal driver and one for the python driver. (work in progress)
+* [tests/full/](tests/full/): the whole chain on real hardware, run from Libero and SoftConsole rather than from `make sim`. [tests/full/libre_ila_uart/](tests/full/libre_ila_uart/) holds the projects for the board build the capture at the top came from, with the configuration under test and the pass criterion in its own README. The bare core on AXI4Lite, and the cocotb simulation of the same chain, are still to come.
 
 `make sim` runs all three, host side first because those take milliseconds. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on. See [tests/README.md](tests/README.md) for what each one covers.
 
 # Drivers
 
 * [drivers/baremetal/](drivers/baremetal/): C driver for the bare core over AXI4Lite. The probe is opaque to it, the whole register map is derived from the probe width, buffer depth and sampling clock frequency read back from the core.
-* [drivers/python/](drivers/python/): python driver for the UART wrapper. `libre_ila.py` is the command line front end, `driver.py` speaks the register map and `vcd.py` turns the samples back into named signals, reading `portmap.csv` for the names and writing a `.vcd` any waveform viewer will open. `read_regs`/`write_regs` speak the UART packet format, splitting anything longer than 127 words across packets, and raise on a timeout or a mismatched response header. `gui.py` is the graphical front end shown at the top, it is implemented but not yet validated against hardware.
+* [drivers/python/](drivers/python/): python driver for the UART wrapper. `libre_ila.py` is the command line front end, `driver.py` speaks the register map and `vcd.py` turns the samples back into named signals, reading `portmap.csv` for the names and writing a `.vcd` any waveform viewer will open. `read_regs`/`write_regs` speak the UART packet format, splitting anything longer than 127 words across packets, and raise on a timeout or a mismatched response header. `gui.py` is the graphical front end shown at the top.
 
 # Future improvements
 

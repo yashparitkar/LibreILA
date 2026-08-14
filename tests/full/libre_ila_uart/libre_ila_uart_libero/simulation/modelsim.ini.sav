@@ -1,0 +1,10 @@
+[Library]
+others = $MODEL_TECH/../modelsim.ini
+polarfire = /home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/lib/questasim/precompiled/vlog/polarfire
+syncad_vhdl_lib = /home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/lib/actel/syncad_vhdl_lib
+
+[vcom]
+VHDL93 = 1
+
+[vsim]
+IterationLimit = 5000

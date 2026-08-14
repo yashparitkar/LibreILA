@@ -1,0 +1,44 @@
+%% File: chapters/chapter6.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: Driving the UART wrapper from the command line.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{The Command Line Interface}
+\label{ch:cli}
+
+\todo{Every command with its usage and a worked scenario. The transcripts come from real runs against hardware, not from plausible-looking output written by hand.}
+
+\section{Telling the tool about a core}
+\label{sec:cli_devices}
+
+\todo{\texttt{--add-device} connects, reads the UID back and writes the device store; after that a core is addressed by \texttt{--device}. The point to make loudly: \texttt{--device} selects by \emph{UID}, not by the order devices were added, and a core built without a G\_UID reports 0. \texttt{--device-dir} has to agree between the CLI and the GUI.}
+
+\section{The verbs and the order they run in}
+\label{sec:cli_verbs}
+
+\todo{The flags are verbs, and they are applied in a fixed order whatever order they are given in. The ordering table, then a whole capture as one line, and the same capture split across invocations: nothing about the session is kept on the host.}
+
+\section{Configuring the trigger}
+\label{sec:cli_trigger}
+
+\todo{Condition and mask as one number covering the whole probe word, in any base, with bit 0 the first signal in the portmap. These do \emph{not} use the portmap names. Type and reduction, omitted fields keeping what the core already had, and a value with bits above the probe width being refused rather than trimmed.}
+
+\section{Worked scenarios}
+\label{sec:cli_scenarios}
+
+\todo{Three or four end-to-end runs with real pasted output: trigger on a condition, force a trigger that never came, disarm and retry, and a capture split across two invocations.}
+
+\section{Debugging the link}
+\label{sec:cli_debug}
+
+\todo{\texttt{--debug} logs every UART transaction. A real log extract and how to read it: the byte counts matter as much as the errors, because a reply that is short or long for its request means the two ends disagree about which request is being served.}
+
+\section{Exit statuses}
+\label{sec:cli_exit}
+
+\todo{The exit codes, a sentence each on what actually causes them, and a pointer to the troubleshooting chapter.}
+\end{document}

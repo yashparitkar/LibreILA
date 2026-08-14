@@ -1,0 +1,34 @@
+%% File: chapters/chapter1.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: Introduction: what LibreILA is and which document answers what.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{Introduction}
+\label{ch:intro}
+
+\todo{What LibreILA is, in three paragraphs, followed by the document map.}
+
+\section{What LibreILA is}
+\label{sec:intro_what}
+
+\todo{An in-system ILA spliced into a link inside the fabric, sampling into a circular buffer in fabric RAM. Triggered, time correlated, and read back as a VCD. One short paragraph, no register detail.}
+
+\section{Using LibreILA}
+\label{sec:intro_deliverables}
+
+\todo{The two deliverables and the chapter each one leads to: \texttt{libre\_ila}, the bare core on AXI4Lite, driven by the baremetal C driver (Chapter~\ref{ch:cdriver}), and \texttt{libre\_ila\_uart}, the serial wrapper, driven from a PC by the python driver (Chapters~\ref{ch:cli} and~\ref{ch:gui}).}
+
+\section{Document Map}
+\label{sec:intro_docmap}
+
+\todo{A table of the three documents: this manual is how to use LibreILA, the datasheet is the specification, register map, timing and packet format, and the per-directory READMEs are implementation notes for someone changing the code. A user of LibreILA never needs the third.}
+
+\section{Conventions}
+\label{sec:intro_conventions}
+
+\todo{Shell prompts, paths relative to the repository root, register names in small caps and hex as 0x. Half a page.}
+\end{document}

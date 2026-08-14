@@ -1,0 +1,267 @@
+%% File: chapters/chapter2.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: Getting started: prerequisites and a first end-to-end capture.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{Getting Started}
+\label{ch:started}
+
+\todo{The highest value chapter in the manual: a reader who follows it from top to bottom gets a waveform on screen without opening any other document. No forward references, so anything needed here is stated here, with the full treatment cross-referenced later.}
+
+\section{Prerequisites}
+\label{sec:started_prereq}
+
+The full toolchain is tested using following:
+
+\begin{itemize}
+    \item FPGA: Microchip PolarFire SoC Discovery Kit (mpfs-disco-kit)
+    \item Libero SoC v2025.2
+    \item SoftConsole v2022.2
+    \item Ubuntu 22.04.3 LTS
+    \item Python 3.10.0
+    \item Packages for driver: pyserial (v3.5)
+    \item Packages for GUI: PySide6 (v6.5.1)
+    \item Rpi Pico with \texttt{debugprobe\_on\_pico} firmware flashed as USB-TTL adapter (other serial adapters will also work)
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/replicate_steps/0_testing_setup.jpg}
+    \caption{The testing setup.}
+    \label{fig:started_setup}
+\end{figure}
+
+The tools might or might not work on other versions, but the manual is written for the above. The reader is expected to have a working knowledge of Linux and Python, and to be able to install software and run commands in a terminal.
+
+Not all of it is needed for all of it. Table~\ref{tab:started_prereq} says what each piece buys; leave a row out and everything that does not depend on it still works.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Tool} & \textbf{Needed for} \\
+        \hline
+        Python 3.10 or later & everything on the host \\
+        \hline
+        pyserial & the python driver, both front ends \\
+        \hline
+        PySide6 & the graphical front end, \texttt{--gui}, only \\
+        \hline
+        USB-TTL adapter & reaching \texttt{libre\_ila\_uart} from the PC \\
+        \hline
+        Libero SoC & building a core into a design and programming the FPGA \\
+        \hline
+        SoftConsole & the baremetal C driver, and the demo application this chapter runs \\
+        \hline
+        GHDL & optional, runs the simulations under \texttt{tests/hdl/} \\
+        \hline
+        GTKWave & optional, opens the captured \texttt{.vcd}; any VCD viewer will do \\
+        \hline
+    \end{tabularx}
+    \caption{What each prerequisite is for.}
+    \label{tab:started_prereq}
+\end{table}
+
+\subsection{Installing the host packages}
+\label{sec:started_hostpkgs}
+
+Both python packages are in apt on Debian and Ubuntu:
+
+\begin{lstlisting}
+sudo apt install python3-serial
+sudo apt install python3-pyside6.qtwidgets python3-pyside6.qtgui
+\end{lstlisting}
+
+PySide6 ships one package per Qt module there, so \texttt{python3-pyside6} is not a package and \texttt{python3-pyside6.qtcore} on its own is not enough. Everything except \texttt{--gui} works without either of the two.
+
+Ubuntu 22.04 predates PySide6's apt packaging, so on the tested system those two packages do not exist at all. Install it into a virtual environment instead, as in Section~\ref{sec:started_venv}.
+
+The optional tools are one line as well:
+
+\begin{lstlisting}
+sudo apt install ghdl gtkwave
+\end{lstlisting}
+
+Neither is needed to build a core or take a capture. GHDL runs the simulations under \texttt{tests/hdl/}, and GTKWave is what the driver's \texttt{--waveform-viewer} defaults to when it opens a capture for you.
+
+Finally, reading a serial port on Ubuntu needs membership of the \texttt{dialout} group. Add yourself once and log out and back in, otherwise every connection fails with a permission error on \texttt{/dev/ttyUSB0}:
+
+\begin{lstlisting}
+sudo usermod -aG dialout $USER
+\end{lstlisting}
+
+\subsection{Creating a Python virtual environment}
+\label{sec:started_venv}
+
+This is how PySide6 is installed on a distribution that does not package it, and it is the tidier route on any distribution, since nothing lands system wide.
+
+\begin{enumerate}
+    \item Install Python 3.10 or later, pip and the venv module:
+    \begin{lstlisting}
+sudo apt install python3 python3-pip python3-venv
+    \end{lstlisting}
+    \item In the root of the repository, create a virtual environment named \texttt{venv-libreila}:
+    \begin{lstlisting}
+python3 -m venv venv-libreila
+    \end{lstlisting}
+    \item Activate the virtual environment:
+    \begin{lstlisting}
+source venv-libreila/bin/activate
+    \end{lstlisting}
+    \item Install the required packages:
+    \begin{lstlisting}
+pip install pyserial PySide6
+    \end{lstlisting}
+\end{enumerate}
+
+The name and the place matter. The root \texttt{Makefile} and the GUI test under \texttt{tests/python/05\_gui/} both look for \texttt{venv-libreila} at the repository root and fall back to it when the system \texttt{python3} has no PySide6, so a virtual environment put anywhere else has to be activated by hand for every command in this manual.
+
+To check that one of the two has it, without running anything else, from the repository root:
+
+\begin{lstlisting}
+make check-pyside6
+\end{lstlisting}
+
+It prints an install line if neither the system \texttt{python3} nor the virtual environment has PySide6, and stays silent when one of them does.
+
+\section{Getting the sources}
+\label{sec:started_sources}
+
+\todo{The clone, then a directory tour in one short table: \texttt{hdl/}, \texttt{codegen/}, \texttt{drivers/}, \texttt{tests/}, \texttt{docs/}.}
+
+\subsection{Cloning the repository}
+Make a local clone of the repository, 
+
+\begin{lstlisting}
+    git clone https://github.com/yashparitkar/LibreILA
+\end{lstlisting}
+
+\subsection{Importing the Libero project}
+
+\begin{enumerate}
+    \item Open Libero
+    \item In the Project tab $\to$ Open Project $\to$ Browse to \texttt{\{repo\}/tests/full/libre\_ila\_uart/libre\_ila\_uart\_libero/libre\_ila\_uart\_libero.prjx}
+    \item You can view the block design in \texttt{Design Heirarchy}, it contains the libre\_ila, axi4smaster\_pktgen (to generate dummy axistream traffic), a simple heartbeat ip and other MPFS blocks.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/importing_libero_project/1_exploring_the_bd.png}
+        \caption{Exploring the block design.}
+        \label{fig:started_libero_bd}
+    \end{figure}
+    \item Connect the Microchip PolarFire SoC development board to your PC via USB.
+    \item In the \texttt{Design Flow} tab, click \texttt{Run PROGRAM Action}, it should do all the synthesis, placement, routing and programming of the FPGA.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/importing_libero_project/2_run_program.png}
+        \caption{Run PROGRAM Action.}
+        \label{fig:started_libero_program}
+    \end{figure}
+\end{enumerate}
+
+\subsection{Importing the SoftConsole project}
+\begin{enumerate}
+    \item Open SoftConsole
+    \item Right click in the Project Explorer tab $\to$ Import $\to$ General $\to$ Existing Projects into Workspace $\to$ Next $\to$ Browse $\to$ Select \texttt{\{repo\}/tests/full/libre\_ila\_uart/libre\_ila\_uart\_sc} $\to$ Finish
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/importing_sc_project/1_import_project.png}
+        \caption{Importing the project.}
+        \label{fig:started_sc_import}
+    \end{figure}
+    \item You can view the source code in \texttt{src} folder, the file \texttt{src/application/hart1/u54\_1.c} contains the main function which initializes the UART and sends some dummy data over AXI4Stream to the libre\_ila core.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/replicate_steps/1_open_the_softconsole_project.png}
+        \caption{Opening the SoftConsole project.}
+        \label{fig:started_sc_open}
+    \end{figure}
+    \item Change the Build Configuration to LIM-Debug-DiscoveryKit
+    \item Build the project by clicking on the hammer icon in the toolbar.
+    \item Debug the project by clicking on the bug icon in the toolbar, it should program the SoC and start the application.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/replicate_steps/2_debug_view.png}
+        \caption{The Debug view.}
+        \label{fig:started_sc_debug}
+    \end{figure}
+    \item Once the DDR training is complete, the application will stop at breakpoint in \texttt{src/application/hart0/u54\_0.c} file, click on the Resume button in the toolbar to continue the execution of the application. 
+\end{enumerate}
+
+
+\section{Your first capture}
+\label{sec:started_first}
+
+\todo{The whole loop on the stock 64-bit AXI4Stream build, every command shown and every output pasted: generate the core, add it to a project, build, connect the USB-TTL adapter, add the device, set a trigger, arm, wait, read back, open the VCD. The trigger is the datasheet's worked example, TVALID and TLAST rising, so the two documents agree.}
+
+\begin{enumerate}
+    \item Start the debug project on SoftConsole
+    \item Open a the serial terminal to connect with the MSS UART, you can use any serial terminal of your choice, we will use \texttt{minicom} here. Note that, if the drivers for the MPFS is installed properly, you will see three serial devices in \texttt{/dev/} directory, one of them will be streaming the output from the MSS UART. In our case, it is \texttt{/dev/ttyUSB2}.
+    \begin{lstlisting}
+        minicom -D /dev/ttyUSB2 -b 115200
+    \end{lstlisting}
+    \item In the serial terminal, you should see the following output:
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/replicate_steps/4_mss_connected.png}
+        \caption{MSS UART connected.}
+        \label{fig:started_mss}
+    \end{figure}
+    \item Configure the pktgen using the menu options, we are using following configuration:
+    \begin{lstlisting}
+        Packet size: 250 frames
+        Packet count: 250 packets
+        Packet density: bubble per 2 frames
+    \end{lstlisting}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/replicate_steps/5_configuring_pktgen.png}
+        \caption{Configuring PKTGEN.}
+        \label{fig:started_pktgen}
+    \end{figure}
+    \item Open the GUI front end, you can use the following command to open the GUI:
+    \begin{lstlisting}
+        python3 libreila.py --gui
+    \end{lstlisting}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/replicate_steps/3_launch_libre_ila.png}
+        \caption{Launching LibreILA.}
+        \label{fig:started_launch}
+    \end{figure}
+    \item In the GUI, click on \texttt{Add Device} and select the serial port to which the USB-TTL adapter is connected, in our case it is \texttt{/dev/ttyACM0}. Click on \texttt{Connect} to connect to the device.
+    \item Set the trigger edge, rising and move the position to somewhere middle and trigger condition to \texttt{TVALID and TLAST rising}. Click on \texttt{Arm} to arm the trigger.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/replicate_steps/6_configuring_and_arming_the_ila.png}
+        \caption{Configuring and arming the ILA.}
+        \label{fig:started_arm}
+    \end{figure}
+    \item Fire the packet generator by selection option \texttt{1. Start PKTGEN transfer} on the MSS serial terminal
+    \item The ILA should've captured the data and the ILA status will change to \texttt{Triggered} and then to \texttt{Done} quickly.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/replicate_steps/7_firing_pktgen_done.png}
+        \caption{Firing PKTGEN, capture done.}
+        \label{fig:started_done}
+    \end{figure}
+    \item Press \texttt{Save} in the \texttt{Capture} section to read data from the ILA and save it to a VCD file.
+    \item Press \texttt{Open with gtkwave} to open the capture in gtkwave
+    \item In gtkwave, right click on the \texttt{libre\_ila} $\to$ Recure Import $\to$ Insert to add signals to waveform window
+    \item Tip: click on the "Magnifying glass with green tick" to fit the capture in the window
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{images/replicate_steps/8_gtkwave_window.png}
+        \caption{The GTKWave window.}
+        \label{fig:started_gtkwave}
+    \end{figure}
+\end{enumerate}
+
+\section{What just happened}
+\label{sec:started_recap}
+
+\todo{Half a page retracing the steps and naming the chapter that covers each in full: the map into the rest of the manual.}
+\end{document}

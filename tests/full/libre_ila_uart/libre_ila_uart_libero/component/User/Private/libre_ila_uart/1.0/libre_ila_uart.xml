@@ -1,0 +1,146 @@
+<spirit:component xmlns:actel-cc="http://www.actel.com/XMLSchema/CoreConsole" xmlns:spirit="http://www.spiritconsortium.org/XMLSchema/SPIRIT/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.spiritconsortium.org/XMLSchema/SPIRIT/1.1 http://www.spiritconsortium.org/XMLSchema/SPIRIT/1.1/component.xsd">
+  <spirit:vendor>User</spirit:vendor>
+  <spirit:library>Private</spirit:library>
+  <spirit:name>libre_ila_uart</spirit:name>
+  <spirit:version>1.0</spirit:version>
+  <spirit:busInterfaces>
+  <spirit:busInterface>
+    <spirit:name>probe_master</spirit:name>
+    <spirit:busType spirit:vendor="AMBA" spirit:library="AMBA4" spirit:name="AXI4Stream" spirit:version="r0p0_1"/>
+    <spirit:master></spirit:master>
+    <spirit:signalMap>
+      <spirit:signalName>
+        <spirit:componentSignalName>probe_master_axis_tvalid</spirit:componentSignalName><spirit:busSignalName>TVALID</spirit:busSignalName></spirit:signalName>
+      <spirit:signalName>
+        <spirit:componentSignalName>probe_master_axis_tready</spirit:componentSignalName><spirit:busSignalName>TREADY</spirit:busSignalName></spirit:signalName>
+      <spirit:signalName>
+        <spirit:componentSignalName>probe_master_axis_tdata</spirit:componentSignalName><spirit:busSignalName>TDATA</spirit:busSignalName></spirit:signalName>
+      <spirit:signalName>
+        <spirit:componentSignalName>probe_master_axis_tlast</spirit:componentSignalName><spirit:busSignalName>TLAST</spirit:busSignalName></spirit:signalName></spirit:signalMap>
+    <spirit:vendorExtensions></spirit:vendorExtensions>
+  </spirit:busInterface>
+  <spirit:busInterface>
+    <spirit:name>probe_slave</spirit:name>
+    <spirit:busType spirit:vendor="AMBA" spirit:library="AMBA4" spirit:name="AXI4Stream" spirit:version="r0p0_1"/>
+    <spirit:slave></spirit:slave>
+    <spirit:signalMap>
+      <spirit:signalName>
+        <spirit:componentSignalName>probe_slave_axis_tvalid</spirit:componentSignalName><spirit:busSignalName>TVALID</spirit:busSignalName></spirit:signalName>
+      <spirit:signalName>
+        <spirit:componentSignalName>probe_slave_axis_tready</spirit:componentSignalName><spirit:busSignalName>TREADY</spirit:busSignalName></spirit:signalName>
+      <spirit:signalName>
+        <spirit:componentSignalName>probe_slave_axis_tdata</spirit:componentSignalName><spirit:busSignalName>TDATA</spirit:busSignalName></spirit:signalName>
+      <spirit:signalName>
+        <spirit:componentSignalName>probe_slave_axis_tlast</spirit:componentSignalName><spirit:busSignalName>TLAST</spirit:busSignalName></spirit:signalName></spirit:signalMap>
+    <spirit:vendorExtensions></spirit:vendorExtensions>
+  </spirit:busInterface>
+  </spirit:busInterfaces>
+  <spirit:memoryMaps>
+  </spirit:memoryMaps>
+  <spirit:hwModel>
+    <spirit:views>
+    </spirit:views>
+    <spirit:signals>
+      <spirit:signal>
+        <spirit:name>i_rst_sync</spirit:name>
+        <spirit:direction>in</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>samp_aclk</spirit:name>
+        <spirit:direction>in</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>s_axil_aclk</spirit:name>
+        <spirit:direction>in</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>uart_rx</spirit:name>
+        <spirit:direction>in</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>uart_tx</spirit:name>
+        <spirit:direction>out</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>probe_slave_axis_tdata</spirit:name>
+        <spirit:direction>in</spirit:direction>
+        <spirit:left>63</spirit:left>
+        <spirit:right>0</spirit:right>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>probe_slave_axis_tlast</spirit:name>
+        <spirit:direction>in</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>probe_slave_axis_tvalid</spirit:name>
+        <spirit:direction>in</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>probe_slave_axis_tready</spirit:name>
+        <spirit:direction>out</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>probe_master_axis_tdata</spirit:name>
+        <spirit:direction>out</spirit:direction>
+        <spirit:left>63</spirit:left>
+        <spirit:right>0</spirit:right>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>probe_master_axis_tlast</spirit:name>
+        <spirit:direction>out</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>probe_master_axis_tvalid</spirit:name>
+        <spirit:direction>out</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>probe_master_axis_tready</spirit:name>
+        <spirit:direction>in</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>i_ext_trig</spirit:name>
+        <spirit:direction>in</spirit:direction>
+      </spirit:signal>
+      <spirit:signal>
+        <spirit:name>o_trig_out</spirit:name>
+        <spirit:direction>out</spirit:direction>
+      </spirit:signal>
+    </spirit:signals>
+    <spirit:hwParameters>
+      <spirit:hwParameter spirit:id="G_SAMP_CLK_FREQ" spirit:name="G_SAMP_CLK_FREQ" spirit:prompt="G_SAMP_CLK_FREQ:" spirit:dataType="int" spirit:resolve="user">100000000</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="G_AXIL_CLK_FREQ" spirit:name="G_AXIL_CLK_FREQ" spirit:prompt="G_AXIL_CLK_FREQ:" spirit:dataType="int" spirit:resolve="user">100000000</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="G_EXTERNAL_TRIG" spirit:name="G_EXTERNAL_TRIG" spirit:prompt="G_EXTERNAL_TRIG:" spirit:dataType="int" spirit:resolve="user">0</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="G_PROBE_WIDTH" spirit:name="G_PROBE_WIDTH" spirit:prompt="G_PROBE_WIDTH:" spirit:dataType="int" spirit:resolve="user">67</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="G_SAMP_BUFF_DEPTH" spirit:name="G_SAMP_BUFF_DEPTH" spirit:prompt="G_SAMP_BUFF_DEPTH:" spirit:dataType="int" spirit:resolve="user">2048</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="G_UID" spirit:name="G_UID" spirit:prompt="G_UID:" spirit:dataType="int" spirit:resolve="user">0</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="G_UART_RX_FIFO_DEPTH" spirit:name="G_UART_RX_FIFO_DEPTH" spirit:prompt="G_UART_RX_FIFO_DEPTH:" spirit:dataType="int" spirit:resolve="user">1024</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="G_UART_TX_FIFO_DEPTH" spirit:name="G_UART_TX_FIFO_DEPTH" spirit:prompt="G_UART_TX_FIFO_DEPTH:" spirit:dataType="int" spirit:resolve="user">1024</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="G_BAUD_RATE" spirit:name="G_BAUD_RATE" spirit:prompt="G_BAUD_RATE:" spirit:dataType="int" spirit:resolve="user">115200</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="C_S_AXIL_DATA_WIDTH" spirit:name="C_S_AXIL_DATA_WIDTH" spirit:prompt="C_S_AXIL_DATA_WIDTH:" spirit:dataType="int" spirit:resolve="user">32</spirit:hwParameter>
+      <spirit:hwParameter spirit:id="C_S_AXIL_ADDR_WIDTH" spirit:name="C_S_AXIL_ADDR_WIDTH" spirit:prompt="C_S_AXIL_ADDR_WIDTH:" spirit:dataType="int" spirit:resolve="user">32</spirit:hwParameter>
+    </spirit:hwParameters>
+    <spirit:deletedhwParameters>
+    </spirit:deletedhwParameters>
+  </spirit:hwModel>
+  <spirit:choices>
+  </spirit:choices>
+  <spirit:fileSets>
+  <spirit:fileSet spirit:fileSetId="HDL_FILESET">
+    <spirit:file>
+      <spirit:name>hdl/libre_ila_uart.vhdl</spirit:name>
+      <spirit:fileType>verilogSource</spirit:fileType>
+    <spirit:vendorExtensions></spirit:vendorExtensions>
+    </spirit:file>
+  <spirit:vendorExtensions></spirit:vendorExtensions>
+  </spirit:fileSet>
+  </spirit:fileSets>
+  <spirit:vendorExtensions>
+    <actel-cc:type typeName="IP"/>
+    <actel-cc:instantiateOnCreation value="false"/>
+    <actel-cc:diveInPermission value="READ_WRITE"/>
+    <actel-cc:categories categoryName="OS" style="hidden">
+      <actel-cc:category name="PC">
+      </actel-cc:category>
+    </actel-cc:categories>
+  </spirit:vendorExtensions>
+</spirit:component>

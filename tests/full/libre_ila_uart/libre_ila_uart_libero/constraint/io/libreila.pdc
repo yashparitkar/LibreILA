@@ -1,0 +1,11 @@
+set_io -port_name uart_tx \
+    -pin_name B14 \
+    -fixed true \
+    -io_std LVCMOS33 \
+    -DIRECTION OUT
+    
+set_io -port_name uart_rx \
+    -pin_name  E13 \
+    -fixed true \
+    -io_std LVCMOS33 \
+    -DIRECTION IN

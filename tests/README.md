@@ -8,9 +8,9 @@ The split is by what a test **needs to run**, not by what it covers:
 | `hdl/`    | ghdl, plus the generated core in `codegen/gen_axis/` | `make sim-hdl` |
 | `python/` | python3 and nothing else | `make sim-python` |
 | `c/`      | a C compiler and nothing else | `make sim-c` |
-| `full/`   | ghdl and cocotb, plus the generated core | not wired up yet, see [full/README.md](full/README.md) |
+| `full/`   | a board, Libero and SoftConsole | by hand, see [full/README.md](full/README.md) |
 
-`make sim` from the project root runs all three wired-up ones, host side tests first because they take milliseconds and a broken packet format or register map should not wait for the simulations to finish. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on — which is also why `full/`, whose Makefile carries no targets yet, is not part of `make sim`.
+`make sim` from the project root runs all three wired-up ones, host side tests first because they take milliseconds and a broken packet format or register map should not wait for the simulations to finish. A directory counts as a test if it carries a Makefile with a `sim` target, so the numbering is a convention and not something the build depends on — which is also why `full/`, which carries no Makefile at all, is not part of `make sim`.
 
 ## hdl/
 GHDL simulations of the core and the UART wrapper. The numbering is the order they build up in, each one leaning on what the last established.
@@ -101,7 +101,13 @@ The same `FakeWrapper` also serves the register map, so the tests cover the two 
 * **The control path and the readout.** `TestControl` covers the status decode and the ARM_FT and DISARM guards, `TestReadout` covers unrolling the circular buffer from the oldest sample and rebasing the trigger index onto that ordering.
 
 ## full/
-Not populated yet. See [full/README.md](full/README.md) for the idea: cocotb
-driving the generated core in simulation, through the same UART wrapper the
-python driver talks to on real hardware, rather than through `hdl/`'s
-testbenches or `python/`'s stubbed model of that wrapper.
+The whole chain on a board.
+
+`libre_ila_uart/` holds the Libero and SoftConsole projects for that build,
+along with the configuration under test, the stimulus and the pass criterion.
+It is run from those tools rather than from `make sim`, and Chapter 2 of the
+[manual](../docs/manual.pdf) walks through it step by step.
+
+Still to come: the same treatment for the bare AXI4Lite core in `libre_ila/`,
+and the cocotb version of this chain in simulation, driving the generated core
+through the same UART wrapper instead of through a stub.

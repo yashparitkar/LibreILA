@@ -1,0 +1,40 @@
+%% File: chapters/chapter5.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: The python driver stack: what each layer owns.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{The Software Stack}
+\label{ch:stack}
+
+\todo{The layers the python driver is built from, and what each one owns.}
+
+\section{Architecture}
+\label{sec:stack_arch}
+
+\todo{The architecture diagram, and the division of labour between the layers.}
+
+\section{The session}
+\label{sec:stack_session}
+
+\todo{What a session is, who uses it, and the rules for using one.}
+
+\section{The register driver}
+\label{sec:stack_driver}
+
+\todo{How the UART carries AXI4Lite register access, and the link's fail safes: timeout and resync.}
+
+\section{The trigger translator}
+\label{sec:stack_trigger}
+
+\todo{Per-signal patterns such as \texttt{0b00101xxxx}, translated to and from the condition/mask pair.}
+
+\section{The VCD writer}
+\label{sec:stack_vcd}
+
+\todo{Reads \texttt{portmap.csv}, checks the widths add up to the probe width the core reports, unrolls the circular buffer and writes named signals.}
+
+\end{document}

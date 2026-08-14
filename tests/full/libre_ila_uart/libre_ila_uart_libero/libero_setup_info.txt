@@ -1,0 +1,68 @@
+# Microsemi Corp.
+# Date: 2026-Aug-14 19:57:43
+Libero Release : 2025.2
+Libero Version : 2025.2.0.14
+Operating System Name : Linux
+Linux Distribution Description:	Ubuntu 22.04.3 LTS
+
+Ram Size : Unknown
+OS Type : 64-bit
+
+Environment Variables : 
+---------------------
+	GJS_DEBUG_TOPICS=JS ERROR;JS LOG
+	LANGUAGE=en_IN:en
+	USER=yash
+	MHCP_LIBERO_HOME=/home/yash/microchip/
+	XDG_SESSION_TYPE=x11
+	SHLVL=0
+	LD_LIBRARY_PATH=/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/lib:/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/lib64/rhel:/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/lib64:/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/libriscv64:/usr/lib/x86_64-linux-gnu
+	HOME=/home/yash
+	FPGENPROG=/home/yash/microchip/Libero_SoC_2025.2/Designer/bin64/fpgenprog
+	OLDPWD=/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/bin64
+	DESKTOP_SESSION=ubuntu-xorg
+	SC_INSTALL_DIR=/home/yash/microchip/SoftConsole-v2022.2-RISC-V-747/
+	GIO_LAUNCHED_DESKTOP_FILE=/home/yash/.local/share/applications/Microchip-Libero_SoC_2025.2.desktop
+	GTK_MODULES=gail:atk-bridge
+	GNOME_SHELL_SESSION_MODE=ubuntu
+	MANAGERPID=1407
+	SYSTEMD_EXEC_PID=1689
+	DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+	GIO_LAUNCHED_DESKTOP_FILE_PID=2687
+	LOGNAME=yash
+	GTK_IM_MODULE=ibus
+	JOURNAL_STREAM=8:6710
+	XDG_SESSION_CLASS=user
+	USERNAME=yash
+	GNOME_DESKTOP_SESSION_ID=this-is-deprecated
+	SNPSLMD_LICENSE_FILE=1702@ubuntu22043
+	WINDOWPATH=2
+	PATH=/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/bin:/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/bin64:/home/yash/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin
+	SESSION_MANAGER=local/ubuntu22043:@/tmp/.ICE-unix/1661,unix/ubuntu22043:/tmp/.ICE-unix/1661
+	INVOCATION_ID=86512aedf4de4e21899b8860b7c016e5
+	XDG_RUNTIME_DIR=/run/user/1000
+	LM_LICENSE_FILE=1702@ubuntu22043
+	XDG_MENU_PREFIX=gnome-
+	DISPLAY=:1
+	LANG=en_US.UTF-8
+	XDG_CURRENT_DESKTOP=ubuntu:GNOME
+	XAUTHORITY=/run/user/1000/gdm/Xauthority
+	XDG_SESSION_DESKTOP=ubuntu-xorg
+	XMODIFIERS=@im=ibus
+	SSH_AGENT_LAUNCHER=gnome-keyring
+	SSH_AUTH_SOCK=/run/user/1000/keyring/ssh
+	SHELL=/bin/bash
+	QT_ACCESSIBILITY=1
+	GDMSESSION=ubuntu-xorg
+	GPG_AGENT_INFO=/run/user/1000/gnupg/S.gpg-agent:0:1
+	GJS_DEBUG_OUTPUT=stderr
+	QT_IM_MODULE=ibus
+	SYNPLCTYD_LICENSE_FILE=1702@ubuntu22043
+	PWD=/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/bin
+	XDG_DATA_DIRS=/usr/share/ubuntu-xorg:/usr/share/gnome:/home/yash/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share/:/usr/share/:/var/lib/snapd/desktop
+	XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu-xorg:/etc/xdg
+	exedir=/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/bin64
+	ACTEL_SW_DIR=/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer
+	AMHOME=/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/am
+	TCL_LIBRARY=/home/yash/microchip/Libero_SoC_2025.2/Libero_SoC/Designer/lib/tcl8.5
+	MICROSEMI_ROOT_PORT=/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/tooldata/libero.2738

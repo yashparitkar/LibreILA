@@ -57,21 +57,13 @@ Where the bus genuinely cannot be spliced in series, for instance a controller t
 
 ### Running it
 
-```sh
-python3 code_generator.py                        # stock build  -> gen_axis/
-python3 code_generator.py \
-        --portmap portmap.csv \
-        --config  configuration.csv              # user build   -> codegen/gen/
-python3 code_generator.py --dry-run              # report only, writes nothing
-```
-
-The output directory is picked automatically: a run with **both** csv files left at their shipped defaults is the stock build and lands in `gen_axis/`, anything else lands in `gen/`. `--outdir` overrides that. Neither directory is tracked.
+The command lines and flags are at the top of this file. The output directory is picked automatically: a run with **both** csv files left at their shipped defaults is the stock build and lands in `gen_axis/`, anything else lands in `gen/`. `--outdir` overrides that. Neither directory is tracked.
 
 `GEN_TYPE` decides which files come out: `0` emits the bare AXI4Lite core alone, `1` emits it together with the UART wrapper and the fifo/uart blocks it instantiates. The testbenches need the wrapper, so `templates/default_configuration.csv` keeps `GEN_TYPE` at 1.
 
 The testbenches under `tests/hdl/` read `gen_axis/` rather than `../hdl/`, so what gets simulated is what the generator actually emits. Each of those test Makefiles treats that directory as an order-only prerequisite: if it exists it is reused untouched, if it is missing the generator runs first. **After editing anything in `../hdl/`, delete `gen_axis/` (or run `make clean`) or the tests will keep simulating the previous build.**
 
-The generated files can be passed through VHDL Style Guide (VHDL Style Guide) to make them more readable.
+The generated files can be passed through VHDL Style Guide to make them more readable.
 
 > `configuration_generation.py` is still to be written, see the future improvements section.
 
@@ -104,3 +96,13 @@ regenerate it only when it is missing. Not tracked.
 ## gen/
 The results of a user code generation, i.e. any run whose portmap or
 configuration differs from the defaults. Not tracked.
+
+## Directory structure
+```text
+codegen/
+├── code_generator.py : Main code generator file
+├── configuration.csv : Configuration input file
+├── portmap.csv       : Portmap used for the ILA
+├── README.md         : This file
+└── templates         : Template files for code generation
+```

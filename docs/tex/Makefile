@@ -29,6 +29,10 @@ copy :
 	cp $(DATASHEET).pdf ../$(DATASHEET).pdf
 	cp $(MANUAL).pdf ../$(MANUAL).pdf
 
+# clean: the latex intermediates are found anywhere under here, the pdfs are
+# named instead. Only the two documents, the subfile pdfs a standalone chapter
+# or appendix build leaves behind and what svg2pdf wrote are generated, so a
+# pdf figure dropped into images/ survives.
 clean:
 	find . -type f \( \
 		-name '*.aux' -o -name '*.bbl' -o -name '*.blg' -o \
@@ -36,8 +40,8 @@ clean:
 		-name '*.nav' -o -name '*.out' -o -name '*.snm' -o \
 		-name '*.toc' -o -name '*.lof' -o -name '*.lot' -o \
 		-name '*.synctex.gz' -o -name '*.vrb' -o -name '*.bcf' -o \
-		-name '*.run.xml' -o \
-		-name '*.pdf' \
+		-name '*.run.xml' \
 	\) -delete
-	rm -f Chapters/*.pdf Appendices/*.pdf
-	rm -f images/*_converted.pdf
+	rm -f $(DATASHEET).pdf $(MANUAL).pdf
+	rm -f chapters/*.pdf appendices/*.pdf
+	find ./images -name '*_converted.pdf' -delete

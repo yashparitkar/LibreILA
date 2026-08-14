@@ -1,0 +1,34 @@
+%% File: chapters/chapter10.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: Troubleshooting: symptom, cause and fix.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{Troubleshooting}
+\label{ch:trouble}
+
+\todo{The chapter that most directly stops a user hunting through READMEs. Every entry is a symptom the user actually sees, the cause, and the fix: a summary table first, then a subsection per group with the detail.}
+
+\section{Generation and build}
+\label{sec:tr_build}
+
+\todo{Stale \texttt{gen\_axis/} after editing \texttt{hdl/}. Portmap rejected for whitespace around fields. Directive not found aborting the run. Sample buffer inferred as registers and the area blowing up. Timing failing between the two clock domains because they were never declared asynchronous.}
+
+\section{The link}
+\label{sec:tr_link}
+
+\todo{No port, busy port, timeout, desynced reply. A baud mismatch between G\_BAUD\_RATE and \texttt{--baud}. RX and TX not crossed over. How \texttt{--debug} tells these apart, and what the resync line means.}
+
+\section{The trigger}
+\label{sec:tr_trigger}
+
+\todo{Fires immediately on arming: a level trigger whose condition already held, which is the single most common surprise. Never fires: mask, reduction, or a condition that cannot occur; recover with force trigger. An all-zero mask in AND mode matching vacuously. Mask bits set in the padding above the probe width.}
+
+\section{The capture}
+\label{sec:tr_capture}
+
+\todo{Signals named wrongly or shifted: portmap drifted from the synthesised core. Buffer looks like noise before the window start: reading without unrolling from the first index. Time axis wrong: G\_SAMP\_CLK\_FREQ does not match the real clock. Talking to the wrong core: \texttt{--device} is a UID, not an index.}
+\end{document}

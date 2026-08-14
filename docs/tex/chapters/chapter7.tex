@@ -1,0 +1,34 @@
+%% File: chapters/chapter7.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: Driving the UART wrapper from the graphical interface.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{The Graphical Interface}
+\label{ch:gui}
+
+\todo{Screenshots carry this chapter. \texttt{make shots} in \texttt{tests/python/05\_gui} renders the real GUI against two fake cores, so every screenshot here can be regenerated without hardware, in one pass, once the shot list is settled.}
+
+\section{Starting it}
+\label{sec:gui_start}
+
+\todo{\texttt{--gui}, what it needs installed, and that it reads the same device store as the CLI, so \texttt{--device-dir} must agree.}
+
+\section{Tabs and connections}
+\label{sec:gui_tabs}
+
+\todo{One tab per stored device, titled by connection state and UID. A tab owns one session for as long as it lives, so the port is opened once and held. A tab starts disconnected: opening the window opens no ports.}
+
+\section{Running a capture}
+\label{sec:gui_capture}
+
+\todo{The workflow, a screenshot per step: connect, review the trigger, arm, watch the state, force or disarm if needed, capture with the progress bar, open in the waveform viewer.}
+
+\section{What it does not do yet}
+\label{sec:gui_limits}
+
+\todo{The trigger view is read only in this pass. The per-signal condition table is next, and the translator behind it already exists; saying so here saves a reader hunting for a control that is not there.}
+\end{document}

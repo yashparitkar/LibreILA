@@ -1,0 +1,39 @@
+%% File: chapters/chapter9.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: Interpreting the captured data.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{Reading the Capture}
+\label{ch:reading}
+
+\todo{What the user ends up with, and how to read it. A short chapter, but the one that turns a file into an answer.}
+
+\section{The VCD file}
+\label{sec:read_vcd}
+
+\todo{Signals named from \texttt{portmap.csv}. Delta encoded: the first sample states every signal, after that only what moved. The width check that refuses a readout when the portmap has drifted from the synthesised core, and why that check exists.}
+
+\section{The trigger marker}
+\label{sec:read_trigger}
+
+\todo{VCD has no marker of its own, so the trigger is carried as an extra one-bit wire that pulses for exactly the sample it fired on.}
+
+\section{The time axis}
+\label{sec:read_time}
+
+\todo{Timestamps in picoseconds, one sample apart at the sampling clock the core reports. The rate is G\_SAMP\_CLK\_FREQ as synthesised, so a wrong generic gives a correct capture on a wrong time axis.}
+
+\section{In the waveform viewer}
+\label{sec:read_gtkwave}
+
+\todo{Opening the file, finding the trigger, and a screenshot of a real capture. \texttt{--waveform-viewer} for a reader who does not use GTKWave.}
+
+\section{Reading the raw buffer yourself}
+\label{sec:read_raw}
+
+\todo{For the baremetal path or a custom host: unrolling from the first index, the trigger index and the modulo arithmetic, with the register offsets left to the datasheet capture procedure.}
+\end{document}

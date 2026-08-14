@@ -1,0 +1,49 @@
+%% File: chapters/chapter8.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: Driving the bare AXI4Lite core from firmware.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{The Baremetal C Driver}
+\label{ch:cdriver}
+
+\todo{The path for \texttt{libre\_ila} on AXI4Lite, which the manual does not cover at all today. A reader on this path never touches the python driver, so the chapter has to stand on its own.}
+
+\section{Adding the driver to a project}
+\label{sec:c_files}
+
+\todo{The three files and what each is for. The AXI4Lite accessors are HAL calls, so which toolchain the shipped version assumes has to be stated plainly.}
+
+\section{Definitions you must supply}
+\label{sec:c_defs}
+
+\todo{The three CORE\_LIBRE\_ILA\_ defines size the arrays the caller declares and nothing else; the driver reads none of them. Why array sizes cannot come from the hardware, and why the length travels alongside the pointer, so a mismatch fails at the call rather than overrunning.}
+
+\section{Initialising}
+\label{sec:c_init}
+
+\todo{\texttt{LIBRE\_ILA\_init()} reads the probe width, buffer depth and sampling clock out of the core and derives the register map, so re-synthesising with a different probe width needs no firmware rebuild. It also picks up the UID.}
+
+\section{Configuring the trigger}
+\label{sec:c_trigger}
+
+\todo{The probe is opaque: one flat word, bit 0 upwards. The pattern of naming your own bits with a define and setting them through the word/mask macros, then the configure call with its reduction mode.}
+
+\section{Running a capture}
+\label{sec:c_capture}
+
+\todo{Position, arm, wait or poll status, force trigger, disarm, read back, as one complete compiling example rather than fragments.}
+
+\section{Several cores from one binary}
+\label{sec:c_multi}
+
+\todo{Each instance carries its own geometry, so one binary can drive cores of different probe widths. Their arrays are sized with the width macros and indexed with the sample macros, passing that instance's lane count. The magic key says a core is there, the UID says which one.}
+
+\section{Porting to another toolchain}
+\label{sec:c_porting}
+
+\todo{The register accessors are the only tool-dependent part: exactly which functions to reimplement and what they must do, so a user on a non-Microchip toolchain gets a checklist rather than a warning.}
+\end{document}

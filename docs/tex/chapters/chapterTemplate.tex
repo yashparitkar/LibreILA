@@ -1,0 +1,44 @@
+%% File: chapters/chapterTemplate.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: Template for a new chapter. Copy, rename, add a subfile line in manual.tex.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{Chapter Title}
+\label{ch:slug}
+
+\todo{What this chapter is for and who needs it, in a line or two.}
+
+\section{First Section}
+\label{sec:slug_first}
+
+\todo{What goes here.}
+
+\begin{figure}[H]
+    \centering
+    % \includegraphics[width=0.8\textwidth]{images/example.png}
+    \caption{Caption.}
+    \label{fig:slug_example}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Heading} & \textbf{Description} \\
+        \hline
+        Item & What it does \\
+        \hline
+    \end{tabularx}
+    \caption{Caption.}
+    \label{tab:slug_example}
+\end{table}
+
+\section{Summary}
+\label{sec:slug_summary}
+
+\todo{Optional.}
+\end{document}

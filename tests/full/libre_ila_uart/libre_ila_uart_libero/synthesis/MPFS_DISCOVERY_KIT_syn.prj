@@ -1,0 +1,269 @@
+#--  Synopsys, Inc.
+#--  Version W-2025.03M-SP1-1
+#--  Project file /home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/synthesis/MPFS_DISCOVERY_KIT_syn.prj
+#--  Written on Thu Aug 13 14:23:57 2026
+
+
+#project files
+add_file -verilog "../component/syn_comps.v"
+add_file -include "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_utility_functions.v"
+add_file -include "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/coreaxi4dmacontroller_arbiter_parameters.v"
+add_file -include "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/coreaxi4dmacontroller_arbiter_mapping.v"
+add_file -include "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/coreaxi4dmacontroller_interrupt_parameters.v"
+add_file -include "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/coreaxi4dmacontroller_interrupt_mapping.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/CORERESET/CORERESET_0/core/corereset_pf.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/CORERESET/CORERESET.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/INIT_MONITOR/INIT_MONITOR_0/INIT_MONITOR_INIT_MONITOR_0_PFSOC_INIT_MONITOR.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/INIT_MONITOR/INIT_MONITOR.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/PF_CCC_C0/PF_CCC_C0_0/PF_CCC_C0_PF_CCC_C0_0_PF_CCC.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/PF_CCC_C0/PF_CCC_C0.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/CLOCKS_AND_RESETS/CLOCKS_AND_RESETS.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_axi4_lite_target_ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_axi4_stream_target_ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_ctrl_if_mux_cdc.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_axi4_initiator_ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_SRAM_cache.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_ram_cache.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_cache.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_round_robin_arbiter_w_ack.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_dma_start_ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_int_status_mux.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_round_robin_arbiter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_fixed_priority_arbiter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_SRAM_dscCacheM.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_ram_dscCacheM.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_SRAM_dscCacheNM.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_ram_dscCacheNM.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_SRAM_dscConCacheNM.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_ram_dscConCacheNM.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_int_ext_dscrptr_cache.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_dma_arbiter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_int_error_ctrl_fsm.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_rd_tran_ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_rd_tran_queue.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_trans_ack.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_wr_tran_ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_wr_tran_queue.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_dma_tran_ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_dscrptr_src_mux.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_ext_dscrptr_fetch_fsm.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_dma_controller.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_SRAM_bd.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_ram_bd.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_ram_1k20_wrapper.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_buffer_descriptors.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_control_registers.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/CoreAXI4DMAController_int_1_ControllerFIFO.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/CoreAXI4DMAController_int_2_ControllerFIFO.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/CoreAXI4DMAController_int_3_ControllerFIFO.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_SRAM_fifo_0.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/DMA_CONTROLLER_DMA_CONTROLLER_0_ram_fifo_0.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/CoreAXI4DMAController_int_0_ControllerFIFO.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_int_x_ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller_int_controller.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER_0/rtl/vlog/core/coreaxi4dmacontroller.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_CONTROLLER/DMA_CONTROLLER.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/ResetSycnc.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/MasterAddressDecoder.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/DependenceChecker.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/BitScan0.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/TransactionController.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/MasterControl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/RoundRobinArb.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/TargetMuxController.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/AddressController.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/Revision.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/DERR_Slave.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/DualPort_FF_SyncWr_SyncRd.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/DualPort_Ram_SyncWr_SyncRd.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/RdFifoDualPort.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/ReadDataMux.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/RequestQual.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/ReadDataController.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/RDataController.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/SlaveDataMuxController.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/RespController.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/FifoDualPort.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/WriteDataMux.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/WDataController.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4CrossBar/Axi4CrossBar.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/AHB_SM_Undefburst.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/MstrAHBtoAXI4Converter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/Bin2Gray.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/CDC_grayCodeCounter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/CDC_rdCtrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/CDC_wrCtrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/RAM_BLOCK.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/CDC_FIFO.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/MstrClockDomainCrossing.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_DownConv_CmdFifoWriteCtrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/Hold_Reg_Ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_DownConv_Hold_Reg_Rd.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_DownConv_preCalcCmdFifoWrCtrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_DownConv_widthConvrd.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/FIFO_CTRL.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/FIFO.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/byte2bit.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_DownConv_readWidthConv.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_DownConv_Hold_Reg_Wr.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_DownConv_widthConvwr.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_brespCtrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_DownConv_writeWidthConv.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DownConverter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_AChannel.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_BChannel.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_RChannel_SlvRid_Arb.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_RChan_Ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_preCalcRChan_Ctrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/FIFO_downsizing.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_RChannel.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_WChan_Hold_Reg.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_WChan_ReadDataFifoCtrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_Wchan_WriteDataFifoCtrl.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/FIFO_upsizing.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_WChannel.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/DWC_UpConv_preCalcAChannel.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/UpConverter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/MstrDataWidthConv.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/MstrProtocolConverter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/RegSliceFull.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/RegisterSlice.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/MasterConvertor.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/SlvClockDomainCrossing.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/SlvDataWidthConverter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/SlvAxi4ProtConvRead.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/SlvAxi4ProtConvWrite.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/SlvAxi4ProtocolConv.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/SlvAxi4ProtConvAXI4ID.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/SlvProtocolConverter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/Axi4Convertors/SlaveConvertor.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/COREAXI4INTERCONNECT/2.9.100/rtl/vlog/core/CoreAxi4Interconnect.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/DMA_INITIATOR/DMA_INITIATOR.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/FIC0_INITIATOR/FIC0_INITIATOR.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MSS_LSRAM/PF_TPSRAM_AHB_AXI_0/MSS_LSRAM_PF_TPSRAM_AHB_AXI_0_PF_TPSRAM.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MSS_LSRAM/COREAXI4SRAM_0/rtl/vlog/core/CoreAXI4SRAM_MAINCTRL_ECC_RT.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MSS_LSRAM/COREAXI4SRAM_0/rtl/vlog/core/CoreAXI4SRAM_MAINCTRL_ECC.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MSS_LSRAM/COREAXI4SRAM_0/rtl/vlog/core/CoreAXI4SRAM_MAINCTRL_RT.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MSS_LSRAM/COREAXI4SRAM_0/rtl/vlog/core/CoreAXI4SRAM_MAINCTRL.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MSS_LSRAM/COREAXI4SRAM_0/rtl/vlog/core/CoreAXI4SRAM_SLVIF.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MSS_LSRAM/COREAXI4SRAM_0/rtl/vlog/core/CoreAXI4SRAM.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MSS_LSRAM/MSS_LSRAM.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/FIC_0_PERIPHERALS/FIC_0_PERIPHERALS.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/hdl/apb_arbiter.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/hdl/APB_PASS_THROUGH.v"
+add_file -verilog -lib COREAPB3_LIB "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/CoreAPB3/4.2.100/rtl/vlog/core/coreapb3_muxptob3.v"
+add_file -verilog -lib COREAPB3_LIB "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/CoreAPB3/4.2.100/rtl/vlog/core/coreapb3_iaddr_reg.v"
+add_file -verilog -lib COREAPB3_LIB "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/Actel/DirectCore/CoreAPB3/4.2.100/rtl/vlog/core/coreapb3.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/FIC_3_0x4000_0xxx/FIC_3_0x4000_0xxx.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/FIC_3_0x4xxx_xxxx/FIC_3_0x4xxx_xxxx.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/FIC_3_ADDRESS_GENERATION/FIC_3_ADDRESS_GENERATION.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/GPIO/GPIO_0/rtl/vlog/core/coregpio.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/GPIO/GPIO.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MIV_IHC_C0/MIV_IHC_C0_0/rtl/core/core_merged/miv_ihc_core_merged.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MIV_IHC_C0/MIV_IHC_C0.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/RECONFIGURATION_INTERFACE/RECONFIGURATION_INTERFACE_0/RECONFIGURATION_INTERFACE_RECONFIGURATION_INTERFACE_0_PF_DRI.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/RECONFIGURATION_INTERFACE/RECONFIGURATION_INTERFACE.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/FIC_3_PERIPHERALS/FIC_3_PERIPHERALS.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MPFS_DISCOVERY_KIT_MSS/MSS_NOBYP_NOBYP_NOBYP_BYP_BYP_syn_comps.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MPFS_DISCOVERY_KIT_MSS/MPFS_DISCOVERY_KIT_MSS.v"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MSS_WRAPPER/MSS_WRAPPER.v"
+add_file -vhdl -lib work "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/hdl/axi4liteslave.vhdl"
+add_file -vhdl -lib work "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/hdl/axi4smaster_pktgen.vhdl"
+add_file -vhdl -lib work "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/hdl/heartbeat.vhdl"
+add_file -vhdl -lib work "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/hdl/fifo.vhdl"
+add_file -vhdl -lib work "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/hdl/libre_ila.vhdl"
+add_file -vhdl -lib work "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/hdl/uart.vhdl"
+add_file -vhdl -lib work "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/hdl/libre_ila_uart.vhdl"
+add_file -verilog "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/component/work/MPFS_DISCOVERY_KIT/MPFS_DISCOVERY_KIT.v"
+add_file -fpga_constraint "/home/yash/Data/Projects/LibreILA/tests/full/libre_ila_uart/libre_ila_uart_libero/designer/MPFS_DISCOVERY_KIT/synthesis.fdc"
+
+
+#implementation: "synthesis"
+impl -add synthesis -type fpga
+
+#
+#implementation attributes
+
+set_option -vlog_std sysv
+
+#device options
+set_option -technology PolarFireSoC
+set_option -part MPFS095T
+set_option -package FCVG784
+set_option -speed_grade -1
+
+#compilation/mapping options
+set_option -use_fsm_explorer 0
+set_option -top_module "MPFS_DISCOVERY_KIT"
+
+# hdl_compiler_options
+set_option -hdl_strict_syntax 0
+
+# mapper_without_write_options
+set_option -frequency 100.000
+set_option -resolve_multiple_driver 1
+set_option -srs_instrumentation 1
+
+# mapper_options
+set_option -write_verilog 0
+set_option -write_structural_verilog 0
+set_option -write_vhdl 0
+set_option -design_rule_fanout_limit 0
+
+# actel_options
+set_option -rw_check_on_ram 0
+
+# Microchip G4
+set_option -run_prop_extract 1
+set_option -maxfan 10000
+set_option -infer_seqShift 1
+set_option -clock_globalthreshold 2
+set_option -async_globalthreshold 800
+set_option -globalthreshold 5000
+set_option -low_power_ram_decomp 0
+set_option -seqshift_to_uram 1
+set_option -disable_io_insertion 0
+set_option -opcond COMTC
+set_option -retiming 0
+set_option -report_path 4000
+set_option -update_models_cp 0
+set_option -preserve_registers 0
+set_option -disable_ramindex 0
+set_option -rep_clkint_driver 1
+set_option -microsemi_enhanced_flow 1
+set_option -ternary_adder_decomp 66
+set_option -async_clkint_removal 1
+
+# Microchip PolarFireSoC
+set_option -automatic_compile_point 1
+set_option -rom_map_logic 1
+set_option -polarfire_ram_init 1
+set_option -gclkint_threshold 1000
+set_option -rgclkint_threshold 100
+set_option -clkint_rgclkint_limit 1
+set_option -low_power_gated_clock 0
+set_option -gclk_resource_count 24
+set_option -min_cdc_sync_flops 2
+set_option -unsafe_cdc_netlist_property 0
+set_option -pack_uram_addr_reg 1
+set_option -act_wide_mul_size 35
+
+# NFilter
+set_option -no_sequential_opt 0
+
+# sequential_optimization_options
+set_option -symbolic_fsm_compiler 1
+
+# Compiler Options
+set_option -compiler_compatible 0
+set_option -resource_sharing 1
+
+# Compiler Options
+set_option -vhdl2008 1
+
+#automatic place and route (vendor) options
+set_option -write_apr_constraint 1
+
+#set result format/file last
+project -result_file "./MPFS_DISCOVERY_KIT.vm"
+impl -active "synthesis"

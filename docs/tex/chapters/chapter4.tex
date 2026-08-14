@@ -1,0 +1,50 @@
+%% File: chapters/chapter4.tex
+%% Author: Y.U.P. (yashparitkar)
+%%
+%% Description: Integrating the generated core into an FPGA project.
+
+\documentclass[../manual.tex]{subfiles}
+
+\begin{document}
+
+\chapter{Integrating LibreILA into a Design}
+\label{ch:integration}
+
+\todo{What to do with the generated code once it exists.}
+
+\section{Files to add}
+\label{sec:integ_files}
+
+\todo{What the generator emits for GEN\_TYPE 0 and 1, and which of those files go into the project. VHDL Style Guide can be run over them first where a project has a house style.}
+
+\section{Core or wrapper}
+\label{sec:integ_which}
+
+\todo{Choosing between the two, and what each one costs and buys.}
+
+\section{Splicing the probe into a link}
+\label{sec:integ_splice}
+
+\todo{What the probe master and probe slave sides are, and where the core sits in the link.}
+
+\section{Clocks and reset}
+\label{sec:integ_clocks}
+
+\todo{\texttt{samp\_aclk} takes the clock the probed link runs on, not a convenient free-running one; \texttt{s\_axil\_aclk} takes whatever the bus runs on. The practical reset rule, with the requirements themselves left in the datasheet.}
+
+\section{Timing constraints}
+\label{sec:integ_sdc}
+
+\todo{Work in progress: not verified in SDC yet.}
+
+\section{Connecting the UART}
+\label{sec:integ_uart}
+
+\todo{Any two pins will do, chosen in the design constraints.}
+
+\section{Checking the build}
+\label{sec:integ_check}
+
+\todo{Confirming the sample buffer was inferred as RAM and that timing is met.}
+
+\end{document}

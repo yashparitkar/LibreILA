@@ -1,10 +1,10 @@
 % File: manual.tex
 % Author: Y.U.P. (yashparitkar)
-% Last Modified: 2026-08-11 Tue 15:46
+% Last Modified: 2026-08-13 Thu 20:53
 %
 % Description: LaTeX source file for the LibreILA user manual. This covers mainly the usage instructions for the LibreILA tool.
 
-\documentclass{article}
+\documentclass{book}
 \usepackage{float}
 \usepackage[margin=2.5cm]{geometry}
 % \usepackage{xurl}
@@ -17,12 +17,27 @@
 \usepackage[linktocpage]{hyperref}
 % \usepackage{wasysym}
 \usepackage{graphicx}
+\graphicspath{{images/}{../images/}} % second entry: chapters compiled standalone as subfiles
 % \usepackage{epsfig}
 \setkeys{Gin}{width=0.8\textwidth}
 % \usepackage[normalem]{ulem}
 % \usepackage{enumerate}
 \usepackage{listings}
 \usepackage[nohyperlinks]{acronym}
+\usepackage{enumitem}
+
+%% List spacing %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% book.cls leaves \flushbottom on for a twoside document and the default
+% list glue is elastic, so a page that runs short is padded out by
+% stretching the gaps between list items. Rigid spacing so a list cannot
+% be stretched, and \raggedbottom so LaTeX stops trying to.
+\setlist{topsep=4pt, itemsep=2pt, parsep=0pt, partopsep=0pt}
+\raggedbottom
+
+% Row height for every table in the document. It lives here rather than in the
+% body so a chapter compiled on its own as a subfile gets the same tables as
+% the full build.
+\renewcommand{\arraystretch}{1.25}
 
 \lstset{ %
 basicstyle=\footnotesize,       % the size of the fonts that are used for the code
@@ -56,30 +71,26 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
 
 
 \newcommand{\todo}[1]{\textbf{\color{red}TODO: #1}}
-\newcommand{\arya}{\color{blue}} 
+\newcommand{\arya}{\color{blue}}
 \newcommand{\degr}{\ensuremath{^\circ}}
 
-\title{LibreILA User Manual}
+\usepackage{subfiles} % Allows compiling individual chapters/appendices standalone; load last
+
+% The logo rides in \title so it lands on the title page itself. As a
+% standalone figure it was a float and drifted off onto its own page.
+\title{%
+    \includegraphics[width=0.5\linewidth]{./images/libre_ila_logo_converted.pdf}\\[2em]
+    LibreILA User Manual}
 \author{Yash Paritkar (github/yashparitkar)}
-\date{July 2026}
+\date{August 2026}
 
 \begin{document}
 
-\begin{figure}
-    \centering
-    \includegraphics[trim=0 0 0 0,clip=true,width=0.75\linewidth]{./images/libre_ila_logo_converted.pdf}
-    % \caption{Caption}
-    \label{fig:rendering}
-\end{figure}
-
 \maketitle
-
-\newpage
 
 \section*{Document History}
 \addcontentsline{toc}{section}{Document history}
 
-\renewcommand{\arraystretch}{1.5}
 \begin{table}[H]
     \centering
     \begin{tabularx}{\textwidth}{|l|c|X|}
@@ -93,33 +104,33 @@ breakatwhitespace=false,        % sets if automatic breaks should only happen at
     \label{tab:hisotry}
 \end{table}
 
-\newpage
-
 \tableofcontents
 
-\newpage
 \listoffigures
 \listoftables
 
 \section*{List of Acronyms}
 \input{acronym}
 
-\newpage
-\section{Introduction}
-This document describes the design and implementation of the \ac{ILA}.
+%% Chapters %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% One file per chapter under chapters/. Each is a subfiles document and
+%% compiles on its own; chapters/chapterTemplate.tex is the starting point
+%% for a new one. A chapter has to be listed here or it is not built.
 
-\newpage
-\section{Generating configuration}
-\begin{abstract}
-    If same sampling clock speed is ok for multiple channels, a single ILA can be used to sample multiple channels otherwise multiple ILAs can be used to sample different channels at different speeds.
-\end{abstract}
+\subfile{chapters/chapter1}
+\subfile{chapters/chapter2}
+\subfile{chapters/chapter3}
+\subfile{chapters/chapter4}
+\subfile{chapters/chapter5}
+\subfile{chapters/chapter6}
+\subfile{chapters/chapter7}
+\subfile{chapters/chapter8}
+\subfile{chapters/chapter9}
+\subfile{chapters/chapter10}
 
-\newpage
-\section{Creating a generic logic analyzer from LibreILA}
+%% Appendices %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\appendix
 
-\newpage
-\section{Using the CLI interface of LibreILA}
+\subfile{appendices/appendixA}
 
-\newpage
-\section{Using the GUI interface of LibreILA}
 \end{document}
