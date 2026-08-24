@@ -10,11 +10,129 @@
 \chapter{Simulations}
 \label{app:nohw}
 
-\todo{What the simulations cover, and how to run them with no hardware attached.}
+Everything in this manual except programming a board can be exercised with nothing plugged in. The test suite is how, and it is also the quickest way to find out whether a change you made broke something, since the host side of it runs in milliseconds.
 
 \section{The test suite}
 \label{sec:nohw_tests}
 
-\todo{\texttt{make sim} and what each group needs: the HDL simulations need GHDL and a generated core, the python and C tests need neither. What each group actually proves.}
+From the root of the repository:
+
+\begin{lstlisting}
+make sim           # everything
+make sim-python    # the host side tests, python3 and nothing else
+make sim-c         # the baremetal driver, a C compiler and nothing else
+make sim-hdl       # the GHDL simulations
+make configure     # just bring the generated core up to date
+\end{lstlisting}
+
+\texttt{tests/} is split by what a test \emph{needs} to run rather than by what it covers, which is what makes the three targets independently useful. Table~\ref{tab:nohw_groups} is the whole dependency story.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Group} & \textbf{Needs} & \textbf{Covers} \\
+        \hline
+        \texttt{tests/python/} & python3 & The python driver, every layer of it, against a byte level model of the wrapper \\
+        \hline
+        \texttt{tests/c/} & A C compiler & The baremetal driver, compiled and run on the host against a stubbed HAL \\
+        \hline
+        \texttt{tests/hdl/} & GHDL, and the generated core & The core itself, simulated as the generator actually emits it \\
+        \hline
+    \end{tabularx}
+    \caption{The three test groups and what each one needs.}
+    \label{tab:nohw_groups}
+\end{table}
+
+\texttt{make sim} runs the host side first, and deliberately: those tests take milliseconds, so a broken packet format or register map fails there rather than after the simulations have run. A directory counts as a test if it carries its own \texttt{Makefile}, which keeps the numbering a convention rather than something the build depends on.
+
+Two notes on what is not needed. The python group needs no serial port and no board, because it drives the driver against a model of the wrapper rather than against hardware; \texttt{tests/python/05\_gui} additionally needs PySide6 and skips itself where the widget packages are absent, so \texttt{make sim-python} really does need python3 and nothing else. The C group needs no vendor toolchain, because \texttt{tests/c/00\_reg\_map/stub/} supplies what the PolarFire SoC HAL would have; that stub is also the worked example of the port described in Section~\ref{sec:c_porting}.
+
+\section{What each test proves}
+\label{sec:nohw_coverage}
+
+The HDL simulations are the specification of the core's behaviour, one directory per property.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Directory} & \textbf{Proves} \\
+        \hline
+        \texttt{00\_sim\_ext\_trig} & The external trigger build triggers off \texttt{i\_ext\_trig} \\
+        \hline
+        \texttt{01\_sim\_axil\_trig} & The internal trigger fires on a condition, here TLAST high \\
+        \hline
+        \texttt{02\_sim\_axil\_trig\_data} & A masked data pattern triggers on the data it names and not on the rest \\
+        \hline
+        \texttt{03\_sim\_axil\_cdc} & The two clock domains behave when they are not the same clock \\
+        \hline
+        \texttt{04\_sim\_axil\_force\_trig} & A second write to ARM\_FT forces the trigger \\
+        \hline
+        \texttt{06\_sim\_libre\_ila\_uart} & The UART wrapper end to end: configure, arm, trigger and read back over the serial link \\
+        \hline
+        \texttt{07\_sim\_edge\_test} & Level against edge triggering, TRIG\_CFG bits 1 and 2 \\
+        \hline
+        \texttt{08\_sim\_addr\_bound\_check} & Address decoding at and past the end of the register map \\
+        \hline
+        \texttt{09\_sim\_axil\_disarm} & The DISARM register returns an armed core to IDLE \\
+        \hline
+    \end{tabularx}
+    \caption{The HDL simulations.}
+    \label{tab:nohw_hdl}
+\end{table}
+
+The host side tests cover the two drivers layer by layer.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Directory} & \textbf{Proves} \\
+        \hline
+        \texttt{python/00\_pkt\_format} & The register reads and writes against a byte level model of the wrapper's packet parser \\
+        \hline
+        \texttt{python/01\_vcd} & The portmap parsing that turns \texttt{portmap.csv} into a bit layout, and the VCD that comes out of it \\
+        \hline
+        \texttt{python/02\_cli} & The command line front end end to end, every verb, against that same model \\
+        \hline
+        \texttt{python/03\_session} & The session layer both front ends drive \\
+        \hline
+        \texttt{python/04\_trigger} & The translation between per-signal patterns and the flat condition and mask pair \\
+        \hline
+        \texttt{python/05\_gui} & The graphical front end, driven offscreen against two fake cores \\
+        \hline
+        \texttt{c/00\_reg\_map} & The baremetal driver against the register map, rather than against itself \\
+        \hline
+    \end{tabularx}
+    \caption{The host side tests.}
+    \label{tab:nohw_host}
+\end{table}
+
+The HDL group reads \texttt{codegen/gen\_axis/} rather than \texttt{hdl/}, so what is simulated is what the generator actually emits rather than the templates it emits from. Each test Makefile regenerates that directory when the generator, anything in \texttt{hdl/} or anything in \texttt{codegen/templates/} has changed under it, so running one test directly stays as up to date as going through the root Makefile. Section~\ref{sec:codegen_running} covers the one case that stamp cannot see.
+
+\section{Running one on its own}
+\label{sec:nohw_single}
+
+Every test directory carries its own Makefile and can be run from where it is:
+
+\begin{lstlisting}
+cd tests/hdl/07_sim_edge_test
+make sim       # run it
+make wave      # run it and open the result in gtkwave
+make clean
+\end{lstlisting}
+
+\texttt{make wave} is the useful one when a simulation fails: the waveform it opens is the core's own internals, not a capture, so it shows what the trigger comparator and the capture state machine were doing at the moment the test gave up.
+
+The graphical front end has one more entry point, which is not a test at all:
+
+\begin{lstlisting}
+cd tests/python/05_gui
+make gui       # open the real GUI against two fake cores
+make shots     # the same, rendered offscreen to shots/*.png
+\end{lstlisting}
+
+\texttt{make gui} starts the real window against a throwaway device store holding two fake cores, so the whole of Chapter~\ref{ch:gui} can be followed without a board attached. It is the fastest way to see what the tool does before committing to building a core into a design.
 
 \end{document}

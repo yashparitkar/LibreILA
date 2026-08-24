@@ -77,20 +77,21 @@ EXECUTION_ORDER = """\
 The flags are verbs. Whatever order they are given in, they run in this one:
 
   1  --reset                     forget every stored device, then stop
-  2  --add-device                store the device on --serial-port, then stop
-  3  (connect to --device)
-  4  --info                      print what the core reports, then stop
-  5  --disarm                     cancel a capture still in progress
-  6  --set-trigger-condition
+  2  --list-devices              print the stored devices, then stop
+  3  --add-device                store the device on --serial-port, then stop
+  4  (connect to --device)
+  5  --info                      print what the core reports, then stop
+  6  --disarm                     cancel a capture still in progress
+  7  --set-trigger-condition
      --set-trigger-mask
      --set-trigger-type
      --set-trigger-reduction     merged into one trigger write
-  7  --set-trigger-position
-  8  --get-trigger-configuration read the trigger back out of the core
-  9  --arm
-  10 --force-trigger
-  11 --wait-done
-  12 --read-data                 write the .vcd
+  8  --set-trigger-position
+  9  --get-trigger-configuration read the trigger back out of the core
+  10 --arm
+  11 --force-trigger
+  12 --wait-done
+  13 --read-data                 write the .vcd
 
 So a whole capture is one line:
 
@@ -172,6 +173,13 @@ def build_parser():
     )
 
     parser.add_argument(
+        "--list-devices",
+        action="store_true",
+        help="Print the UID, port and baud rate of every stored device, then stop. These are "
+             "the UIDs --device takes",
+    )
+
+    parser.add_argument(
         "--add-device",
         action="store_true",
         help="Add a new LibreILA device instance with the specified serial port and baud rate",
@@ -247,7 +255,8 @@ def build_parser():
     parser.add_argument(
         "--set-trigger-mask",
         type=_trigger_value,
-        help="Which bits of the condition are compared, same format. A zero mask never triggers",
+        help="Which bits of the condition are compared, same format. A zero mask never fires in "
+             "'or' mode, and fires on the first sample in 'and' mode",
     )
 
     parser.add_argument(
@@ -331,6 +340,50 @@ def cmd_reset(args):
             print(f"removed {path}")
     else:
         print("no stored devices to remove")
+
+    return _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_SUCCESS"]
+
+
+def cmd_list_devices(args):
+    """
+    cmd_list_devices: Print the stored devices.
+
+    No port is opened. This is the store, i.e. what --device can name, not what
+    is currently plugged in, and a UID here only reaches a core if the port it
+    was added on still answers as that UID.
+
+    args: The parsed command line.
+
+    returns: An exit status.
+    """
+
+    uids = session.list_devices(args.device_dir)
+
+    if not uids:
+        print(f"no stored devices in {args.device_dir}. Add one with --add-device "
+              f"--serial-port <port>.")
+
+        return _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_SUCCESS"]
+
+    print(f"stored devices in {args.device_dir}:")
+
+    # The files are hand editable, so one mangled entry is reported against its
+    # UID and the rest of the listing still prints.
+    broken = False
+
+    for uid in uids:
+        try:
+            serial_port, baud = session.load_device(uid, args.device_dir)
+        except session.OperationError as err:
+            broken = True
+
+            print(f"  UID {uid:<6} unreadable: {err}")
+            continue
+
+        print(f"  UID {uid:<6} {serial_port:<16} {baud} baud")
+
+    if broken:
+        return _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_DEVICE_NOT_FOUND"]
 
     return _libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_SUCCESS"]
 
@@ -521,6 +574,9 @@ def run(args, parser):
 
     if args.gui:
         return cmd_gui(args)
+
+    if args.list_devices:
+        return cmd_list_devices(args)
 
     if args.add_device:
         return cmd_add_device(args)

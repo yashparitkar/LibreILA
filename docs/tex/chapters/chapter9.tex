@@ -10,30 +10,70 @@
 \chapter{Reading the Capture}
 \label{ch:reading}
 
-\todo{What the user ends up with, and how to read it. A short chapter, but the one that turns a file into an answer.}
+A finished capture is one file, and this chapter is about reading it: what is in it, where the trigger is, what the time axis means, and how to unroll the buffer yourself if you are on the baremetal path and have raw words rather than a file.
 
 \section{The VCD file}
 \label{sec:read_vcd}
 
-\todo{Signals named from \texttt{portmap.csv}. Delta encoded: the first sample states every signal, after that only what moved. The width check that refuses a readout when the portmap has drifted from the synthesised core, and why that check exists.}
+\texttt{--read-data} writes a VCD, which every waveform viewer reads. The signals are named from \texttt{portmap.csv}, in the order that file lists them, and they sit in a scope called \texttt{libre\_ila}, so a capture opened next to a simulation of the same design does not collide with it. The header is short enough to read by eye:
+
+\begin{lstlisting}
+$timescale 1ps $end
+$scope module libre_ila $end
+$var wire 64 ! axis_tdata $end
+$var wire 1 " axis_tlast $end
+$var wire 1 # axis_tvalid $end
+$var wire 1 $ axis_tready $end
+$var wire 1 % trigger $end
+$upscope $end
+$enddefinitions $end
+\end{lstlisting}
+
+The body is delta encoded. The first sample states every signal, and after that only what moved, which is what keeps a full buffer of a mostly idle bus small. It also means a signal that never changes appears once, at time zero, and nowhere else.
+
+The one thing that can go wrong before the file is written is the portmap. The driver refuses the readout unless the widths in \texttt{portmap.csv} add up to the probe width the core reports, and exits with status 6 if they do not. That check is there because the failure it catches is otherwise silent: a portmap that has drifted from the synthesised core still slices the probe word cleanly, just at the wrong boundaries, so the capture comes back looking entirely plausible and meaning nothing. A name that has moved is easy to spot; a 64-bit bus read off one bit low is not.
+
+Keep the portmap a build actually used with that build, in other words. If a core has been re-synthesised from a different portmap since, pass \texttt{--portmap} pointing at the right one rather than trusting the default.
 
 \section{The trigger marker}
 \label{sec:read_trigger}
 
-\todo{VCD has no marker of its own, so the trigger is carried as an extra one-bit wire that pulses for exactly the sample it fired on.}
+VCD has no notion of a marker, cursor or annotation, so the trigger is carried as data: an extra one-bit wire named \texttt{trigger}, declared after the probe signals, which is 0 for every sample except the one the ILA triggered on, where it is 1. It pulses for exactly that sample.
+
+That sample is the one the condition held on, in level mode, or the one it changed on, in the edge modes. There is no pipeline delay to correct for on the host side, so the pulse marks the event itself rather than the core's reaction to it.
+
+Declaring it last is deliberate: adding or removing a signal in the portmap does not shift the identifier the trigger wire uses, so scripts that look for it keep working across builds.
 
 \section{The time axis}
 \label{sec:read_time}
 
-\todo{Timestamps in picoseconds, one sample apart at the sampling clock the core reports. The rate is G\_SAMP\_CLK\_FREQ as synthesised, so a wrong generic gives a correct capture on a wrong time axis.}
+Timestamps are in picoseconds, one sample apart, at the sampling clock the core reports. Picoseconds keep the step an exact integer for every clock that divides into $10^{12}$, which covers the round numbers a sampling domain actually runs at; 100\,MHz lands on 10\,000\,ps per sample.
+
+The rate comes from \texttt{G\_SAMP\_CLK\_FREQ} as synthesised, read back out of the core rather than assumed by the host. So a generic that does not match the clock actually connected to \texttt{samp\_aclk} gives a perfectly correct capture on a wrong time axis: every sample is real and in the right order, and every interval measured off the viewer's cursor is wrong by the ratio of the two frequencies. Nothing in the flow can detect this, since the core has no way to measure its own clock. It is worth checking the frequency in \texttt{--info} against the design once per build.
 
 \section{In the waveform viewer}
 \label{sec:read_gtkwave}
 
-\todo{Opening the file, finding the trigger, and a screenshot of a real capture. \texttt{--waveform-viewer} for a reader who does not use GTKWave.}
+The GUI's \texttt{Open with gtkwave} launches the viewer on the file just written, and on the command line the file is opened however you would open any other VCD. \texttt{--waveform-viewer} names a different one for a reader who does not use GTKWave; anything that takes a file path on its command line will do.
+
+In GTKWave, the signals are not shown until they are added: right click \texttt{libre\_ila} in the tree, then \texttt{Recurse Import} and \texttt{Insert}, which brings in the probe signals and the trigger wire in portmap order. The magnifying glass with the green tick fits the whole capture in the window, which is the quickest way to see the shape of what was caught. Figure~\ref{fig:started_gtkwave} in Chapter~\ref{ch:started} is a real capture opened this way.
+
+To find the trigger, look for the pulse on \texttt{trigger}, or search on that signal going high. Everything to the left of it is history the core was already holding when the condition fired, and its extent is what \texttt{--set-trigger-position} chose; everything to the right was captured after.
 
 \section{Reading the raw buffer yourself}
 \label{sec:read_raw}
 
-\todo{For the baremetal path or a custom host: unrolling from the first index, the trigger index and the modulo arithmetic, with the register offsets left to the datasheet capture procedure.}
+On the baremetal path, or from a custom host, what comes back is words rather than a file. The buffer is circular and the capture stopped wherever it stopped, so the words are not in time order until they are unrolled.
+
+Two registers say where the window is, and both are valid once DONE is set. SAMP\_BUFF\_FRST\_IDX is the oldest sample, SAMP\_BUFF\_TRIG\_IDX is the one that triggered, and both are raw indices into the circular buffer. Then, with \texttt{DEPTH} the buffer depth:
+
+\begin{itemize}
+    \item Sample $i$ of the window, counting from the oldest, is at buffer index $(\mathrm{FRST\_IDX} + i) \bmod \mathtt{DEPTH}$.
+    \item The trigger sits at position $(\mathrm{TRIG\_IDX} - \mathrm{FRST\_IDX}) \bmod \mathtt{DEPTH}$ within the unrolled window.
+\end{itemize}
+
+Skipping the unroll is a recognisable failure rather than a subtle one: the capture reads correctly from the start index to the end of the buffer, then jumps backwards in time to the part that was overwritten, so the waveform looks right up to a discontinuity and wrong after it.
+
+Within a sample, the probe word is stored one 32-bit lane per slice, lane $n$ carrying probe bits $32n+31$ downto $32n$, with the last lane zero padded in its upper bits. On the bus each sample is padded further, up to the register stride, so a 67-bit probe reads back as four registers per sample of which the first three carry data. \texttt{LIBRE\_ILA\_read\_data()} does all of this for you, including the unroll and dropping the padding words, and hands back the trigger position already rebased on its own output; Section~\ref{sec:c_capture} is that call in context. For a host doing it by hand, the register offsets and the full capture procedure are in the datasheet.
+
 \end{document}

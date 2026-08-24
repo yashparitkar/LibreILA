@@ -10,31 +10,127 @@
 \chapter{The Software Stack}
 \label{ch:stack}
 
-\todo{The layers the python driver is built from, and what each one owns.}
+This chapter is introduces the reader to the python driver stack, what each layer owns, and how they interact. More information on the driver can be obtained by reading the source code and corresponding READMEs.
 
 \section{Architecture}
 \label{sec:stack_arch}
 
-\todo{The architecture diagram, and the division of labour between the layers.}
+The driver is five modules under \texttt{drivers/python/}, listed in Table~\ref{tab:stack_files}
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{File} & \textbf{What it owns} \\
+        \hline
+        \texttt{libre\_ila.py} & The command line front end. Every verb lives here \\
+        \hline
+        \texttt{gui.py} & The graphical front end, \texttt{--gui} \\
+        \hline
+        \texttt{session.py} & One connection to one core, and every operation either front end can ask of it \\
+        \hline
+        \texttt{driver.py} & The register map over UART. Knows nothing about what the probe bits mean \\
+        \hline
+        \texttt{vcd.py} & The portmap and the VCD. Turns raw samples back into named signals \\
+        \hline
+        \texttt{trigger.py} & Per-signal trigger patterns to and from the flat condition and mask pair \\
+        \hline
+    \end{tabularx}
+    \caption{The modules of the python driver.}
+    \label{tab:stack_files}
+\end{table}
+
+The \texttt{driver.py} serves as the core with \texttt{session.py} as the interface to the front ends. The front ends are \texttt{libre\_ila.py} for the command line and \texttt{gui.py} for the GUI. The \texttt{session.py} module allows the command line and GUI to share the same operations while leveraging the different lifetimes of a session. The \texttt{vcd.py} and \texttt{trigger.py} modules are used by the \texttt{session.py} to handle the VCD and trigger translation respectively.
 
 \section{The session}
 \label{sec:stack_session}
 
-\todo{What a session is, who uses it, and the rules for using one.}
+A session is one connection to one core. It is constructed with a serial port, a baud rate and optionally a portmap path and a UID, and it does nothing until \texttt{connect()} is called; construction opens no port. Once connected it carries the core's geometry, read out of the core itself rather than configured: \texttt{probe\_width}, \texttt{samp\_buff\_depth}, \texttt{samp\_freq\_hz}, \texttt{n\_lanes}, \texttt{stride\_width} and \texttt{uid}. That is the reason re-synthesising with a different probe width needs no change on the host.
+
+The operations are the verbs of Chapter~\ref{ch:cli} under different names: \texttt{info}, \texttt{status}, \texttt{get\_trigger}, \texttt{set\_trigger}, \texttt{set\_trigger\_position}, \texttt{arm}, \texttt{force\_trigger}, \texttt{disarm}, \texttt{wait\_done} and \texttt{capture}. \texttt{probes} returns the portmap, loaded on first use and then kept, after checking it against the width the core reports.
+
+Two rules matter when driving one from your own code.
+
+\textbf{One session may only be touched by one thread at a time.} The wrapper is a request and response protocol over a single port, and the transaction layer flushes the input buffer on the way in, so two overlapping operations desync the wrapper and each other. Sessions are independent of one another, one port each, so several cores in parallel is fine; two threads on one session is not.
+
+\textbf{The readout is the one long operation.} \texttt{capture()} takes a \texttt{progress} callback, called as \mbox{\texttt{progress(words\_read, words\_total)}}, because a full buffer takes seconds rather than a packet. An event driven front end runs it off the thread serving its event loop and reports from there. \texttt{wait\_done(timeout)} is the blocking alternative, for a front end with nothing else to do, since it polls in a loop; an event driven one polls \texttt{status} on a timer instead, which it wants anyway to keep a state display honest.
+
+Failures come back as \texttt{OperationError} with a \texttt{reason} field taking one of the symbolic values in Table~\ref{tab:stack_reasons}. The message states the fact and stops, deliberately: the remedy for a capture that has not finished is \texttt{--wait-done} on the command line and a button in a window, so the layer that knows which is the one that says so.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Reason} & \textbf{Means} \\
+        \hline
+        \texttt{usage} & The call itself was wrong, e.g. a trigger value wider than the probe \\
+        \hline
+        \texttt{device-not-found} & No stored device with that UID, or its file is unreadable \\
+        \hline
+        \texttt{portmap} & No portmap given, or the file could not be read \\
+        \hline
+        \texttt{portmap-mismatch} & The portmap widths do not add up to the probe width the core reports \\
+        \hline
+        \texttt{timeout} & The link did not answer, or answered out of step \\
+        \hline
+        \texttt{not-done} & The capture had not reached DONE when the readout was asked for \\
+        \hline
+    \end{tabularx}
+    \caption{The symbolic reasons an \texttt{OperationError} carries.}
+    \label{tab:stack_reasons}
+\end{table}
 
 \section{The register driver}
 \label{sec:stack_driver}
 
-\todo{How the UART carries AXI4Lite register access, and the link's fail safes: timeout and resync.}
+\texttt{driver.py} is the register map over the wire and nothing above it. It reads and writes 32-bit registers by address; it does not know what a probe bit means, what a portmap is, or that a VCD exists.
+
+The wrapper carries AXI4Lite as a request and response packet pair, both fields wider than a byte sent most significant first:
+
+\begin{lstlisting}
+PC to ILA:  | 0x55 | R/W (1) #words (7) | base address (32) | write words |
+ILA to PC:  | 0xAA | valid (1) #words (7) | base address (32) | read words |
+\end{lstlisting}
+
+So a request is a six byte header and, for a write, four bytes per word; a reply is a six byte header and, for a read, four bytes per word. Both directions are answered, a write included, which is what lets the host tell a lost request from a slow one. The count field is seven bits, so a transfer is at most 127 words and a full buffer readout is split into many packets. The full packet format, including the valid bit and the wrapper's watchdog, is in the datasheet.
+
+The link has two fail safes. Every read carries a timeout, so a wrapper that has stopped answering fails the operation rather than blocking the host forever. And when a reply arrives that does not match its request, the driver resyncs: it reads and discards until the link goes quiet, logging \texttt{RESYNC dropped N stale bytes}, and only then reports the failure. Without that, one desynced reply would leave every later transaction reading the tail of the previous one.
 
 \section{The trigger translator}
 \label{sec:stack_trigger}
 
-\todo{Per-signal patterns such as \texttt{0b00101xxxx}, translated to and from the condition/mask pair.}
+The core takes a flat condition word and a flat mask word, both as wide as the probe. That is the wrong shape for a person, who thinks in signals: \texttt{axis\_tvalid} is 1, \texttt{axis\_tdata} is anything, \texttt{axis\_tlast} is 1. \texttt{trigger.py} translates between the two.
+
+A pattern is written per signal, in one of four radices. \texttt{bin} and \texttt{hex} carry don't cares, \texttt{uint} and \texttt{int} do not, since a don't care is a property of a digit and a decimal digit does not map onto a whole number of bits. A don't care is written \texttt{x}, \texttt{X} or \texttt{-}, the last because that is what a truth table uses and someone will type it. Underscores and whitespace are allowed as grouping, so \texttt{0b0010\_1xxx} is read the way it is written. In hex an \texttt{x} is four don't cares; in binary it is one.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Function} & \textbf{Does} \\
+        \hline
+        \texttt{parse\_pattern} & One signal's pattern to a (value, mask) pair of that signal's width \\
+        \hline
+        \texttt{format\_pattern} & The same pair back to a pattern string, for display \\
+        \hline
+        \texttt{patterns\_to\_vector} & A pattern per probe to the flat condition and mask the core takes \\
+        \hline
+        \texttt{vector\_to\_patterns} & The flat pair back to one pattern per probe \\
+        \hline
+    \end{tabularx}
+    \caption{The trigger translation functions.}
+    \label{tab:stack_trigger}
+\end{table}
+
+The last two take the probe list from the portmap, which is what gives each signal its place in the flat word. The pair round trips: a vector read out of the core becomes patterns, and those patterns become the same vector again, which is what lets a front end show the trigger a core is actually holding rather than the one it last wrote.
 
 \section{The VCD writer}
 \label{sec:stack_vcd}
 
-\todo{Reads \texttt{portmap.csv}, checks the widths add up to the probe width the core reports, unrolls the circular buffer and writes named signals.}
+\texttt{vcd.py} owns the portmap and the output file. \texttt{load\_portmap} reads \texttt{portmap.csv} and works out each signal's place in the probe word, returning name, width, type, lsb and msb in the order the file lists them. It applies exactly the acceptance rules of the generator, down to treating an indented \texttt{\#} as an error rather than a comment, because this file is parsed once to build the hardware and once to read it back and the two have to accept the same set of files.
+
+\texttt{check\_portmap} is the check that matters. It refuses the readout unless the portmap widths add up to the probe width the core reports. That check exists because the failure it catches is otherwise silent: a portmap that has drifted from the synthesised core still slices the probe word cleanly, just at the wrong boundaries, so the capture comes back looking plausible and meaning nothing.
+
+\texttt{unpack\_sample} turns one raw row into per-signal values, and \texttt{write\_vcd} writes the file: signals named from the portmap, the buffer unrolled from the first index, timestamps derived from the sampling clock the core reported, and the trigger carried as an extra one-bit wire. Chapter~\ref{ch:reading} describes the result from the reader's side.
 
 \end{document}

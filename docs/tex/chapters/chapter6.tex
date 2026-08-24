@@ -10,35 +10,179 @@
 \chapter{The Command Line Interface}
 \label{ch:cli}
 
-\todo{Every command with its usage and a worked scenario. The transcripts come from real runs against hardware, not from plausible-looking output written by hand.}
+\texttt{drivers/python/libre\_ila.py} drives a \texttt{libre\_ila\_uart} build from a PC. This chapter covers every command it takes, in the order it applies them, and then runs the same capture several ways. It assumes a core already built into a design and reachable over a serial adapter, as in Chapter~\ref{ch:integration}.
+
+Everything the tool writes lands in \texttt{capture/} under the working directory: the device store, the \texttt{.vcd} and the debug log. The directory is created when something is written, never on import, so a run that only prints leaves nothing behind.
 
 \section{Telling the tool about a core}
 \label{sec:cli_devices}
 
-\todo{\texttt{--add-device} connects, reads the UID back and writes the device store; after that a core is addressed by \texttt{--device}. The point to make loudly: \texttt{--device} selects by \emph{UID}, not by the order devices were added, and a core built without a G\_UID reports 0. \texttt{--device-dir} has to agree between the CLI and the GUI.}
+A core is introduced once and then addressed by the identity it reports:
+
+\begin{lstlisting}
+./libre_ila.py --add-device --serial-port /dev/ttyUSB0 --baud 115200
+./libre_ila.py --device 0 --info
+\end{lstlisting}
+
+\texttt{--add-device} connects, reads the UID back out of the core and writes \texttt{capture/libre\_ila\_device<UID>.txt}, a single line holding the port and the baud rate. \texttt{--reset} forgets every stored device, and \texttt{--device-dir} puts the store somewhere else.
+
+
+The GUI reads the same store, so a core added on the command line comes up as a tab and one added in a tab is reachable with \texttt{--device}. That holds only while both are pointed at the same place, which is what \texttt{--device-dir} is for: the working directory is the right default for a tool run from a shell and the wrong one for a window started from a desktop entry.
 
 \section{The verbs and the order they run in}
 \label{sec:cli_verbs}
 
-\todo{The flags are verbs, and they are applied in a fixed order whatever order they are given in. The ordering table, then a whole capture as one line, and the same capture split across invocations: nothing about the session is kept on the host.}
+The flags are verbs, and whatever order they are given in, they are applied in the order of Table~\ref{tab:cli_order}. Several of them in one invocation is the normal way to use the tool.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+        \hline
+        \rowcolor{gray!40} \textbf{\#} & \textbf{Flag} & \textbf{Behaviour} \\
+        \hline
+        1 & \texttt{--reset} & Forget every stored device, then stop \\
+        \hline
+        2 & \texttt{--add-device} & Store the device on \texttt{--serial-port}, then stop \\
+        \hline
+        3 & & Connect to \texttt{--device} \\
+        \hline
+        4 & \texttt{--info} & Print what the core reports, then stop \\
+        \hline
+        5 & \texttt{--disarm} & Cancel a capture in progress, before the trigger writes so a retry is one line \\
+        \hline
+        6 & \texttt{--set-trigger-condition}, \texttt{--set-trigger-mask}, \texttt{--set-trigger-type}, \texttt{--set-trigger-reduction} & Merged into one trigger write \\
+        \hline
+        7 & \texttt{--set-trigger-position} & Where the trigger sits in the buffer, in samples \\
+        \hline
+        8 & \texttt{--get-trigger-configuration} & Read the trigger back out of the core \\
+        \hline
+        9 & \texttt{--arm} & \\
+        \hline
+        10 & \texttt{--force-trigger} & \\
+        \hline
+        11 & \texttt{--wait-done [SECONDS]} & Default 10 \\
+        \hline
+        12 & \texttt{--read-data} & Write the \texttt{.vcd} to \texttt{--output} \\
+        \hline
+    \end{tabularx}
+    \caption{The verbs, and the fixed order they are applied in.}
+    \label{tab:cli_order}
+\end{table}
+
+So a whole capture is one line:
+
+\begin{lstlisting}
+./libre_ila.py --set-trigger-condition 0x20000000000000000 \
+               --set-trigger-mask 0x20000000000000000 \
+               --set-trigger-type rising --arm --wait-done --read-data -o cap.vcd
+\end{lstlisting}
+
+and splitting it across invocations works just as well: arm now, read whenever. Nothing about the session is kept on the host. The core holds the trigger setup, the state and the samples, and the driver reads its whole geometry back out of the core at startup, which is the same reason re-synthesising with a different probe width needs no change here.
 
 \section{Configuring the trigger}
 \label{sec:cli_trigger}
 
-\todo{Condition and mask as one number covering the whole probe word, in any base, with bit 0 the first signal in the portmap. These do \emph{not} use the portmap names. Type and reduction, omitted fields keeping what the core already had, and a value with bits above the probe width being refused rather than trimmed.}
+\texttt{--set-trigger-condition} is the pattern the probe word is compared against, and \texttt{--set-trigger-mask} picks which of its bits are compared. Both take one number covering the whole probe word, in any base: \texttt{0x...}, \texttt{0b...}, \texttt{0o...} or decimal.
+
+These two flags \textbf{do not use the portmap names}. Bit 0 is the first signal listed in \texttt{portmap.csv} and the bits run upwards from there, so the number has to be counted out. For the stock AXI4S build \texttt{axis\_tvalid} is bit 65, so triggering on it rising is:
+
+\begin{lstlisting}
+--set-trigger-condition 0x20000000000000000 \
+--set-trigger-mask      0x20000000000000000 \
+--set-trigger-type      rising
+\end{lstlisting}
+
+\texttt{--set-trigger-type} is \texttt{level}, \texttt{rising} or \texttt{falling}, and \texttt{--set-trigger-reduction} is \texttt{and}, every masked bit matches, or \texttt{or}, any one of them. The two are independent. Whichever fields are left out keep whatever the core already had, because the trigger registers read back before they are written, so setting one field does not disturb the rest.
+
+A value with bits above the probe width is refused rather than trimmed. This is worth the strictness: the core zero-extends each sample to the full register stride before comparing, so a mask bit up in the padding fires an \texttt{or} trigger on the very first sample and stops an \texttt{and} trigger from firing at all. Both failures look like the trigger, not like the number.
 
 \section{Worked scenarios}
 \label{sec:cli_scenarios}
 
-\todo{Three or four end-to-end runs with real pasted output: trigger on a condition, force a trigger that never came, disarm and retry, and a capture split across two invocations.}
+\textbf{Trigger on a condition.} Arm on the rising edge of TVALID and read the result back in one line:
+
+\begin{lstlisting}
+./libre_ila.py --device 0 \
+               --set-trigger-condition 0x20000000000000000 \
+               --set-trigger-mask 0x20000000000000000 \
+               --set-trigger-type rising --set-trigger-position 512 \
+               --arm --wait-done 30 --read-data -o packet_start.vcd
+\end{lstlisting}
+
+\textbf{Force a trigger that never came.} When the condition turns out not to occur, arm and then force, which fills the buffer from wherever it had got to:
+
+\begin{lstlisting}
+./libre_ila.py --device 0 --arm
+./libre_ila.py --device 0 --force-trigger --wait-done --read-data
+\end{lstlisting}
+
+\textbf{Disarm and retry.} \texttt{--disarm} runs before the trigger writes, so changing your mind about the condition is one line rather than two invocations:
+
+\begin{lstlisting}
+./libre_ila.py --device 0 --disarm \
+               --set-trigger-type level --set-trigger-reduction or --arm
+\end{lstlisting}
+
+\textbf{A capture split across two invocations.} Arm before firing whatever the design does, then come back for the data:
+
+\begin{lstlisting}
+./libre_ila.py --device 0 --arm
+# ... run the design
+./libre_ila.py --device 0 --wait-done 0 --read-data -o late.vcd
+\end{lstlisting}
+
+The last one is the case that shows where the state lives. The core stays armed and then DONE across the gap, and the second invocation reads its geometry, its trigger and its samples back out of the core with nothing carried over from the first.
 
 \section{Debugging the link}
 \label{sec:cli_debug}
 
-\todo{\texttt{--debug} logs every UART transaction. A real log extract and how to read it: the byte counts matter as much as the errors, because a reply that is short or long for its request means the two ends disagree about which request is being served.}
+\texttt{--debug} logs every UART transaction to \texttt{capture/libre\_ila.log}. It works with every verb and with \texttt{--gui}, where all tabs share the one file.
+
+\begin{lstlisting}
+2026-08-13 12:49:30 /dev/ttyACM0 connect baudrate=115200
+2026-08-13 12:49:30 /dev/ttyACM0 TX read  addr=0x00000004 count=5 bytes=55 05 00 00 00 04
+2026-08-13 12:49:30 /dev/ttyACM0 RX header bytes=aa 85 00 00 00 04
+2026-08-13 12:49:30 /dev/ttyACM0 RX payload words=0xb01dface 0x05f5e100 0x00000043 0x00000800 0x00000000
+\end{lstlisting}
+
+Every line carries the port, so two tabs writing at once stay apart, and the file is appended to and flushed per line, so a run that hangs or is killed still leaves everything up to that point on disk.
+
+\texttt{ERR} lines carry the failure, and a \texttt{RESYNC dropped N stale bytes} line follows one when the driver drained the link to get back in step. \textbf{The byte counts are worth reading, not just the errors.} The wrapper answers a read with a six byte header and four bytes per word, so a reply that is short or long for the request it followed says the two ends disagree about which request is being served, rather than that one reply got corrupted. The extract above is a healthy exchange to compare against: a five word read of the output block, answered with a header whose count matches and five payload words, the first of which is the magic key.
 
 \section{Exit statuses}
 \label{sec:cli_exit}
 
-\todo{The exit codes, a sentence each on what actually causes them, and a pointer to the troubleshooting chapter.}
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Code} & \textbf{Cause} \\
+        \hline
+        0 & Success \\
+        \hline
+        2 & Usage error: the flags themselves do not make sense, or a trigger value is wider than the probe \\
+        \hline
+        3 & Could not add the device: the port did not open, or nothing answered on it \\
+        \hline
+        4 & No such stored device, or its file is unreadable. Usually \texttt{--device} given an index instead of a UID \\
+        \hline
+        5 & No portmap: \texttt{--portmap} points at nothing, or the default is not there \\
+        \hline
+        6 & The portmap does not match the core: its widths do not add up to the probe width the core reports \\
+        \hline
+        7 & Link error: no port, busy port, timeout or a desynced reply \\
+        \hline
+        8 & The capture did not reach DONE within \texttt{--wait-done} \\
+        \hline
+        9 & The core refused the operation, e.g. arming an armed ILA or disarming an idle one \\
+        \hline
+        10 & The GUI is not available, i.e. PySide6 is not installed \\
+        \hline
+    \end{tabularx}
+    \caption{Exit statuses of the command line front end.}
+    \label{tab:cli_exit}
+\end{table}
+
+Codes 6, 7, 8 and 9 are the four that mean something is wrong rather than mistyped, and each has an entry in Chapter~\ref{ch:trouble} with the fix.
+
 \end{document}

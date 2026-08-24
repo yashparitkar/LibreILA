@@ -10,7 +10,7 @@
 \chapter{Getting Started}
 \label{ch:started}
 
-\todo{The highest value chapter in the manual: a reader who follows it from top to bottom gets a waveform on screen without opening any other document. No forward references, so anything needed here is stated here, with the full treatment cross-referenced later.}
+In this chapter, we will walk through the steps to get the example design up and running on the Microchip PolarFire SoC Discovery Kit. We will cover the prerequisites, how to get the sources, and how to perform your first capture using the LibreILA toolchain.
 
 \section{Prerequisites}
 \label{sec:started_prereq}
@@ -28,9 +28,9 @@ The full toolchain is tested using following:
     \item Rpi Pico with \texttt{debugprobe\_on\_pico} firmware flashed as USB-TTL adapter (other serial adapters will also work)
 \end{itemize}
 
-\begin{figure}[H]
+\begin{figure}[h]
     \centering
-    \includegraphics[width=0.6\textwidth]{images/replicate_steps/0_testing_setup.jpg}
+    \includegraphics[width=0.6\textwidth]{../images/replicate_steps/0_testing_setup.jpg}
     \caption{The testing setup.}
     \label{fig:started_setup}
 \end{figure}
@@ -131,8 +131,6 @@ It prints an install line if neither the system \texttt{python3} nor the virtual
 \section{Getting the sources}
 \label{sec:started_sources}
 
-\todo{The clone, then a directory tour in one short table: \texttt{hdl/}, \texttt{codegen/}, \texttt{drivers/}, \texttt{tests/}, \texttt{docs/}.}
-
 \subsection{Cloning the repository}
 Make a local clone of the repository, 
 
@@ -144,11 +142,11 @@ Make a local clone of the repository,
 
 \begin{enumerate}
     \item Open Libero
-    \item In the Project tab $\to$ Open Project $\to$ Browse to \texttt{\{repo\}/tests/full/libre\_ila\_uart/libre\_ila\_uart\_libero/libre\_ila\_uart\_libero.prjx}
-    \item You can view the block design in \texttt{Design Heirarchy}, it contains the libre\_ila, axi4smaster\_pktgen (to generate dummy axistream traffic), a simple heartbeat ip and other MPFS blocks.
+    \item In the Project tab $\to$ Open Project $\to$ Browse to \texttt{\{repo\}/tests/full/libre\_ila\_uart/}\\ \texttt{libre\_ila\_uart\_libero/libre\_ila\_uart\_libero.prjx}
+    \item You can view the block design in \texttt{Design Heirarchy}, it contains the libre\_ila, axi4smaster\_pktgen (to generate dummy axistream traffic), a simple heartbeat ip and other MPFS blocks. Notice how the LibreILA core is connected to the AXI4Stream link between the pktgen and the slave is kept open while tieing the TREADY high to ensure the pktgen can always send data.
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/importing_libero_project/1_exploring_the_bd.png}
+        \includegraphics[width=\textwidth]{../images/importing_libero_project/1_exploring_the_bd.png}
         \caption{Exploring the block design.}
         \label{fig:started_libero_bd}
     \end{figure}
@@ -156,10 +154,12 @@ Make a local clone of the repository,
     \item In the \texttt{Design Flow} tab, click \texttt{Run PROGRAM Action}, it should do all the synthesis, placement, routing and programming of the FPGA.
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/importing_libero_project/2_run_program.png}
+        \includegraphics[width=\textwidth]{../images/importing_libero_project/2_run_program.png}
         \caption{Run PROGRAM Action.}
         \label{fig:started_libero_program}
     \end{figure}
+    \item The design uses B14 (RPi Pin 38) as UART TX and E13 (RPi Pin 40) as UART RX. This can be verified in the \texttt{libreila.pdc} constrains file.
+    \item Connect the USB-TTL adapter to the board, and connect the TX of the adapter to B14 and RX to E13. The GND of the adapter should be connected to any GND pin on the board.
 \end{enumerate}
 
 \subsection{Importing the SoftConsole project}
@@ -168,14 +168,14 @@ Make a local clone of the repository,
     \item Right click in the Project Explorer tab $\to$ Import $\to$ General $\to$ Existing Projects into Workspace $\to$ Next $\to$ Browse $\to$ Select \texttt{\{repo\}/tests/full/libre\_ila\_uart/libre\_ila\_uart\_sc} $\to$ Finish
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/importing_sc_project/1_import_project.png}
+        \includegraphics[width=\textwidth]{../images/importing_sc_project/1_import_project.png}
         \caption{Importing the project.}
         \label{fig:started_sc_import}
     \end{figure}
     \item You can view the source code in \texttt{src} folder, the file \texttt{src/application/hart1/u54\_1.c} contains the main function which initializes the UART and sends some dummy data over AXI4Stream to the libre\_ila core.
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/replicate_steps/1_open_the_softconsole_project.png}
+        \includegraphics[width=\textwidth]{../images/replicate_steps/1_open_the_softconsole_project.png}
         \caption{Opening the SoftConsole project.}
         \label{fig:started_sc_open}
     \end{figure}
@@ -184,7 +184,7 @@ Make a local clone of the repository,
     \item Debug the project by clicking on the bug icon in the toolbar, it should program the SoC and start the application.
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/replicate_steps/2_debug_view.png}
+        \includegraphics[width=\textwidth]{../images/replicate_steps/2_debug_view.png}
         \caption{The Debug view.}
         \label{fig:started_sc_debug}
     \end{figure}
@@ -195,8 +195,6 @@ Make a local clone of the repository,
 \section{Your first capture}
 \label{sec:started_first}
 
-\todo{The whole loop on the stock 64-bit AXI4Stream build, every command shown and every output pasted: generate the core, add it to a project, build, connect the USB-TTL adapter, add the device, set a trigger, arm, wait, read back, open the VCD. The trigger is the datasheet's worked example, TVALID and TLAST rising, so the two documents agree.}
-
 \begin{enumerate}
     \item Start the debug project on SoftConsole
     \item Open a the serial terminal to connect with the MSS UART, you can use any serial terminal of your choice, we will use \texttt{minicom} here. Note that, if the drivers for the MPFS is installed properly, you will see three serial devices in \texttt{/dev/} directory, one of them will be streaming the output from the MSS UART. In our case, it is \texttt{/dev/ttyUSB2}.
@@ -206,7 +204,7 @@ Make a local clone of the repository,
     \item In the serial terminal, you should see the following output:
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/replicate_steps/4_mss_connected.png}
+        \includegraphics[width=\textwidth]{../images/replicate_steps/4_mss_connected.png}
         \caption{MSS UART connected.}
         \label{fig:started_mss}
     \end{figure}
@@ -218,7 +216,7 @@ Make a local clone of the repository,
     \end{lstlisting}
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/replicate_steps/5_configuring_pktgen.png}
+        \includegraphics[width=\textwidth]{../images/replicate_steps/5_configuring_pktgen.png}
         \caption{Configuring PKTGEN.}
         \label{fig:started_pktgen}
     \end{figure}
@@ -228,7 +226,7 @@ Make a local clone of the repository,
     \end{lstlisting}
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/replicate_steps/3_launch_libre_ila.png}
+        \includegraphics[width=\textwidth]{../images/replicate_steps/3_launch_libre_ila.png}
         \caption{Launching LibreILA.}
         \label{fig:started_launch}
     \end{figure}
@@ -236,7 +234,7 @@ Make a local clone of the repository,
     \item Set the trigger edge, rising and move the position to somewhere middle and trigger condition to \texttt{TVALID and TLAST rising}. Click on \texttt{Arm} to arm the trigger.
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/replicate_steps/6_configuring_and_arming_the_ila.png}
+        \includegraphics[width=\textwidth]{../images/replicate_steps/6_configuring_and_arming_the_ila.png}
         \caption{Configuring and arming the ILA.}
         \label{fig:started_arm}
     \end{figure}
@@ -244,7 +242,7 @@ Make a local clone of the repository,
     \item The ILA should've captured the data and the ILA status will change to \texttt{Triggered} and then to \texttt{Done} quickly.
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/replicate_steps/7_firing_pktgen_done.png}
+        \includegraphics[width=\textwidth]{../images/replicate_steps/7_firing_pktgen_done.png}
         \caption{Firing PKTGEN, capture done.}
         \label{fig:started_done}
     \end{figure}
@@ -254,14 +252,16 @@ Make a local clone of the repository,
     \item Tip: click on the "Magnifying glass with green tick" to fit the capture in the window
     \begin{figure}[H]
         \centering
-        \includegraphics[width=\textwidth]{images/replicate_steps/8_gtkwave_window.png}
+        \includegraphics[width=\textwidth]{../images/replicate_steps/8_gtkwave_window.png}
         \caption{The GTKWave window.}
         \label{fig:started_gtkwave}
     \end{figure}
 \end{enumerate}
 
-\section{What just happened}
+\section{Conclusion}
 \label{sec:started_recap}
+In this chapter, we have walked through the steps to get the example design up and running on the Microchip PolarFire SoC Discovery Kit. We have covered the prerequisites, how to get the sources, an overview of how to connect the LibreILA, and how to perform your first capture using the LibreILA toolchain. You should now be able to replicate the steps and perform your own captures using the LibreILA toolchain. 
 
-\todo{Half a page retracing the steps and naming the chapter that covers each in full: the map into the rest of the manual.}
+In further chapters, we will cover how to modify the LibreILA core to capture different signals, how to use the driver to configure the core and how to use the GUI front end to visualize the captured data. Similar steps can be followed to adapt this to your own design, toolchain and board.
+
 \end{document}

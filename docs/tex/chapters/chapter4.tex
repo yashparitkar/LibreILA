@@ -10,41 +10,138 @@
 \chapter{Integrating LibreILA into a Design}
 \label{ch:integration}
 
-\todo{What to do with the generated code once it exists.}
+Chapter~\ref{ch:codegen} ends with a directory of VHDL. This chapter describes how to incorporate it into a design: which files go into the project, which of the two builds to instantiate, where in a link the probe ports go, what to feed the clocks and the reset, and what to look at in the reports once it has been through synthesis. It assumes the user has already generated a core and has a working FPGA project to integrate it into, and has a working knowledge of the FPGA toolchain, especially block design based applications, and of the target device.
+
+None of it is tool specific. The worked example throughout is the supplied project of Chapter~\ref{ch:started}, a stock \texttt{libre\_ila\_uart} spliced into the AXI4Stream link of a packet generator on the PolarFire SoC Discovery Kit, and the file paths quoted are that project's. Any tool that can compile VHDL-2008 will do the same job.
 
 \section{Files to add}
 \label{sec:integ_files}
 
-\todo{What the generator emits for GEN\_TYPE 0 and 1, and which of those files go into the project. VHDL Style Guide can be run over them first where a project has a house style.}
+Once the core has been generated as given in Chapter~\ref{ch:codegen}, the HDL files can be added to the project. What the generator emits depends on \texttt{GEN\_TYPE}, and all of what it emits goes in. Table~\ref{tab:integ_files} says which file is which.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{File} & \textbf{Emitted for} & \textbf{What it is} \\
+        \hline
+        \texttt{libre\_ila.vhdl} & both & The core: sample buffer, trigger, register map and AXI4Lite slave port \\
+        \hline
+        \texttt{libre\_ila\_uart.vhdl} & \texttt{GEN\_TYPE} 1 & The wrapper: the same core with a UART and a packet parser in front of its bus port \\
+        \hline
+        \texttt{uart.vhdl} & \texttt{GEN\_TYPE} 1 & The serial transmitter and receiver, instantiated by the wrapper \\
+        \hline
+        \texttt{fifo.vhdl} & \texttt{GEN\_TYPE} 1 & The transmit and receive queues, instantiated by the wrapper twice \\
+        \hline
+    \end{tabularx}
+    \caption{The generated files and what each one is.}
+    \label{tab:integ_files}
+\end{table}
+
+Only the top one is instantiated by hand. \texttt{libre\_ila\_uart} declares the other three as components and wires them up itself, so a \texttt{GEN\_TYPE} 1 build needs all four files compiled into the project but only one instance written.
+
+Copy them into the project rather than pointing the project at \texttt{gen/} where they were generated. That directory is not tracked and the next run of the generator rewrites it, so a project referencing it in place can change under a colleague who has never run the generator at all. In the supplied project the four files sit in \texttt{libre\_ila\_uart\_libero/hdl/} alongside the design's own sources.
+
+The sources are plain VHDL-2008 and use only the \texttt{ieee} standard libraries: \texttt{std\_logic\_1164}, \texttt{numeric\_std} and \texttt{math\_real}. No vendor primitive is instantiated and no vendor library is referenced. The one piece of vendor-specific text anywhere in them is a \texttt{syn\_ramstyle} attribute of \texttt{"lsram"} on the sample buffer, which Synplify and Libero honour and every other tool ignores; removing it changes nothing but the kind of RAM the buffer lands in. Where a project has a house style, the generated files can be run through VHDL Style Guide first, which is what they were formatted with in the first place.
 
 \section{Core or wrapper}
 \label{sec:integ_which}
 
-\todo{Choosing between the two, and what each one costs and buys.}
+The choice is about what already exists in the design, not about what the ILA can do, since the capture side is identical either way. \texttt{libre\_ila} presents the register map on an AXI4Lite slave port and needs a bus master in the design to drive it. \texttt{libre\_ila\_uart} puts that same register map behind a UART, so it needs two fabric pins and a serial adapter instead. Table~\ref{tab:integ_which} is the comparison.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|>{\raggedright\arraybackslash}X|>{\raggedright\arraybackslash}X|}
+        \hline
+        \rowcolor{gray!40} & \texttt{libre\_ila} & \texttt{libre\_ila\_uart} \\
+        \hline
+        Driven by & An AXI4Lite master in the design & A PC, over two wires \\
+        \hline
+        Host driver & The C driver, from firmware & The python driver, command line or GUI \\
+        \hline
+        Needs & A spare bus master and address space & Two fabric pins and a USB-TTL adapter \\
+        \hline
+        Costs at 67 bits by 2048 & 600 fabric 4LUT, 388 DFF, 7 LSRAM & 1280 fabric 4LUT, 817 DFF, 9 LSRAM \\
+        \hline
+        Readout of a stock capture & As fast as the master reads it & About 2.9\,s at 115\,200 baud \\
+        \hline
+    \end{tabularx}
+    \caption{The two builds compared. The resource figures are the datasheet's, measured on PolarFire SoC.}
+    \label{tab:integ_which}
+\end{table}
+
+So the wrapper costs roughly twice the core in fabric and two more LSRAM blocks for its queues, and buys a capture that can be taken from a laptop with nothing running on the chip. Take the core where firmware is already there to drive it and a capture should never need a PC attached, and the wrapper where there is no bus master to spare, or where the debugging is being done from a desk rather than from inside the application.
 
 \section{Splicing the probe into a link}
 \label{sec:integ_splice}
 
-\todo{What the probe master and probe slave sides are, and where the core sits in the link.}
+The two probe ports are the two cut ends of the link. \texttt{probe\_slave\_*} faces the \emph{master} of the probed link and carries the directions that link's slave would have; \texttt{probe\_master\_*} faces the slave and carries the mirror of each one. So the master's outputs go into \texttt{probe\_slave\_}, and \texttt{probe\_master\_} goes on to the slave:
+
+\begin{lstlisting}
+  master                     libre_ila                      slave
+  ------                     ---------                      -----
+  tvalid --> probe_slave_axis_tvalid = probe_master_axis_tvalid --> tvalid
+  tready <-- probe_slave_axis_tready = probe_master_axis_tready <-- tready
+\end{lstlisting}
+
+with the rest of the signals following their own direction the same way. The \texttt{=} in the middle is a signal assignment and nothing more. The splice is combinational and costs the link no latency, no handshake change and no clock cycle; what it does cost is routing, since every probed signal now goes through the core's ports instead of straight across.
+
+A \texttt{mon} signal has no master side port at all and is not a cut. Tap it in parallel with whatever already drives it and leave the link alone.
+
+Where the far end of the link does not exist, the master side ports are the loose ends. The supplied project is exactly that case: the packet generator's stream ends at the ILA, so \texttt{probe\_master\_axis\_tready} is tied to \texttt{'1'} to keep the generator sending and the other \texttt{probe\_master\_} outputs are left unconnected. That is a demonstration rather than a pattern to copy; in a real design both sides go to real logic.
+
+One trap comes with the graphical tools. SmartDesign and its equivalents read the generics off the entity when the component is imported and then write them into the instantiation as explicit overrides, which is why the supplied project's netlist carries \texttt{G\_PROBE\_WIDTH(67)} in the instance rather than inheriting it. Regenerate with a different portmap and the file on disk changes while the instantiation does not, so the component has to be refreshed in the tool as well. The mismatch shows up as an elaboration error if you are lucky and as a probe word sliced at the wrong boundaries if you are not.
 
 \section{Clocks and reset}
 \label{sec:integ_clocks}
 
-\todo{\texttt{samp\_aclk} takes the clock the probed link runs on, not a convenient free-running one; \texttt{s\_axil\_aclk} takes whatever the bus runs on. The practical reset rule, with the requirements themselves left in the datasheet.}
+\texttt{samp\_aclk} takes the clock the probed link runs on. Not a convenient free-running clock, and not a faster one: the core stores one sample on every rising edge of \texttt{samp\_aclk}, so anything else records a resampled version of the link rather than the link. \texttt{s\_axil\_aclk} takes whatever the bus runs on, or in a wrapper build, whatever clock the UART should be timed off. The two may perfectly well be the same clock; in the supplied project both are driven from \texttt{FIC\_0\_CLK} at 100\,MHz.
+
+Both frequencies were fixed at generation, and the generics have to agree with the clocks actually connected here. \texttt{G\_SAMP\_CLK\_FREQ} is reported to the host and sets the time axis of the capture, so a mismatch there is a VCD with the wrong time base. \texttt{G\_AXIL\_CLK\_FREQ} sets the watchdog period and the UART divider, so a mismatch there is a serial link that does not talk at all. Section~\ref{sec:codegen_config} covers both.
+
+The core takes one reset per domain. \texttt{i\_rst\_sync} is active high, sampled on \texttt{samp\_aclk}. \texttt{s\_axil\_aresetn} is active low, sampled on \texttt{s\_axil\_aclk}. The wrapper takes only \texttt{i\_rst\_sync} and derives the other from it by inversion, so a wrapper build has a single active-high reset input. In practice, drive it from the reset the rest of the design already uses and hold it for at least two periods of the \emph{slower} of the two clocks. The sample buffer is not cleared by either reset, which matters not at all, because a capture overwrites the whole buffer before it can complete. The full requirements are in the datasheet.
 
 \section{Timing constraints}
 \label{sec:integ_sdc}
 
-\todo{Work in progress: not verified in SDC yet.}
+\texttt{samp\_aclk} and \texttt{s\_axil\_aclk} are unrelated clocks. Declare them asynchronous to one another so the tool does not try to close timing between the domains, which in \acs{SDC} is \texttt{set\_clock\_groups -asynchronous}. Everything that genuinely crosses is already handled inside the core: the arm and disarm toggles and the three status bits carry their own two-flop synchronisers, and the sample buffer crosses inside the RAM, which needs no constraint at all. Where the two clocks come from one source, or the design constrains them together for other reasons, a maximum delay on the crossing registers is the narrower alternative.
+
+This section is work in progress and is the one place in this manual where the advice has not been exercised on hardware. The supplied project runs both domains from a single clock, so no cross-domain constraint was needed to build it and none has been verified in \acs{SDC}. Treat the paragraph above as the intended constraint rather than a tested recipe, and check the report rather than trusting it.
 
 \section{Connecting the UART}
 \label{sec:integ_uart}
 
-\todo{Any two pins will do, chosen in the design constraints.}
+In a wrapper build, \texttt{uart\_rx} and \texttt{uart\_tx} are ordinary one-bit fabric ports. Any two pins that reach the serial adapter will do, and which two is a decision for the design's IO constraints rather than anything in the core. The supplied project puts them on the Discovery Kit's Raspberry Pi header:
+
+\begin{lstlisting}
+set_io -port_name uart_tx -pin_name B14 -fixed true \
+       -io_std LVCMOS33 -DIRECTION OUT
+set_io -port_name uart_rx -pin_name E13 -fixed true \
+       -io_std LVCMOS33 -DIRECTION IN
+\end{lstlisting}
+
+Two things about that. The IO standard has to match the adapter, which for the 3.3\,V adapters this was tested with is LVCMOS33. And the wires cross: the adapter's TX goes to the pin constrained as \texttt{uart\_rx}, its RX to the pin constrained as \texttt{uart\_tx}, and its ground to any ground on the board. Chapter~\ref{ch:started} has the wiring for the tested setup.
+
+The line rate is not a runtime setting. \texttt{G\_BAUD\_RATE} was fixed at generation and is baked into the divider, so the host has to be told the same number; changing it means regenerating and resynthesising.
 
 \section{Checking the build}
 \label{sec:integ_check}
 
-\todo{Confirming the sample buffer was inferred as RAM and that timing is met.}
+Two things are worth confirming in the reports before blaming the core for anything: that the sample buffer was inferred as RAM, and that timing is met.
+
+The buffer is the whole cost of the core, and it is meant to land in block RAM. Look at the resource usage by module in the synthesis report and find the core's instance. For the stock build in the supplied project that row reads seven LSRAM (20K) blocks against \texttt{libre\_ila\_inst}, with one more for each of the wrapper's two FIFOs. What a failure looks like is unmistakable: zero RAM blocks against the core, and a flip-flop count several thousand higher than the datasheet's utilization table leads you to expect. That means the tool declined to infer a simple dual-port RAM with independent read and write clocks and fell back to registers. The design still builds and still behaves correctly that way, it just costs far more fabric than it should, and the datasheet's device requirements section covers what to do about it.
+
+For timing, filter the report to the paths that touch the core rather than reading the whole design's worst path. In SmartTime that is a maximum delay analysis with \texttt{libre\_ila*} in the \emph{From} field, then the same again with it in the \emph{To} field, which separates the paths the core drives from the paths that drive it.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{../images/67_2048/WNS_paths_from_libre_ila.png}
+    \caption{Register to register paths out of the core, stock build.}
+    \label{fig:integ_timing}
+\end{figure}
+
+The number to check is simply that the worst slack is positive, on both filters; in Figure~\ref{fig:integ_timing} it is about 3.8\,ns. The datasheet quotes fmax for several probe widths and depths, and a build that misses timing at a clock well below those figures is usually placement rather than the core: the probe ports fan out across the design by construction, and a core placed far from the link it watches pays for it on the probe paths.
+
+Last, run the design's own tests with the ILA spliced in. A probe direction written the wrong way round in the portmap elaborates cleanly and captures correctly, and shows up only as the probed link no longer working, so a link that misbehaves the moment the core is added is a portmap question and not a timing one. Once the design runs, connecting a host confirms the rest: both drivers read the probe width out of the core and refuse to go on if it disagrees with the portmap they were given, which catches a core synthesised from one portmap and read back with another.
 
 \end{document}

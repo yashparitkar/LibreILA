@@ -10,25 +10,102 @@
 \chapter{Introduction}
 \label{ch:intro}
 
-\todo{What LibreILA is, in three paragraphs, followed by the document map.}
+This manual is about using LibreILA. It contains a worked example of a capture on hardware, modifying the core, wiring into the design, driving it from either host, reading back what it captured, using the GUI and some basic troubleshooting. Although care is taken to write every minor detail down, it is assumed that the reader is familiar with using FPGA toolchains, the command line, and a serial terminal. 
+
 
 \section{What LibreILA is}
 \label{sec:intro_what}
 
-\todo{An in-system ILA spliced into a link inside the fabric, sampling into a circular buffer in fabric RAM. Triggered, time correlated, and read back as a VCD. One short paragraph, no register detail.}
+LibreILA is an in-system logic analyzer: a small core spliced into a link inside the FPGA fabric, which watches that link go past and records it. Any net in the RTL can be probed. While armed it writes one sample of the probed signals into a circular buffer in fabric RAM on every sampling clock edge, so the buffer always holds the most recent window of history. Once a condition specified by the user is met, the core stops writing and the buffer is frozen after specified post-trigger samples. The user can then read the buffer back into a VCD file on the host, and open it in a waveform viewer to see what happened.
+
+The splice is pass-through. The core's two probe ports are shorted combinationally, so the link it sits in the middle of behaves exactly as it did before and pays no latency for being watched. The two mirrored ports allow easy connection when using GUI based design tools.
 
 \section{Using LibreILA}
 \label{sec:intro_deliverables}
 
-\todo{The two deliverables and the chapter each one leads to: \texttt{libre\_ila}, the bare core on AXI4Lite, driven by the baremetal C driver (Chapter~\ref{ch:cdriver}), and \texttt{libre\_ila\_uart}, the serial wrapper, driven from a PC by the python driver (Chapters~\ref{ch:cli} and~\ref{ch:gui}).}
+The core is delivered two ways, and which one you build decides which host drives it and which chapters of this manual you need.
+
+\texttt{libre\_ila} is the core itself, with an AXI4Lite slave port. It suits a design that already carries a bus master: a hard or soft processor, or anything else that can write registers. The baremetal C driver under \texttt{drivers/baremetal/} drives it from firmware, so a capture never leaves the chip and no PC has to be attached to take one. Chapter~\ref{ch:cdriver} covers that path on its own, end to end.
+
+\texttt{libre\_ila\_uart} wraps the same core with a UART and a packet parser, putting the register map at the end of two wires instead of on a bus. Nothing inside the core changes. It suits a design with no bus master to spare, or a board you would rather drive from a laptop. The python driver under \texttt{drivers/python/} drives it from a PC, either from the command line (Chapter~\ref{ch:cli}) or from a window (Chapter~\ref{ch:gui}). This makes the usage very similar to a commercial logic analyzer.
+
+Everything on either side of that choice is shared. Both builds come out of the same generator and are wired into a design the same way, and both capture into the same buffer and are read back into the same VCD. Table~\ref{tab:intro_paths} is the short version.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Build} & \textbf{Driven by} & \textbf{Chapters} \\
+        \hline
+        \texttt{libre\_ila} & the C driver, from firmware & \ref{ch:codegen}, \ref{ch:integration}, \ref{ch:cdriver} and \ref{ch:reading} \\
+        \hline
+        \texttt{libre\_ila\_uart} & the python driver, from a PC & \ref{ch:codegen}, \ref{ch:integration}, \ref{ch:cli} or \ref{ch:gui}, and \ref{ch:reading} \\
+        \hline
+    \end{tabularx}
+    \caption{The two deliverables and the chapters each one leads to.}
+    \label{tab:intro_paths}
+\end{table}
+
+The remaining chapters serve both. Chapter~\ref{ch:stack} describes how the python driver is put together, for a reader scripting against it rather than using the front ends. Chapter~\ref{ch:trouble} is the symptom-to-fix list, and Appendix~\ref{app:nohw} runs the test suite with no hardware attached. If you are here for the first time, start with Chapter~\ref{ch:started} whichever build you are eventually after: it takes a capture on a stock build with the wiring already done, so the pieces have names before you have to choose between them.
+
+Interestingly enough, the \texttt{libre\_ila\_uart} build is simply a \texttt{libre\_ila} core with a \ac{UART} to AXI4Lite bridge around it. If end user demands more speed, HDMI, USB or Ethernet bridges could be added in the same way.
 
 \section{Document Map}
 \label{sec:intro_docmap}
 
-\todo{A table of the three documents: this manual is how to use LibreILA, the datasheet is the specification, register map, timing and packet format, and the per-directory READMEs are implementation notes for someone changing the code. A user of LibreILA never needs the third.}
+Three documents describe LibreILA.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Document} & \textbf{Answers} & \textbf{Contents} \\
+        \hline
+        This manual & how do I use it & Prerequisites and a first capture, the code generator, integrating a core into a design, both drivers, reading the capture, and troubleshooting \\
+        \hline
+        The datasheet & what is it and what does it guarantee & Probe and port structure, capture and trigger behaviour, clock domains, reset, timing, the core parameters, the AXI4Lite register map register by register, and the UART packet format \\
+        \hline
+        The READMEs & how does it work inside & One per directory, next to the code they describe. Implementation notes for someone changing LibreILA itself \\
+        \hline
+    \end{tabularx}
+    \caption{The three documents and what each is for.}
+    \label{tab:intro_docs}
+\end{table}
+
+The datasheet is the specification, manual is user guide. Both PDFs live in \texttt{docs/}, built from the sources in \texttt{docs/tex/}, and \texttt{REGISTER\_MAP.csv} at the repository root carries the same register map one row per field, for a script that would rather not read a PDF.
+
 
 \section{Conventions}
 \label{sec:intro_conventions}
 
-\todo{Shell prompts, paths relative to the repository root, register names in small caps and hex as 0x. Half a page.}
+Table~\ref{tab:intro_conventions} lists the conventions this manual holds to throughout.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Written as} & \textbf{Means} \\
+        \hline
+        \texttt{make sim} & A command, shown without a shell prompt so it can be copied whole. Unless the text says otherwise it is run from the root of your clone \\
+        \hline
+        \texttt{\{repo\}} & The root of your clone, wherever you put it. Every other path is relative to it, as in \texttt{drivers/python/libre\_ila.py} \\
+        \hline
+        TRIG\_CFG & A register or one of its fields, spelt as the datasheet register map spells it \\
+        \hline
+        \texttt{G\_SAMP\_BUFF\_DEPTH} & A generic, fixed at synthesis and set in \texttt{configuration.csv} \\
+        \hline
+        \hline
+        \texttt{0b001x1} & A trigger pattern, where \texttt{x} is a bit that is not compared \\
+        \hline
+        bit 0 & The least significant bit, and the first signal listed in \texttt{portmap.csv}. Bit order is counted that way everywhere \\
+        \hline
+    \end{tabularx}
+    \caption{Conventions used in this manual.}
+    \label{tab:intro_conventions}
+\end{table}
+
+Two names are kept apart deliberately. \emph{The C driver} always means the baremetal driver for \texttt{libre\_ila} and \emph{the python driver} always means the host driver for \texttt{libre\_ila\_uart}; neither is ever called just ``the driver'', because the two share a register map and nothing else.
+
+This manual is a work in progress. Anything still to be written is marked \todo{like this} and prints in red, so a gap is visible rather than silent.
+
 \end{document}

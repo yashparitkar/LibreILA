@@ -10,45 +10,288 @@
 \chapter{The Code Generator}
 \label{ch:codegen}
 
-\todo{A build is fully described by \texttt{portmap.csv} and \texttt{configuration.csv}: how to write both, how to run the generator, and two recipes at the end.}
+A build of the core is described entirely by two CSV files in \texttt{codegen/}. \texttt{configuration.csv} lists the generics and their values, one line per generic, and \texttt{portmap.csv} lists the signals to probe and their widths, one line per signal. The generator reads both, finds the VHDL templates in \texttt{hdl/}, replaces the directives in them with what the two files describe, and writes a complete set of sources to \texttt{gen\_axis/} for the stock build or to \texttt{gen/} otherwise. Nothing is ever written back into \texttt{hdl/}, so the templates there stay the single source.
+
+The portmap outlives the generation step. The python driver reads the same file to name the signals in the VCD and to number the trigger bits, so one file describes the probe for the hardware and for the host at once. What comes out of the generator is ordinary VHDL with no further tooling attached to it; Chapter~\ref{ch:integration} takes it from there.
 
 \section{Working of the code generator}
 \label{sec:codegen_how}
 
-\todo{Find and replace against the templates in \texttt{hdl/}, driven by the \texttt{\^{}\^{}XX} directives. The directive table (DI, DO, MI, MO, SH, MX), and why a directive listed for a file but not found aborts the run: a dropped block cannot become an unconnected port.}
+The code generator is more of a find and replace tool than a compiler. Each templated file is walked twice: once to rewrite the generic defaults, and once to expand the directives.
+
+The generics pass is the simple one. \texttt{configuration.csv} is read, every value is checked against the same limits the HDL asserts at elaboration, and the default of each named generic is rewritten in place. Only declarations that already carry a \texttt{:=} are touched, which confines the pass to the entity and leaves the component declarations in the wrapper alone. \texttt{G\_PROBE\_WIDTH} is the one generic that is not read from the configuration at all: it is summed from the portmap, which is why it must be generated rather than set by hand.
+
+The directives pass works on the \texttt{\^{}\^{}XX} markers that sit in the comment headers of the templates. The generated block is inserted after the run of comment lines that immediately follows the directive line, so the heading and its closing rule stay above the generated code rather than being buried in it. The six directives are listed in Table~\ref{tab:codegen_directives}.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Directive} & \textbf{File} & \textbf{Expands to} \\
+        \hline
+        \texttt{\^{}\^{}DI} & both & The probe port declarations, slave side \\
+        \hline
+        \texttt{\^{}\^{}DO} & both & The probe port declarations, master side \\
+        \hline
+        \texttt{\^{}\^{}MI} & \texttt{libre\_ila\_uart} & The slave side associations in the port map of the core instance \\
+        \hline
+        \texttt{\^{}\^{}MO} & \texttt{libre\_ila\_uart} & The master side associations in the port map of the core instance \\
+        \hline
+        \texttt{\^{}\^{}SH} & \texttt{libre\_ila} & The pass through assignments between the two sides \\
+        \hline
+        \texttt{\^{}\^{}MX} & \texttt{libre\_ila} & The \texttt{w\_probe} concatenation that the sampler writes \\
+        \hline
+    \end{tabularx}
+    \caption{The code generation directives.}
+    \label{tab:codegen_directives}
+\end{table}
+
+A directive may appear more than once in a file. The wrapper carries \texttt{\^{}\^{}DI} and \texttt{\^{}\^{}DO} twice, once in its own entity and once in the component declaration of the core, and the indentation of each generated block is taken from the directive line itself, so the same block serves both depths. In the template, \texttt{\^{}\^{}DI} is nothing but a header:
+
+\begin{lstlisting}
+    -- Probe Slave ^^DI ---------------------------------------------
+    -- Faces the master of the probed link, so it carries the port
+    -- directions of that link's slave.
+    -----------------------------------------------------------------
+\end{lstlisting}
+
+and with the stock portmap it comes out as:
+
+\begin{lstlisting}
+    -- Probe Slave ^^DI ---------------------------------------------
+    -- Faces the master of the probed link, so it carries the port
+    -- directions of that link's slave.
+    -----------------------------------------------------------------
+    probe_slave_axis_tdata  : in    std_logic_vector(63 downto 0);
+    probe_slave_axis_tlast  : in    std_logic;
+    probe_slave_axis_tvalid : in    std_logic;
+    probe_slave_axis_tready : out   std_logic;
+\end{lstlisting}
+
+Which files come out is decided by \texttt{GEN\_TYPE}: 0 emits the bare AXI4Lite core alone, and 1 emits it together with the UART wrapper and the \texttt{fifo} and \texttt{uart} blocks it instantiates. Those last two carry no directives and are copied verbatim.
+
+In case of any error, the generator aborts the run before writing anything. That includes a directive that is listed for a file but never found in it, which is treated as an error rather than as nothing to do: a silently dropped block would not fail here at all, it would elaborate much later as an unconnected port, and that is a far worse thing to debug than a generator that refuses to run.
 
 \section{Writing configuration.csv}
 \label{sec:codegen_config}
 
-\todo{One line per generic, as \texttt{generic,type,value}. The generics that matter in practice: GEN\_TYPE, which picks core only or core plus wrapper, G\_SAMP\_BUFF\_DEPTH, G\_EXTERNAL\_TRIG and the UART settings. G\_UID may be omitted entirely and may be written in hex. The full ranges stay in the datasheet.}
+One line per generic, written as \texttt{generic,type,value}, where \texttt{type} is the VHDL type of the value and is one of \texttt{integer}, \texttt{natural} or \texttt{string}. Blank lines and lines starting with \texttt{\#} are ignored. Every generic in Table~\ref{tab:codegen_generics} except \texttt{G\_UID} has to be present, and a missing one aborts the run; \texttt{G\_UID} may be left out entirely, which is the same as setting it to zero. A \texttt{natural} may be written in hex, so \texttt{G\_UID,natural,0x0BADC0DE} is read as 195936478, with a ceiling of \texttt{0x7FFFFFFF} because a VHDL \texttt{natural} cannot hold anything with the top bit set. An \texttt{integer} is read as decimal only.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Generic} & \textbf{Stock} & \textbf{What it decides} \\
+        \hline
+        \texttt{GEN\_TYPE} & 1 & Which files come out: 0 the core on its own, 1 the core plus the UART wrapper \\
+        \hline
+        \texttt{G\_SAMP\_BUFF\_DEPTH} & 2048 & How many samples the buffer holds, and with the probe width, how much fabric RAM the core costs. A power of two greater than one \\
+        \hline
+        \texttt{G\_EXTERNAL\_TRIG} & 0 & 1 replaces the trigger comparator with the \texttt{i\_ext\_trig} pin, and the pattern and mask registers are then ignored \\
+        \hline
+        \texttt{G\_SAMP\_CLK\_FREQ} & 100\,000\,000 & Nothing in the logic. It is reported to the host, which builds the time axis of the VCD from it \\
+        \hline
+        \texttt{G\_AXIL\_CLK\_FREQ} & 100\,000\,000 & The watchdog period and the UART divider, so it has to match the clock the bus really runs at \\
+        \hline
+        \texttt{G\_BAUD\_RATE} & 115\,200 & Wrapper only. The line rate, 8N1 \\
+        \hline
+        \texttt{G\_UART\_RX\_FIFO\_DEPTH} & 1024 & Wrapper only. Bytes buffered in each direction. Powers of two \\
+        \texttt{G\_UART\_TX\_FIFO\_DEPTH} & 1024 & \\
+        \hline
+        \texttt{G\_UID} & 0 & Nothing in the logic. It is read back at UID so that several cores in one system can be told apart \\
+        \hline
+    \end{tabularx}
+    \caption{The generics that matter in practice. Full ranges are in the datasheet.}
+    \label{tab:codegen_generics}
+\end{table}
+
+The two clock frequencies are worth keeping apart, because only one of them configures anything. Getting \texttt{G\_SAMP\_CLK\_FREQ} wrong costs a capture that reads back with the wrong time base and nothing else, and it can be corrected after the fact. Getting \texttt{G\_AXIL\_CLK\_FREQ} wrong costs a UART that does not talk, because the divider is derived from it.
+
+The generator refuses a run rather than passing a bad value on to synthesis. Both clock frequencies must be positive, \texttt{G\_EXTERNAL\_TRIG} and \texttt{GEN\_TYPE} must be 0 or 1, the buffer depth and both FIFO depths must be powers of two greater than one, and the baud rate must be below \texttt{G\_AXIL\_CLK\_FREQ}/16. Between \texttt{G\_AXIL\_CLK\_FREQ}/32 and that limit it runs but prints a warning: the 16$\times$ oversampling receiver is down to two clocks per sample there and the margin is thin. The full ranges, including the ones only the elaboration asserts catch, are in the datasheet.
+
+The stock configuration is short enough to read whole:
+
+\begin{lstlisting}
+G_SAMP_CLK_FREQ,integer,100000000
+G_AXIL_CLK_FREQ,integer,100000000
+G_EXTERNAL_TRIG,integer,0
+G_SAMP_BUFF_DEPTH,natural,2048
+G_UID,natural,0
+GEN_TYPE,integer,1
+G_UART_RX_FIFO_DEPTH,natural,1024
+G_UART_TX_FIFO_DEPTH,natural,1024
+G_BAUD_RATE,integer,115200
+\end{lstlisting}
 
 \section{Writing portmap.csv}
 \label{sec:codegen_portmap}
 
-\todo{Three columns, \texttt{signal,width,type}, listed LSB first, and that order is the probe bit order everything else inherits. Parsing is strict: no whitespace around fields, comments only in column 0. The stock AXI4S portmap and one other example.}
+Three columns, \texttt{signal,width,type}, one signal per line, listed LSB first. The first signal listed owns the low bits of the probe word, and that order is the probe bit order everything else inherits: the \texttt{w\_probe} concatenation in the core, the trigger vector, the bit numbering both drivers use, and the order the signals appear in the VCD. For the stock AXI4S build that puts \texttt{axis\_tdata} at bits 0 to 63, \texttt{axis\_tlast} at 64, \texttt{axis\_tvalid} at 65 and \texttt{axis\_tready} at 66, which is exactly what has to be counted out when a trigger pattern is written by hand.
+
+\begin{lstlisting}
+# signal,width,type
+axis_tdata,64,in
+axis_tlast,1,in
+axis_tvalid,1,in
+axis_tready,1,out
+\end{lstlisting}
+
+Parsing is strict, and deliberately so, since both the generator and the driver have to read this file the same way. Each line is split on commas into exactly three fields, taken literally: a space after a comma lands inside the field, so \texttt{axis\_tlast, 1, in} is rejected on the type and \texttt{axis\_tlast ,1,in} would carry the space into the port name. Comments are only comments in column 0, so an indented \texttt{\#} is an error rather than a comment. Widths have to be positive, names have to be unique, and a portmap with no signals in it is refused. The names are not checked for being legal VHDL identifiers, since that surfaces clearly enough at analysis.
+
+The widths add up to \texttt{G\_PROBE\_WIDTH}, and a sample is stored in $\lceil$\texttt{G\_PROBE\_WIDTH}$/32\rceil$ lanes of 32 bits. A width just over a multiple of 32 therefore costs a whole extra lane for every sample in the buffer: the stock build is 67 bits and spends three lanes on it. It is worth spending the three bits somewhere useful, or trimming a data bus by three, where the choice is free.
+
+\texttt{templates/} holds starting points, listed in Table~\ref{tab:codegen_templates}. Copy one to \texttt{codegen/portmap.csv} and cut it down rather than starting from an empty file.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{File} & \textbf{Describes} \\
+        \hline
+        \texttt{default\_portmap.csv} & The stock 64-bit AXI4Stream probe, 67 bits in total. This is the build the tests and the shipped drivers assume \\
+        \hline
+        \texttt{axi4s\_full\_portmap.csv} & Every AXI4Stream signal, clock and reset included. Trim the widths to the link \\
+        \hline
+        \texttt{axi4\_full\_portmap.csv} & AXI4 full, all five channels, with the widths taken from Microchip application note AC409 \\
+        \hline
+        \texttt{default\_configuration.csv} & The stock generics, as printed above \\
+        \hline
+    \end{tabularx}
+    \caption{The templates supplied with the generator.}
+    \label{tab:codegen_templates}
+\end{table}
+
+One trap comes from the two tools defaulting differently. For the generator, \texttt{--portmap} defaults to the copy under \texttt{templates/}; for the python driver it defaults to \texttt{codegen/portmap.csv}. The two ship identical, so a stock build works either way, but as soon as one of them is edited the flag has to be passed to both tools. The driver does not have to be trusted to notice: it refuses a readout whose portmap widths do not add up to the probe width the core reports, which is the check that catches a portmap that has drifted away from the synthesised core.
 
 \subsection{Choosing the signal type}
 \label{sec:codegen_types}
 
-\todo{\texttt{in}, \texttt{out} and \texttt{mon} as a table, described from the \texttt{probe\_slave\_} side.}
+\texttt{type} is the direction the signal has on the \texttt{probe\_slave\_} side, which is the side facing the \emph{master} of the probed link. So the portmap carries the directions that link's slave would have, and \texttt{probe\_master\_} gets the mirror of each one. Table~\ref{tab:codegen_porttypes} is the whole of it.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|l|l|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Type} & \textbf{Slave side} & \textbf{Master side} & \textbf{Pass through} & \textbf{Use for} \\
+        \hline
+        \texttt{in}  & input  & output & yes, slave to master & Anything the probed link's master drives \\
+        \hline
+        \texttt{out} & output & input  & yes, master to slave & Anything the probed link's slave drives \\
+        \hline
+        \texttt{mon} & input  & none   & no, parallel tap only & A link that cannot be spliced in series \\
+        \hline
+    \end{tabularx}
+    \caption{The probe signal types.}
+    \label{tab:codegen_porttypes}
+\end{table}
+
+For AXI4Stream that makes TDATA, TVALID and TLAST \texttt{in} and TREADY \texttt{out}. A \texttt{mon} signal is sampled and can be triggered on like any other, it simply has no master side port and is never driven by the core.
+
+A direction written the wrong way round is not caught anywhere. The generator has no way to know which end of the link drives what, the result elaborates cleanly, and the core still records the signal. What breaks is the pass through, which now drives into the wrong end of the link, so the symptom is a link that stops working the moment the ILA is spliced into it rather than anything the generator or the tools will report.
 
 \subsection{Using bidirectional signals}
 \label{sec:codegen_inout}
 
-\todo{A signal assignment cannot pass a bidirectional line through, so the splice goes on the fabric side of the IO buffer, across the three signals the tristate is built from. The QPI flash example, including the turnaround it captures and a pad probe cannot. Where a bus cannot be spliced at all, \texttt{mon}.}
+There is no \texttt{inout} type, and the generator rejects one with an explanation rather than accepting it. A signal assignment cannot pass a bidirectional line through. Writing \texttt{probe\_master\_x <= probe\_slave\_x} makes the core a second driver on the master side, so anything the far end drives resolves to \texttt{'X'} and nothing ever propagates backwards, and writing both directions is a combinational loop. Even the open-drain idiom, \texttt{'0' when other = '0' else 'Z'} both ways, latches up once both sides are low; real I2C repeaters avoid that with offset voltages, not with logic.
+
+It is not needed either, because an ILA cannot sit between a pad and the outside world. The splice belongs on the fabric side of the IO buffer, where the bus is not bidirectional yet and is still the three unidirectional groups the tristate is built from. For a QPI flash:
+
+\begin{lstlisting}
+# signal,width,type
+qspi_cs_n,1,in
+qspi_sck,1,in
+qspi_sio_o,4,in      # data the controller drives
+qspi_sio_oe,1,in     # turnaround control
+qspi_sio_i,4,out     # data read back
+\end{lstlisting}
+
+That captures strictly more than a probe on the pad would. Drive value, enable and read value stay separate, so the pad itself is reconstructable, and the turnaround becomes visible and triggerable instead of having to be guessed from a single resolved value, which is where the bugs usually are.
+
+Where the bus genuinely cannot be spliced in series, for instance a controller that only exposes one bidirectional port, tap it in parallel with \texttt{mon}. The core reads the resolved value and never drives it.
 
 \section{Running the generator}
 \label{sec:codegen_running}
 
-\todo{The command lines and the flag table. Output lands in \texttt{gen\_axis/} for the stock build and \texttt{gen/} otherwise, overridden by \texttt{--outdir}, and neither is tracked. The trap worth calling out: after editing anything in \texttt{hdl/}, \texttt{gen\_axis/} has to go, by hand or with \texttt{make clean}, or the tests keep simulating the previous build.}
+\begin{lstlisting}
+python3 code_generator.py                                # stock build -> gen_axis/
+python3 code_generator.py --portmap portmap.csv \
+                         --config  configuration.csv     # user build  -> gen/
+python3 code_generator.py --dry-run                      # report only
+\end{lstlisting}
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Flag} & \textbf{Effect} \\
+        \hline
+        \texttt{--portmap <file>} & The probe portmap CSV. Default \texttt{templates/default\_portmap.csv} \\
+        \hline
+        \texttt{--config <file>} & The core configuration CSV. Default \texttt{templates/default\_configuration.csv} \\
+        \hline
+        \texttt{--outdir <dir>} & Override the output directory \\
+        \hline
+        \texttt{--dry-run} & Report what would be generated, write nothing \\
+        \hline
+    \end{tabularx}
+    \caption{The generator's flags.}
+    \label{tab:codegen_flags}
+\end{table}
+
+The defaults are resolved relative to the script rather than to the working directory, so it can be run from anywhere, including from the Makefile at the repository root. Paths given on the command line are resolved relative to the working directory, as usual.
+
+Where the output lands is decided by the inputs. A run with \emph{both} CSV files left at their shipped defaults is the stock build and goes to \texttt{gen\_axis/}; anything else goes to \texttt{gen/}. \texttt{--outdir} overrides both. Neither directory is tracked, so neither is anything to protect: delete either one and the next run rebuilds it.
+
+The run prints back what it read and what it derived, and that output is worth a glance before synthesis, since the bit ranges are the same ones a hand-written trigger pattern has to be counted against:
+
+\begin{lstlisting}
+G_PROBE_WIDTH:67
+  w_probe(63 downto 0) : axis_tdata
+  w_probe(64 downto 64) : axis_tlast
+  w_probe(65 downto 65) : axis_tvalid
+  w_probe(66 downto 66) : axis_tready
+
+GEN_TYPE 1: generating libre_ila.vhdl, fifo.vhdl, uart.vhdl, libre_ila_uart.vhdl
+\end{lstlisting}
+
+From the repository root, \texttt{make configure} brings the stock build up to date and is what the simulations depend on. It is driven by a stamp file in \texttt{gen\_axis/} that tracks the generator itself, everything in \texttt{hdl/} and everything in \texttt{codegen/templates/}, so editing a template regenerates on the next run and touching none of them does not run the generator at all.
+
+The trap worth calling out is what that stamp does \emph{not} track. The two CSV files in \texttt{codegen/} are not among its dependencies, and neither is a build someone dropped into \texttt{gen\_axis/} by hand with \texttt{--outdir}. Point \texttt{--outdir} at \texttt{gen\_axis/} once and the tests keep simulating that user build until something in \texttt{hdl/} or \texttt{templates/} changes. Let user builds go to \texttt{gen/} where they belong, and if one has already landed in \texttt{gen\_axis/}, delete the directory or run \texttt{make clean}.
 
 \section{Building a generic logic analyzer}
 \label{sec:codegen_generic}
 
-\todo{Two ways there: every port \texttt{mon}, or every port \texttt{in} with the master side left open. Which one to prefer and why, and that a \texttt{mon} build has no pass-through, so the core only observes.}
+Nothing says the core has to sit in the middle of a link. For a plain logic analyzer, one that only watches a handful of signals scattered around the design, there are two ways to describe it in the portmap: list every signal as \texttt{mon}, or list every signal as \texttt{in} and leave the master side of the instance open.
+
+Prefer \texttt{mon}. There is no master side port to leave dangling, no pass through logic for synthesis to trim away, and the file says what the build is for. With every signal a tap, the \texttt{\^{}\^{}DO} and \texttt{\^{}\^{}MO} blocks come out empty and \texttt{\^{}\^{}SH} becomes a single comment: the core cannot drive anything, by construction rather than by care taken at instantiation.
+
+\begin{lstlisting}
+# signal,width,type
+dbg_bus,32,mon
+dbg_state,4,mon
+dbg_valid,1,mon
+dbg_error,1,mon
+\end{lstlisting}
+
+The capture side is unchanged by any of this. A \texttt{mon} build arms, triggers, fills the same buffer and reads back into the same VCD; the only thing it gives up is the pass through, and a build that observes rather than intercepts had no use for that anyway.
 
 \section{Probing multiple channels in same build}
 \label{sec:codegen_multi}
 
-\todo{Several channels on one ILA, as long as they share a clock.}
+One core can watch several links at once, as long as they share a sampling clock. List all of them in one portmap and they concatenate into one probe word, with each channel occupying its own run of bits in the order listed. Prefix the names per channel so that the VCD stays readable and the trigger rows in the GUI can be told apart:
+
+\begin{lstlisting}
+# signal,width,type
+ch0_axis_tdata,32,in
+ch0_axis_tvalid,1,in
+ch0_axis_tready,1,out
+ch1_axis_tdata,32,in
+ch1_axis_tvalid,1,in
+ch1_axis_tready,1,out
+\end{lstlisting}
+
+This buys something two separate cores cannot do without being chained: there is one trigger vector spanning every channel, so a condition can be written across them, for instance the moment channel~0 asserts TLAST while channel~1 is still stalled. It costs width, and the buffer costs its lane count times its depth in RAM, so a wide multi-channel probe is usually paid for by shortening the buffer.
+
+Links on different clocks need separate cores, and two things are worth knowing before wiring that up. Every build emits an entity called \texttt{libre\_ila}, and \texttt{libre\_ila\_uart} with it, so two \emph{different} probe shapes cannot go into one project without renaming one of the copies. Two instances of the \emph{same} shape are no trouble at all: instantiate the same entity twice and override \texttt{G\_UID} in each generic map so the host can tell them apart. To make one instance trigger the other, build the second with \texttt{G\_EXTERNAL\_TRIG} set to 1 and drive its \texttt{i\_ext\_trig} from the first one's \texttt{o\_trig\_out}; that pin is not synchronised inside the core, so chained instances have to share a sampling clock or carry a synchroniser between them. The datasheet covers the chaining rules in full.
+
 \end{document}

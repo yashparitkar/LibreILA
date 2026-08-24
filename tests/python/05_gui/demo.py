@@ -109,11 +109,12 @@ def install_fake_serial(cores):
     sys.modules["serial.tools.list_ports"] = list_ports
 
 
-def take_shots(gui, directory):
+def take_shots(gui, device_dir, directory):
     """
     take_shots: Render the window at each step of a capture.
 
     gui: The imported gui module.
+    device_dir: The store the tabs come from.
     directory: Where to write the .png files.
 
     returns: None
@@ -128,7 +129,7 @@ def take_shots(gui, directory):
     app.styleHints().setColorScheme(Qt.ColorScheme.Light)
     app.setPalette(gui.light_palette())
 
-    window = gui.MainWindow("gtkwave", ".", _PORTMAP)
+    window = gui.MainWindow("gtkwave", device_dir, _PORTMAP)
     window.resize(1100, 800)
     window.show()
 
@@ -220,18 +221,21 @@ def main():
 
     os.chdir(work)
 
-    for port, uid in zip(cores, uids):
-        session.save_device(uid, port, 115200)
+    # The same store the window reads, so the tabs are there before it opens
+    device_dir = session.DEFAULT_DEVICE_DIR
 
-    print(f"demo store: {work}")
+    for port, uid in zip(cores, uids):
+        session.save_device(uid, port, 115200, device_dir)
+
+    print(f"demo store: {os.path.join(work, device_dir)}")
 
     for port, uid in zip(cores, uids):
         print(f"  ILA{uid} on {port}")
 
     if args.shots:
-        take_shots(gui, os.path.abspath(os.path.join(_HERE, args.shots)))
+        take_shots(gui, device_dir, os.path.abspath(os.path.join(_HERE, args.shots)))
     else:
-        gui.run_gui("gtkwave", ".", _PORTMAP)
+        gui.run_gui("gtkwave", device_dir, _PORTMAP)
 
     return 0
 

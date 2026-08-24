@@ -198,7 +198,8 @@ class TestNoImportSideEffects(unittest.TestCase):
         parser  = libre_ila.build_parser()
         options = {action.dest for action in parser._actions}
 
-        for verb in ("reset", "add_device", "device", "info", "set_trigger_position",
+        for verb in ("reset", "list_devices", "add_device", "device", "info",
+                     "set_trigger_position",
                      "set_trigger_condition", "set_trigger_mask", "set_trigger_type",
                      "set_trigger_reduction", "get_trigger_configuration", "arm",
                      "force_trigger", "disarm", "wait_done", "read_data", "output",
@@ -304,6 +305,62 @@ class TestDeviceStore(TempCwd):
                 self.assertEqual(status, libre_ila._libre_ila_main_status[
                     "LIBRE_ILA_MAIN_STATUS_DEVICE_NOT_FOUND"])
                 self.assertIn(f"libre_ila_device{_UID}.txt", err)
+
+    def test_list_devices_reports_every_stored_device(self):
+        self.add_device(0, "/dev/ttyUSB0", 115200)
+        self.add_device(_UID, "/dev/ttyACM1", 921600)
+
+        status, out, _ = run_cli("--list-devices")
+
+        self.assertEqual(status, 0)
+
+        for field in ("0", str(_UID), "/dev/ttyUSB0", "/dev/ttyACM1", "115200", "921600"):
+            with self.subTest(field=field):
+                self.assertIn(field, out)
+
+    def test_list_devices_opens_no_port(self):
+        # The store is not a connection. Listing it says what --device can name,
+        # which has to hold with nothing plugged in.
+        self.add_device(_UID)
+
+        wrapper = staged_wrapper()
+
+        status, _, _ = run_cli("--list-devices", wrapper=wrapper)
+
+        self.assertEqual(status, 0)
+        self.assertEqual(wrapper.packets, [])
+
+    def test_list_devices_on_an_empty_store_is_not_an_error(self):
+        status, out, _ = run_cli("--list-devices")
+
+        self.assertEqual(status, 0)
+        self.assertIn("no stored devices", out)
+
+    def test_a_mangled_entry_does_not_hide_the_rest_of_the_listing(self):
+        self.add_device(_UID, "/dev/ttyUSB0", 115200)
+
+        with open(session.device_path(9), "w") as device_file:
+            device_file.write("nonsense\n")
+
+        status, out, _ = run_cli("--list-devices")
+
+        self.assertEqual(status,
+                         libre_ila._libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_DEVICE_NOT_FOUND"])
+        self.assertIn("/dev/ttyUSB0", out)
+        self.assertIn("libre_ila_device9.txt", out)
+
+    def test_the_stored_uids_are_named_when_the_wanted_one_is_missing(self):
+        # Exit 4 is usually --device given an index. Naming what is there is
+        # the answer to the question the error raises.
+        self.add_device(7)
+        self.add_device(_UID)
+
+        status, _, err = run_cli("--device", "1", "--info")
+
+        self.assertEqual(status,
+                         libre_ila._libre_ila_main_status["LIBRE_ILA_MAIN_STATUS_DEVICE_NOT_FOUND"])
+        self.assertIn("7", err)
+        self.assertIn(str(_UID), err)
 
     def test_reset_removes_stored_devices(self):
         self.add_device(0)

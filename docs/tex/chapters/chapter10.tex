@@ -10,25 +10,117 @@
 \chapter{Troubleshooting}
 \label{ch:trouble}
 
-\todo{The chapter that most directly stops a user hunting through READMEs. Every entry is a symptom the user actually sees, the cause, and the fix: a summary table first, then a subsection per group with the detail.}
+Every entry here starts from a symptom you can actually see, rather than from a part of the system. Table~\ref{tab:tr_summary} is the index; the sections after it carry the detail.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|X|l|}
+        \hline
+        \rowcolor{gray!40} \textbf{Symptom} & \textbf{Section} \\
+        \hline
+        The simulations are testing a build I did not generate & \ref{sec:tr_build} \\
+        \hline
+        \texttt{Invalid type for probe} or \texttt{Invalid portmap line} & \ref{sec:tr_build} \\
+        \hline
+        \texttt{directives never found} aborts the generator & \ref{sec:tr_build} \\
+        \hline
+        The core costs thousands of flip-flops and no RAM blocks & \ref{sec:tr_build} \\
+        \hline
+        Timing fails on paths between the two clock domains & \ref{sec:tr_build} \\
+        \hline
+        Elaboration complains about the probe width after regenerating & \ref{sec:tr_build} \\
+        \hline
+        No such port, or permission denied on \texttt{/dev/ttyUSB0} & \ref{sec:tr_link} \\
+        \hline
+        The port is busy & \ref{sec:tr_link} \\
+        \hline
+        Exit status 7, or a timeout with nothing in the log & \ref{sec:tr_link} \\
+        \hline
+        \texttt{RESYNC dropped N stale bytes} & \ref{sec:tr_link} \\
+        \hline
+        The ILA triggers the instant it is armed & \ref{sec:tr_trigger} \\
+        \hline
+        The ILA never triggers & \ref{sec:tr_trigger} \\
+        \hline
+        Exit status 6, the portmap does not match the core & \ref{sec:tr_capture} \\
+        \hline
+        The signals are named wrongly, or shifted by a few bits & \ref{sec:tr_capture} \\
+        \hline
+        The waveform jumps backwards in time part way through & \ref{sec:tr_capture} \\
+        \hline
+        Every interval measured in the viewer is wrong by the same ratio & \ref{sec:tr_capture} \\
+        \hline
+        The capture came from the wrong ILA & \ref{sec:tr_capture} \\
+        \hline
+    \end{tabularx}
+    \caption{Symptom to section.}
+    \label{tab:tr_summary}
+\end{table}
 
 \section{Generation and build}
 \label{sec:tr_build}
 
-\todo{Stale \texttt{gen\_axis/} after editing \texttt{hdl/}. Portmap rejected for whitespace around fields. Directive not found aborting the run. Sample buffer inferred as registers and the area blowing up. Timing failing between the two clock domains because they were never declared asynchronous.}
+\textbf{The simulations are testing a build I did not generate.} The testbenches read \texttt{codegen/gen\_axis/}, and the stamp that keeps it up to date tracks the generator, \texttt{hdl/*.vhdl} and \texttt{codegen/templates/*.csv}. It does not track \texttt{codegen/portmap.csv}, \texttt{codegen/configuration.csv}, or a build someone wrote into \texttt{gen\_axis/} by hand with \texttt{--outdir}. Point \texttt{--outdir} there once and the tests keep simulating that user build until something in \texttt{hdl/} or \texttt{templates/} changes. Delete the directory, or run \texttt{make clean} at the repository root, and let user builds go to \texttt{gen/} where they belong.
+
+\textbf{\texttt{Invalid type for probe} or \texttt{Invalid portmap line}.} The portmap parser takes each line as exactly three comma separated fields, literally, so a space after a comma lands inside the field: \texttt{axis\_tlast, 1, in} is rejected on the type, and \texttt{axis\_tlast ,1,in} would carry a space into the port name. A \texttt{\#} that is not in column 0 is an error rather than a comment, deliberately, since the same file is parsed once to build the hardware and once to read it back. Section~\ref{sec:codegen_portmap} has the full rules.
+
+\textbf{\texttt{directives never found} aborts the generator.} A file listed as carrying a \texttt{\^{}\^{}XX} directive no longer has it, which normally means a template in \texttt{hdl/} was edited and a comment header went with the edit. Put the directive line back. The generator treats this as an error rather than as nothing to do because a silently dropped block does not fail at generation at all; it fails much later, at elaboration, as an unconnected port.
+
+\textbf{The core costs thousands of flip-flops and no RAM blocks.} The synthesis tool declined to infer a simple dual-port RAM with independent read and write clocks for the sample buffer and fell back to registers. The design still builds and still behaves correctly, it just costs far more fabric than it should. Check the resource usage by module: the core's instance should carry a non-zero RAM block count, as in Section~\ref{sec:integ_check}. The datasheet's device requirements section covers the inference itself.
+
+\textbf{Timing fails on paths between the two clock domains.} \texttt{samp\_aclk} and \texttt{s\_axil\_aclk} are unrelated, and if the constraint file never says so the tool will try to close timing between them. Declare them asynchronous, as in Section~\ref{sec:integ_sdc}. Everything that genuinely crosses already carries its own synchroniser inside the core.
+
+\textbf{Elaboration complains about the probe width after regenerating.} Graphical tools capture the generics into the instantiation when the component is imported, so the regenerated file on disk and the stale override in the block design disagree. Refresh the component in the tool. This is the good outcome; the bad one is an override that still elaborates and slices the probe word at the wrong boundaries, which shows up later as a capture whose signals are all shifted.
 
 \section{The link}
 \label{sec:tr_link}
 
-\todo{No port, busy port, timeout, desynced reply. A baud mismatch between G\_BAUD\_RATE and \texttt{--baud}. RX and TX not crossed over. How \texttt{--debug} tells these apart, and what the resync line means.}
+\textbf{No such port, or permission denied.} The adapter is not enumerated, or your user is not in the \texttt{dialout} group. Add yourself once and log out and back in, as in Section~\ref{sec:started_hostpkgs}. A permission error names the port, so it is easy to tell from the port not existing at all.
+
+\textbf{The port is busy.} Something else holds it: a GUI tab that is still connected, a serial terminal left open, or a previous run that has not exited. A tab holds its port for as long as it is connected, on purpose, so disconnect the tab rather than killing the window.
+
+\textbf{Exit status 7, or a timeout with nothing in the log.} The request went out and nothing came back. In order of how often it is the cause:
+
+\begin{itemize}
+    \item \textbf{Baud mismatch.} \texttt{G\_BAUD\_RATE} is fixed at synthesis and \texttt{--baud} has to match it. Neither end can detect the difference, so the symptom is silence rather than corruption.
+    \item \textbf{RX and TX not crossed.} The adapter's TX goes to the pin constrained as \texttt{uart\_rx} and its RX to the pin constrained as \texttt{uart\_tx}. Straight through wiring gives exactly this symptom.
+    \item \textbf{The wrong port.} Several devices enumerate at once on a board like the Discovery Kit, and only one of them is the ILA's adapter.
+    \item \textbf{The FPGA is not programmed}, or is held in reset, so nothing is listening.
+\end{itemize}
+
+Run with \texttt{--debug} to tell them apart: a \texttt{TX} line with no \texttt{RX} line after it is one of the four above, whereas an \texttt{RX} line that arrives and is rejected is the next entry.
+
+\textbf{\texttt{RESYNC dropped N stale bytes}.} A reply arrived that did not match its request, so the driver drained the link to get back in step before reporting the failure. Read the byte counts around it, not just the error: the wrapper answers a read with a six byte header and four bytes per word, so a reply that is short or long for the request it followed says the two ends disagree about \emph{which} request is being served, rather than that one reply was corrupted. The usual cause is two things talking to one core at once, which is also why a session may only be touched by one thread at a time.
 
 \section{The trigger}
 \label{sec:tr_trigger}
 
-\todo{Fires immediately on arming: a level trigger whose condition already held, which is the single most common surprise. Never fires: mask, reduction, or a condition that cannot occur; recover with force trigger. An all-zero mask in AND mode matching vacuously. Mask bits set in the padding above the probe width.}
+\textbf{The ILA triggers the instant it is armed.} This is the single most common surprise, and it is almost always a level trigger whose condition already held at the moment of arming. In level mode the core fires on the very first sample if the condition is already true, so "trigger when TVALID is high" on a busy stream captures the moment you pressed the button and nothing of interest. Use an edge mode, which waits for a transition and does not mistake an already true condition for a rising edge.
+
+The other cause is an all-zero mask in AND mode, which matches \emph{vacuously}: with no bits enabled, every enabled bit trivially matches, so the condition is true from the first sample. If the intent is never to trigger on the probe, use an all-zero mask in OR mode instead, which is the combination that genuinely never fires.
+
+\textbf{The ILA never triggers.} Work through the trigger from the outside in:
+
+\begin{itemize}
+    \item \textbf{The mask.} An all-zero mask in OR mode never fires, as above. A mask that enables the wrong bits fires on the wrong thing or on nothing.
+    \item \textbf{The reduction.} AND asks for every enabled bit at once, which for two signals that are never simultaneously in the required state can be unsatisfiable. OR asks for any one of them.
+    \item \textbf{Bits above the probe width.} The core zero-extends each sample to the full register stride before comparing, so a mask bit set up in the padding fires an OR trigger on the first sample and stops an AND trigger from ever firing. The command line refuses these values rather than trimming them; a host writing the registers directly has to keep the padding words zero itself.
+    \item \textbf{The condition simply has not happened.} Use \texttt{--force-trigger}, or the \texttt{Force trigger} button, which fills the buffer from wherever the capture had got to. What comes back is still real data, just not centred on anything.
+\end{itemize}
+
+Reading the trigger back with \texttt{--get-trigger-configuration} is worth doing before changing anything, since it shows what the core is actually holding rather than what you meant to write.
 
 \section{The capture}
 \label{sec:tr_capture}
 
-\todo{Signals named wrongly or shifted: portmap drifted from the synthesised core. Buffer looks like noise before the window start: reading without unrolling from the first index. Time axis wrong: G\_SAMP\_CLK\_FREQ does not match the real clock. Talking to the wrong core: \texttt{--device} is a UID, not an index.}
+\textbf{Exit status 6, the portmap does not match the core.} The widths in \texttt{portmap.csv} do not add up to the probe width the core reports. Either \texttt{--portmap} is pointing at the wrong file, or the core was re-synthesised from a different portmap since. Note that the generator and the driver default to \emph{different} files: \texttt{templates/default\_portmap.csv} and \texttt{codegen/portmap.csv} respectively. They ship identical, so edit one and pass \texttt{--portmap} to both.
+
+\textbf{The signals are named wrongly, or shifted by a few bits.} The portmap has drifted from the synthesised core in a way the width check cannot see: reordering two signals, or moving a bit between two of them, leaves the total width unchanged. Regenerate the core from the portmap you are reading it with, or read it with the portmap it was generated from.
+
+\textbf{The waveform jumps backwards in time part way through.} The circular buffer was read without unrolling from SAMP\_BUFF\_FRST\_IDX, so the capture reads correctly from the start index to the end of the buffer and then continues with the part that was overwritten. Section~\ref{sec:read_raw} has the arithmetic. Both supplied drivers do this for you, so this one belongs to a custom host.
+
+\textbf{Every interval measured in the viewer is wrong by the same ratio.} \texttt{G\_SAMP\_CLK\_FREQ} does not match the clock actually connected to \texttt{samp\_aclk}. The capture itself is correct and in order; only the time axis is wrong, because the core has no way to measure its own clock and reports what it was told at synthesis. Check the frequency in \texttt{--info} against the design, and regenerate with the right value.
+
+\textbf{The capture came from the wrong ILA.} \texttt{--device} selects by the UID the core reports, not by the order devices were added, and it defaults to 0. A core built without a \texttt{G\_UID} reports 0, so several of them in one system are indistinguishable and the tool will simply talk to whichever one is stored under that name. Give each core its own \texttt{G\_UID} in \texttt{configuration.csv} and rebuild.
+
 \end{document}

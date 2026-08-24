@@ -10,40 +10,212 @@
 \chapter{The Baremetal C Driver}
 \label{ch:cdriver}
 
-\todo{The path for \texttt{libre\_ila} on AXI4Lite, which the manual does not cover at all today. A reader on this path never touches the python driver, so the chapter has to stand on its own.}
+This chapter is the whole of the \texttt{libre\_ila} path. Where the previous two chapters drive the UART wrapper from a PC, this one drives the bare core over its AXI4Lite slave port from firmware running on the same chip, so a capture never leaves the device and no host has to be attached to take one. A reader on this path needs nothing from the python driver and this chapter assumes nothing from those chapters.
+
+What it does assume is a core already built into a design and mapped into the address space of a processor that can reach it, as in Chapter~\ref{ch:integration}, with \texttt{GEN\_TYPE} set to 0.
 
 \section{Adding the driver to a project}
 \label{sec:c_files}
 
-\todo{The three files and what each is for. The AXI4Lite accessors are HAL calls, so which toolchain the shipped version assumes has to be stated plainly.}
+Three files under \texttt{drivers/baremetal/}, listed in Table~\ref{tab:c_files}, all of which go into the firmware project.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{File} & \textbf{What it is} \\
+        \hline
+        \texttt{core\_libre\_ila.c} & The implementation \\
+        \hline
+        \texttt{core\_libre\_ila.h} & The API: the instance type, the status and mode enums, and the function prototypes \\
+        \hline
+        \texttt{core\_libre\_ila\_regs.h} & Register offsets, field masks, and the macros that place a probe bit or index a sample \\
+        \hline
+    \end{tabularx}
+    \caption{The files of the baremetal driver.}
+    \label{tab:c_files}
+\end{table}
+
+The register accesses go through the HAL macros \texttt{HAL\_get\_32bit\_reg} and \texttt{HAL\_set\_32bit\_reg} and the two \texttt{HW\_*\_reg} functions under them, which is the one place the driver is tied to a toolchain. \textbf{As shipped it assumes the Microchip PolarFire SoC toolchain}, whose HAL supplies those macros, \texttt{addr\_t} and \texttt{readmtime()}. On that toolchain the driver compiles as it stands. On any other, Section~\ref{sec:c_porting} is the checklist of what to reimplement; it is short.
+
+The header includes \texttt{hal/hal.h}, or \texttt{hal.h} when \texttt{LEGACY\_DIR\_STRUCTURE} is defined, which is the difference between SoftConsole project layouts rather than anything about the ILA.
 
 \section{Definitions you must supply}
 \label{sec:c_defs}
 
-\todo{The three CORE\_LIBRE\_ILA\_ defines size the arrays the caller declares and nothing else; the driver reads none of them. Why array sizes cannot come from the hardware, and why the length travels alongside the pointer, so a mismatch fails at the call rather than overrunning.}
+Three defines, and they size the arrays you declare and nothing else. The driver reads none of them.
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{|l|X|}
+        \hline
+        \rowcolor{gray!40} \textbf{Define} & \textbf{Is} \\
+        \hline
+        \texttt{CORE\_LIBRE\_ILA\_PROBE\_WIDTH} & Total probed bits, \texttt{G\_PROBE\_WIDTH} in the HDL \\
+        \hline
+        \texttt{CORE\_LIBRE\_ILA\_SAMP\_BUFF\_DEPTH} & Depth of the sample buffer in samples, \texttt{G\_SAMP\_BUFF\_DEPTH} in the HDL \\
+        \hline
+        \texttt{CORE\_LIBRE\_ILA\_SAMP\_FREQ\_HZ} & Sampling clock in Hz, \texttt{G\_SAMP\_CLK\_FREQ} in the HDL. Nothing is derived from this one at all; it is somewhere to record what you expect, and the core reports the real value into \texttt{ila.samp\_clk\_freq\_hz} \\
+        \hline
+    \end{tabularx}
+    \caption{The build time definitions, which size arrays and nothing else.}
+    \label{tab:c_defs}
+\end{table}
+
+Array sizes cannot come from the hardware. They are storage in your own scope and there is no allocator on the way, so the size stays a build time decision however much the rest of the driver refuses to be. What the driver does instead is take the length alongside the pointer: \texttt{LIBRE\_ILA\_configure\_trigger()} and \texttt{LIBRE\_ILA\_read\_data()} both return \texttt{CMD\_STATUS\_BAD\_PARAM} unless the length matches what the core actually needs, and write nothing.
+
+That is worth the extra argument. A width guessed wrong fails at the call rather than overrunning the buffer, and the match is exact rather than "at least" on purpose: the sample macros index rows at the lane count they were compiled with, so a buffer sized for a wider probe than the core has would be filled at one row length and read back at another.
 
 \section{Initialising}
 \label{sec:c_init}
 
-\todo{\texttt{LIBRE\_ILA\_init()} reads the probe width, buffer depth and sampling clock out of the core and derives the register map, so re-synthesising with a different probe width needs no firmware rebuild. It also picks up the UID.}
+\begin{lstlisting}
+libre_ila_instance_t ila;
+
+if (LIBRE_ILA_init(&ila, MY_ILA_BASE_ADDR) != CMD_STATUS_SUCCESS) {
+    /* no LibreILA at that address, or it reports a geometry it
+       could not have been elaborated with */
+}
+\end{lstlisting}
+
+\texttt{LIBRE\_ILA\_init()} first reads MGCKEY and checks it against \texttt{0xB01DFACE}, which is what turns a wrong base address into \texttt{CMD\_STATUS\_BAD\_MAGIC\_KEY} rather than into nonsense. It then reads the probe width, the buffer depth and the sampling clock frequency out of the core and works the four block base addresses out from them, leaving the lot in the instance.
+
+Nothing in the driver is compiled against one synthesis. Re-synthesising with a different \texttt{G\_PROBE\_WIDTH} or buffer depth needs no firmware rebuild, only arrays large enough. This works because the output block sits at the base address in every build, so the registers that report the width are findable before the width is known; the datasheet's register summary lays that out.
+
+\texttt{init()} also picks up \texttt{ila.uid}, the core's \texttt{G\_UID}. It is carried rather than checked, since every value is legal and zero simply means the core was built without one. Where the magic key answers "is this a LibreILA", the UID answers "which one".
 
 \section{Configuring the trigger}
 \label{sec:c_trigger}
 
-\todo{The probe is opaque: one flat word, bit 0 upwards. The pattern of naming your own bits with a define and setting them through the word/mask macros, then the configure call with its reduction mode.}
+The probe is opaque to the driver. It sees one flat word of \texttt{CORE\_LIBRE\_ILA\_PROBE\_WIDTH} bits, bit 0 upwards, and both the trigger vector and the captured samples use that same layout. Naming the bits is your project's job, and the pattern is a define per bit plus the two placement macros:
+
+\begin{lstlisting}
+#define MY_PROBE_ERR_BIT  (3u)
+
+uint32_t cond[LIBRE_ILA_TRIG_WORDS(CORE_LIBRE_ILA_PROBE_WIDTH)] = {0};
+uint32_t mask[LIBRE_ILA_TRIG_WORDS(CORE_LIBRE_ILA_PROBE_WIDTH)] = {0};
+
+cond[LIBRE_ILA_BIT_WORD(MY_PROBE_ERR_BIT)] |= LIBRE_ILA_BIT_MASK(MY_PROBE_ERR_BIT);
+mask[LIBRE_ILA_BIT_WORD(MY_PROBE_ERR_BIT)] |= LIBRE_ILA_BIT_MASK(MY_PROBE_ERR_BIT);
+
+LIBRE_ILA_configure_trigger(&ila, cond, mask, ila.stride_width,
+                            LIBRE_ILA_TRIG_MODE_AND | LIBRE_ILA_TRIG_EDGE);
+\end{lstlisting}
+
+\texttt{cond} is the value each probe bit has to take and \texttt{mask} picks which bits take part, a zero leaving that bit a don't care. Words above the probe width are padding and must stay zero, for the same reason the python driver refuses a value with bits up there: the core zero-extends each sample to the full stride before comparing.
+
+The mode argument carries two independent things ORed together. \texttt{LIBRE\_ILA\_TRIG\_MODE\_AND} or \texttt{LIBRE\_ILA\_TRIG\_MODE\_OR} is the reduction over the enabled bits, and \texttt{LIBRE\_ILA\_TRIG\_EDGE}, optionally with \texttt{LIBRE\_ILA\_TRIG\_FALLING}, decides whether the trigger follows the level of that reduction or one of its edges. Level is the default and fires on the first sample if the condition already holds when the ILA is armed, which is rarely what a request like "trigger when the error bit is high" actually means.
 
 \section{Running a capture}
 \label{sec:c_capture}
 
-\todo{Position, arm, wait or poll status, force trigger, disarm, read back, as one complete compiling example rather than fragments.}
+The whole sequence, as one function that compiles:
+
+\begin{lstlisting}
+#include "core_libre_ila.h"
+
+#define MY_ILA_BASE_ADDR  (0x60000000u)
+#define MY_PROBE_ERR_BIT  (3u)
+
+#define TRIG_WORDS   LIBRE_ILA_TRIG_WORDS(CORE_LIBRE_ILA_PROBE_WIDTH)
+#define BUFF_WORDS   LIBRE_ILA_SAMPLE_WORDS(CORE_LIBRE_ILA_PROBE_WIDTH, \
+                                            CORE_LIBRE_ILA_SAMP_BUFF_DEPTH)
+
+static uint32_t samp_buffer[BUFF_WORDS];
+
+int capture_on_error(void)
+{
+    libre_ila_instance_t ila;
+    uint32_t cond[TRIG_WORDS] = {0};
+    uint32_t mask[TRIG_WORDS] = {0};
+    uint32_t trig_row = 0u;
+    uint32_t n;
+
+    if (LIBRE_ILA_init(&ila, MY_ILA_BASE_ADDR) != CMD_STATUS_SUCCESS) {
+        return -1;
+    }
+
+    /* keep a quarter of the buffer as history before the trigger */
+    LIBRE_ILA_set_trigger_position(&ila, ila.samp_buff_depth / 4u);
+
+    cond[LIBRE_ILA_BIT_WORD(MY_PROBE_ERR_BIT)] |= LIBRE_ILA_BIT_MASK(MY_PROBE_ERR_BIT);
+    mask[LIBRE_ILA_BIT_WORD(MY_PROBE_ERR_BIT)] |= LIBRE_ILA_BIT_MASK(MY_PROBE_ERR_BIT);
+
+    if (LIBRE_ILA_configure_trigger(&ila, cond, mask, ila.stride_width,
+                                    LIBRE_ILA_TRIG_MODE_AND | LIBRE_ILA_TRIG_EDGE)
+        != CMD_STATUS_SUCCESS) {
+        return -1;
+    }
+
+    LIBRE_ILA_arm(&ila);
+
+    /* ... let the design run ... */
+
+    if (LIBRE_ILA_wait_done(&ila, 5000u) != CMD_STATUS_SUCCESS) {
+        /* the error never happened: take what there is anyway */
+        LIBRE_ILA_force_trigger(&ila);
+
+        if (LIBRE_ILA_wait_done(&ila, 1000u) != CMD_STATUS_SUCCESS) {
+            LIBRE_ILA_disarm(&ila);
+            return -1;
+        }
+    }
+
+    if (LIBRE_ILA_read_data(&ila, samp_buffer, BUFF_WORDS, &trig_row)
+        != CMD_STATUS_SUCCESS) {
+        return -1;
+    }
+
+    /* samp_buffer now holds samp_buff_depth samples, oldest first, and
+       sample trig_row is the one the ILA triggered on */
+    for (n = 0u; n < ila.samp_buff_depth; n++) {
+        if (LIBRE_ILA_SAMPLE_BIT(samp_buffer, n, MY_PROBE_ERR_BIT)) {
+            /* ... */
+        }
+    }
+
+    return 0;
+}
+\end{lstlisting}
+
+Three things in there are worth pointing out. \texttt{LIBRE\_ILA\_arm()} ignores the value written, since the hardware acts on the write itself. \texttt{LIBRE\_ILA\_wait\_done()} polls until DONE or the timeout, so its failure is a trigger that has not fired rather than a broken core, which is why forcing is the sensible next step. And \texttt{read\_data()} returns the trigger position \emph{already rebased} on its own output: the buffer comes back unrolled, oldest sample first, and \texttt{trig\_row} indexes it directly. \texttt{LIBRE\_ILA\_read\_idx()} is there for a caller who wants the raw circular indices instead.
+
+Samples are stored packed, \texttt{n\_lanes} words each, with the padding words the hardware inserts up to the register stride dropped. So word \texttt{w} of sample \texttt{n} is \texttt{samp\_buffer[n * n\_lanes + w]}, which is what \texttt{LIBRE\_ILA\_SAMPLE\_WORD()} spells, and probe bit \texttt{b} of sample \texttt{n} is \texttt{LIBRE\_ILA\_SAMPLE\_BIT()}.
 
 \section{Several cores from one binary}
 \label{sec:c_multi}
 
-\todo{Each instance carries its own geometry, so one binary can drive cores of different probe widths. Their arrays are sized with the width macros and indexed with the sample macros, passing that instance's lane count. The magic key says a core is there, the UID says which one.}
+Each instance carries its own geometry, so one binary can drive cores of different probe widths at once. Give each its own \texttt{libre\_ila\_instance\_t}, initialise each from its own base address, and size its arrays with the width macros:
+
+\begin{lstlisting}
+libre_ila_instance_t ila_a, ila_b;
+uint32_t buff_a[LIBRE_ILA_SAMPLE_WORDS(96u, 4096u)];
+uint32_t buff_b[LIBRE_ILA_SAMPLE_WORDS(35u, 1024u)];
+
+LIBRE_ILA_init(&ila_a, ILA_A_BASE);
+LIBRE_ILA_init(&ila_b, ILA_B_BASE);
+
+/* index the wider one at its own lane count, not the global default */
+value = LIBRE_ILA_SAMPLE_BIT_N(buff_a, ila_a.n_lanes, sample, bit);
+\end{lstlisting}
+
+The \texttt{\_N} variants of the sample macros take the lane count explicitly, which is what a second core of a different width needs; the plain \texttt{LIBRE\_ILA\_SAMPLE\_WORD()} and \texttt{LIBRE\_ILA\_SAMPLE\_BIT()} use the global \texttt{CORE\_LIBRE\_ILA\_PROBE\_WIDTH} and are only right for a core that matches it.
+
+The magic key and the UID divide the work of finding them. The key says a given base address holds a LibreILA at all; the UID says which one, so firmware scanning a set of addresses does not have to hardcode which peripheral sits where. Set \texttt{G\_UID} per core in \texttt{configuration.csv} and they stay distinguishable for the life of the build.
 
 \section{Porting to another toolchain}
 \label{sec:c_porting}
 
-\todo{The register accessors are the only tool-dependent part: exactly which functions to reimplement and what they must do, so a user on a non-Microchip toolchain gets a checklist rather than a warning.}
+The register accessors are the only tool-dependent part of the driver. Everything else is plain C99. To move it to a toolchain that is not Microchip's, supply the following and change nothing in \texttt{core\_libre\_ila.c}:
+
+\begin{itemize}
+    \item \texttt{addr\_t}, an integer type wide enough to hold a peripheral address.
+    \item \texttt{uint32\_t HW\_get\_32bit\_reg(addr\_t addr)} and \texttt{void HW\_set\_32bit\_reg(addr\_t addr, uint32\_t value)}, a 32-bit volatile read and write at an absolute address. On a Xilinx toolchain these are \texttt{Xil\_In32} and \texttt{Xil\_Out32} under different names.
+    \item \texttt{HW\_get\_32bit\_reg\_field()} and \texttt{HW\_set\_32bit\_reg\_field()}, the same access with a shift and a mask applied.
+    \item The four \texttt{HAL\_*\_reg} macros that wrap them. These paste \texttt{REG\_NAME\#\#\_REG\_OFFSET} onto a base address at preprocess time, which is the contract the register map is laid out around: offsets in \texttt{core\_libre\_ila\_regs.h} are relative to their block, and the part that moves with the probe width lives in the block base instead, so an offset worked out at runtime never has to go through them.
+    \item \texttt{readmtime()}, a free-running monotonic counter, used only by \texttt{LIBRE\_ILA\_wait\_done()} for its timeout. Its tick rate is \texttt{LIBRE\_ILA\_MTIME\_HZ}, which defaults to 1\,MHz and can be defined to whatever the counter actually runs at. A port that does not need a timeout can poll \texttt{LIBRE\_ILA\_get\_status()} itself and skip this one.
+\end{itemize}
+
+A worked example of exactly that substitution is in the repository: \texttt{tests/c/00\_reg\_map/stub/} backs those accessors with a flat array so the whole driver compiles and runs on a host, which is what lets the C driver be tested with no hardware and no vendor toolchain present. Appendix~\ref{app:nohw} runs it.
+
 \end{document}

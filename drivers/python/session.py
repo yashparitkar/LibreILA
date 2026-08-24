@@ -130,8 +130,14 @@ def load_device(uid, directory=DEFAULT_DEVICE_DIR):
         with open(path, "r") as device_file:
             line = device_file.readline().strip()
     except FileNotFoundError:
-        raise OperationError(f"no device {uid} here ({path} does not exist). Add one with "
-                             f"--add-device --serial-port <port>.",
+        # The usual cause is a UID given as an index, so name the ones that do
+        # exist. It is the answer to the next question either way.
+        stored = list_devices(directory)
+        known  = (f" Stored here: {', '.join(str(one) for one in stored)}." if stored
+                  else " Nothing is stored here.")
+
+        raise OperationError(f"no device {uid} here ({path} does not exist).{known} Add one "
+                             f"with --add-device --serial-port <port>.",
                              REASON_DEVICE_NOT_FOUND)
 
     fields = line.split(",")

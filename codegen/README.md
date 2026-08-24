@@ -61,7 +61,9 @@ The command lines and flags are at the top of this file. The output directory is
 
 `GEN_TYPE` decides which files come out: `0` emits the bare AXI4Lite core alone, `1` emits it together with the UART wrapper and the fifo/uart blocks it instantiates. The testbenches need the wrapper, so `templates/default_configuration.csv` keeps `GEN_TYPE` at 1.
 
-The testbenches under `tests/hdl/` read `gen_axis/` rather than `../hdl/`, so what gets simulated is what the generator actually emits. Each of those test Makefiles treats that directory as an order-only prerequisite: if it exists it is reused untouched, if it is missing the generator runs first. **After editing anything in `../hdl/`, delete `gen_axis/` (or run `make clean`) or the tests will keep simulating the previous build.**
+The testbenches under `tests/hdl/` read `gen_axis/` rather than `../hdl/`, so what gets simulated is what the generator actually emits. Each of those test Makefiles carries a `gen_axis/.stamp` rule over the generator, `../hdl/*.vhdl` and `templates/*.csv`, and so does the root Makefile: touch any of those and the next sim regenerates, touch none of them and the generator does not run at all.
+
+What the stamp does **not** track is `portmap.csv`, `configuration.csv` and anything written into `gen_axis/` by hand. Point `--outdir` at `gen_axis/` once and the tests keep simulating that user build until something in `../hdl/` or `templates/` changes; let user builds go to `gen/`, and if one has already landed there, delete the directory or run `make clean`.
 
 The generated files can be passed through VHDL Style Guide to make them more readable.
 
@@ -91,7 +93,8 @@ argparse, os, re, shutil, sys (all standard library)
 ## gen_axis/
 The stock build, i.e. what comes out when both csv files are left at their
 shipped defaults. The testbenches read this directory instead of `../hdl`, and
-regenerate it only when it is missing. Not tracked.
+regenerate it when the generator, `../hdl/` or `templates/` has changed under
+it. Not tracked.
 
 ## gen/
 The results of a user code generation, i.e. any run whose portmap or
