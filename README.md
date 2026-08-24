@@ -9,7 +9,7 @@ An open source Integrated Logic Analyzer for FPGAs. Tap any signals in your fabr
 The ILA is a generic core, written in plain VHDL and the PC driver is written in python. The core can be used with any FPGA, and the driver can be used with any OS. But the C drivers are primarily written for the Microchip PolarFire SoC, from where the need of an ILA was felt.
 
 <p align="center" width="100%">
-    <img width="60%" src="docs/tex/images/05-armed.png">
+    <img width="60%" src="docs/tex/images/ila_armed_actual.png">
     <br>
     <em>Setting a trigger and arming the core from the python GUI</em>
 </p>
